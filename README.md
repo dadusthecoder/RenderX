@@ -59,8 +59,6 @@ You can install dependencies via **vcpkg**, **apt**, **pacman**, etc.
 
 RenderX uses **CMake** for its build system.
 
----
-
 ## 🔧 1. Install Dependencies
 
 ### Windows (vcpkg recommended)
