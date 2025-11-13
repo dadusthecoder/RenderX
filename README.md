@@ -41,43 +41,6 @@ RenderX exposes unified interfaces for:
 
 ---
 
-# 📁 Project Structure
-
-RenderX/
-│
-├── RHI/ # API-agnostic interfaces
-│ ├── Buffer.h
-│ ├── Texture.h
-│ ├── Pipeline.h
-│ ├── Device.h
-│ └── CommandBuffer.h
-│
-├── Backends/
-│ ├── OpenGL/ # OpenGL backend (GLEW)
-│ │ ├── GL_Buffer.cpp
-│ │ ├── GL_Shader.cpp
-│ │ ├── GL_Pipeline.cpp
-│ │ └── GL_Device.cpp
-│ └── Vulkan/ # Vulkan backend (WIP)
-│
-├── Core/ # Logging, utilities, platform helpers
-│ ├── Log.h
-│ └── Application.cpp
-│
-├── Examples/ # Demo applications
-│ ├── Triangle/
-│ ├── ModelViewer/
-│ └── SoftBody_XPBD/
-│
-├── CMakeLists.txt
-└── README.md
-
-yaml
-Copy code
-
----
-
-
 # 📦 Dependencies
 
 RenderX uses a lightweight and common dependency set:
