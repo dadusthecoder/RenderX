@@ -144,11 +144,11 @@ RenderX is licensed under the MIT License.
 See LICENSE for details.
 
 ⭐ Acknowledgements
--RenderX is inspired by:
--BGFX
--Granite
--Hazel Engine RHI 
--Mini-engine renderers
--OpenGL & Vulkan learning resources
+- RenderX is inspired by:
+- BGFX
+- Granite
+- Hazel Engine RHI 
+- Mini-engine renderers
+- OpenGL & Vulkan learning resources
 
 Special thanks to all open-source graphics communities!
