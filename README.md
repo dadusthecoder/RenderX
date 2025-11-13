@@ -125,18 +125,8 @@ RX_CLIENT_WARN("This is a warning");
 You can fully customize formatting, time stamps, log levels, etc.
 ```
 
-🤝 Contributing
-We welcome contributions of all kinds — backend work, sample demos, bug fixes, and documentation improvements.
-- See CONTRIBUTING.md for
-   - Contribution workflow
-   - Coding standards
-   - Backend architecture rules
-   - Issue and PR templates
-
-
 📄 License
-RenderX is licensed under the MIT License.
-- See LICENSE for details.
+RenderX is licensed under the MIT License . See LICENSE for details.
 
 
 ⭐ Acknowledgements
