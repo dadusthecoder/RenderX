@@ -1,0 +1,32 @@
+cmake_minimum_required(VERSION 3.10 )
+
+project(RenderX VERSION 1.0)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON) 
+
+add_subdirectory(External/glm)
+add_subdirectory(External/spdlog)
+add_subdirectory(External/glew-2.1.0/build/cmake)
+add_subdirectory(test)
+
+
+file(GLOB_RECURSE SOURCES "${CMAKE_SOURCE_DIR}/src/RenderX/*.cpp" "${CMAKE_SOURCE_DIR}/src/RenderX/*.h" 
+                          "${CMAKE_SOURCE_DIR}/src/Backend/OpenGL/*.cpp" "${CMAKE_SOURCE_DIR}/src/Backend/OpenGL/*.h"
+                          "${CMAKE_SOURCE_DIR}/src/Backend/Vulkan/*.cpp" "${CMAKE_SOURCE_DIR}/src/Backend/Vulkan/*.h"
+  )
+
+add_library(${PROJECT_NAME} SHARED ${SOURCES})
+
+target_compile_definitions(${PROJECT_NAME} PRIVATE RENDERX_BUILD_DLL)
+target_include_directories(${PROJECT_NAME}  
+                            PUBLIC  "${CMAKE_SOURCE_DIR}/src"
+                            PUBLIC "${CMAKE_SOURCE_DIR}/External/glm"
+                            PRIVATE "${CMAKE_SOURCE_DIR}/External/spdlog/include"
+                            PRIVATE "${CMAKE_SOURCE_DIR}/External/glew-2.1.0/include"
+  )
+
+  target_link_libraries(${PROJECT_NAME} PRIVATE glm
+                                        PRIVATE spdlog
+                                        PRIVATE glew_s
+                                      )

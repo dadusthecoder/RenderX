@@ -1,0 +1,155 @@
+## Visual Studio C++ Project .gitignore
+
+# User-specific files
+*.rsuser
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Build results
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+[Ww][Ii][Nn]32/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+[Bb]in/
+[Oo]bj/
+[Oo]ut/
+[Ll]og/
+[Ll]ogs/
+
+# Visual Studio cache
+.vs/
+*.VC.db
+*.VC.VC.opendb
+*.opendb
+*.opensdf
+*.sdf
+ipch/
+
+# Compiler intermediate / generated files
+*.ilk
+*.meta
+*.obj
+*.iobj
+*.pch
+*.pdb
+*.ipdb
+*.tmp
+*.log
+*.tlog
+*.idb
+
+# Profiling
+*.psess
+*.vsp
+*.vspx
+*.sap
+
+# Test results
+[Tt]est[Rr]esult*/
+[Bb]uild[Ll]og.*
+
+# Other IDE junk
+*_i.c
+*_p.c
+*_h.h
+*.cachefile
+*.sbr
+
+# Backup / temp files
+~$*
+*~
+*.tmp_proj
+*.bak
+
+# External dependencies
+node_modules/
+packages/
+*.nuget.props
+*.nuget.targets
+
+# Python cache (if using scripts/tools)
+__pycache__/
+*.pyc
+
+# Logs
+*.log
+log.txt
+
+# Assets & shader files to ignore
+*.vert
+*.frag
+
+# Ignore all CMake-generated files
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+CTestTestfile.cmake
+Makefile
+
+# Ignore all subdirectory CMakeLists.txt, but not the root one
+!**/CMakeLists.txt
+
+# Allow the main CMakeLists.txt at project root
+!CMakeLists.txt
+
+.lib 
+.a 
+.dll
+.json
+.so
+.dylib
+.out
+.o
+.ipdb
+.asm
+.obj
+.swp
+.cache
+*.DS_Store
+*.log
+*.bak
+*.old
+*.orig
+*.swp
+*.swo
+
+# Ignore build directories
+build/
+# Ignore external libraries
+External/
+# Ignore generated documentation
+docs/
+doc/
+# Ignore coverage reports
+
+coverage/
+coverage/
+# Ignore temporary files
+tmp/
+
+# Ignore IDE specific files
+.idea/
+.vscode/
+*.code-workspace
+*.sublime-project
+*.sublime-workspace
+# Ignore system files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+# Ignore other common files
+*.log
+*.tmp
+
