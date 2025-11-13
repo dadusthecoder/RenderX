@@ -105,7 +105,7 @@ RenderX uses **CMake** for its build system.
 vcpkg install glew glfw3 glm spdlog
 ```
 
-Linux (apt example)
+###Linux (apt example)
 
 Copy code
 ```bash
@@ -114,7 +114,6 @@ sudo apt install libglew-dev libglfw3-dev libglm-dev
 
 🔨 2. Configure & Build (Default: OpenGL Backend)
 ```bash
-Copy code
 mkdir build
 cd build
 cmake .. -DCONFIG_BACKEND=OpenGL
@@ -124,7 +123,6 @@ cmake --build . --config Release
 🔁 Switching Backend
 Vulkan (requires Vulkan SDK)
 ```bash
-Copy code
 cmake .. -DCONFIG_BACKEND=Vulkan
 RenderX will automatically select:
 ```
@@ -133,7 +131,6 @@ RenderX will automatically select:
 After building:
 
 ```bash
-Copy code
 cd bin
 ./RenderXExample_Triangle
 ```
@@ -145,26 +142,27 @@ Model Viewer → Textures, GLM transforms
 Soft Body (XPBD) → Physics experiment using RHI buffers
 
 🧱 Example Code — Creating a Vertex Buffer
-cpp
-Copy code
+```cpp
 Ref<Buffer> vbo = device->CreateVertexBuffer(
     vertices.data(),
     vertices.size() * sizeof(Vertex)
 );
+```
 The RHI automatically resolves this to:
 GL_Buffer (OpenGL backend), or
 VK_Buffer (Vulkan backend)
-
 without changing any engine-side code.
+
 📜 Logging (spdlog)
 RenderX uses spdlog for logging:
 
-cpp
+```cpp
 Copy code
 RenderXLog::Init();
 RX_CORE_INFO("Renderer initialized");
 RX_CLIENT_WARN("This is a warning");
 You can fully customize formatting, time stamps, log levels, etc.
+```
 
 🤝 Contributing
 We welcome contributions of all kinds — backend work, sample demos, bug fixes, and documentation improvements.
