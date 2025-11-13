@@ -4,56 +4,43 @@
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-blue)]()
 [![Language](https://img.shields.io/badge/C%2B%2B-20-green)]()
 
-RenderX is a modern, lightweight **Render Hardware Interface (RHI)** designed to abstract multiple graphics APIs under a single unified layer.
+RenderX is a modern, lightweight **Render Hardware Interface (RHI)** designed to unify multiple low-level graphics APIs under a clean, engine-friendly abstraction.  
+It enables you to write rendering code **once**, and run it across different backends with minimal changes.
 
-It provides a clean engine-friendly API that sits between your game/engine code and platform-specific graphics APIs like **OpenGL**, **Vulkan**, and future backends such as **DirectX12** and **Metal**.
-
-The primary goal of RenderX is to make engine architecture API-independent while staying lightweight, modular, and easy to understand.
+RenderX currently ships with a **stable OpenGL backend** and a **work-in-progress Vulkan backend**.
 
 ---
 
 # 🚀 Features
 
-## 🌐 Multi-Backend RHI
-- ✔ **OpenGL Backend (Default / Stable)**
-- 🔄 Vulkan Backend (WIP)
-- 🗂 DX12 Backend (Planned)
+### 🌐 Multi-Backend RHI
+- ✔ **OpenGL Backend (Stable, uses GLEW)**  
+- 🔄 **Vulkan Backend (WIP)**  
+- 🗂 DX12 Backend (Planned)  
 - 🍎 Metal Backend (Planned)
 
-## 🧩 RHI Abstractions
-RenderX provides unified interfaces for:
+### 🧩 RHI Abstractions
+RenderX exposes unified interfaces for:
 - `Device`
 - `CommandBuffer`
-- `RenderPass`
+- `Swapchain`
 - `Pipeline`
 - `Buffer` (vertex, index, uniform)
-- `Texture` & `Sampler`
-- `Shader` (GLSL + future SPIR-V support)
-- `Swapchain` (per backend)
+- `Texture` + `Sampler`
+- `Shader`  
+- `RenderPass`
 
-Backend implementations live in:
-/Backends/OpenGL
-/Backends/Vulkan
-
----
-
-# 📦 Dependencies
-
-RenderX uses a minimal and common dependency set:
-
-### **Required Dependencies**
-| Library | Usage |
-|--------|--------|
-| **GLEW**| Loading Opengl functions
-| **GLM** | Math (vectors, matrices, transforms) |
-| **spdlog** | High-performance logging |
-
-You can install these via:
-- vcpkg  
-- system package manager  
-- manual build  
+### 🏗 Engine-Friendly Design
+- Clean separation between:
+  - **RHI interfaces** (API-agnostic)
+  - **Backend implementations** (OpenGL / Vulkan)
+- Zero-cost, modern C++20 abstractions
+- RAII-managed GPU resources
+- Math powered by **GLM**
+- Logging via **spdlog**
 
 ---
+
 # 📁 Project Structure
 
 RenderX/
@@ -66,7 +53,7 @@ RenderX/
 │ └── CommandBuffer.h
 │
 ├── Backends/
-│ ├── OpenGL/ # OpenGL RHI backend using GLEW
+│ ├── OpenGL/ # OpenGL backend (GLEW)
 │ │ ├── GL_Buffer.cpp
 │ │ ├── GL_Shader.cpp
 │ │ ├── GL_Pipeline.cpp
@@ -90,6 +77,21 @@ Copy code
 
 ---
 
+
+# 📦 Dependencies
+
+RenderX uses a lightweight and common dependency set:
+
+| Library | Purpose |
+|--------|---------|
+| **GLEW** | OpenGL function loader |
+| **GLM** | Math (vectors/matrices) |
+| **spdlog** | Logging system |
+
+You can install dependencies via **vcpkg**, **apt**, **pacman**, etc.
+
+---
+
 # 🛠️ Building RenderX
 
 RenderX uses **CMake** for its build system.
@@ -98,109 +100,96 @@ RenderX uses **CMake** for its build system.
 
 ## 🔧 1. Install Dependencies
 
-### **Windows (vcpkg recommended)**
+### Windows (vcpkg recommended)
 ```bash
 vcpkg install glew glfw3 glm spdlog
+```
+
 Linux (apt example)
-bash
+
 Copy code
+```bash
 sudo apt install libglew-dev libglfw3-dev libglm-dev
-🔨 2. Configure & Build (Default OpenGL Backend)
-bash
+```
+
+🔨 2. Configure & Build (Default: OpenGL Backend)
+```bash
 Copy code
 mkdir build
 cd build
-
 cmake .. -DCONFIG_BACKEND=OpenGL
 cmake --build . --config Release
+```
+
 🔁 Switching Backend
-Vulkan (if you have Vulkan SDK installed)
-bash
+Vulkan (requires Vulkan SDK)
+```bash
 Copy code
 cmake .. -DCONFIG_BACKEND=Vulkan
-RenderX automatically selects:
-
-/Backends/OpenGL/*
-
-/Backends/Vulkan/*
-
-depending on this flag.
+RenderX will automatically select:
+```
 
 🧪 Running Examples
 After building:
 
-bash
+```bash
 Copy code
 cd bin
 ./RenderXExample_Triangle
-Current sample demos:
+```
 
-Triangle Example → Basic pipeline + buffer usage
-
+Included sample demos:
+Triangle Example → Basic RHI pipeline usage
 Phong Lighting → Uniform buffers + shading
+Model Viewer → Textures, GLM transforms
+Soft Body (XPBD) → Physics experiment using RHI buffers
 
-Model Viewer → GLM transforms + textures
-
-Soft Body (XPBD) → Physics experiment using RenderX abstractions
-
-🧱 Example Code (Creating a Vertex Buffer)
+🧱 Example Code — Creating a Vertex Buffer
 cpp
 Copy code
 Ref<Buffer> vbo = device->CreateVertexBuffer(
     vertices.data(),
     vertices.size() * sizeof(Vertex)
 );
-The RHI resolves this to:
-
+The RHI automatically resolves this to:
 GL_Buffer (OpenGL backend), or
-
 VK_Buffer (Vulkan backend)
 
-without changing your engine code.
-
+without changing any engine-side code.
 📜 Logging (spdlog)
-RenderX uses spdlog as its logging backend:
+RenderX uses spdlog for logging:
 
 cpp
 Copy code
 RenderXLog::Init();
 RX_CORE_INFO("Renderer initialized");
 RX_CLIENT_WARN("This is a warning");
-Output format is fully configurable.
+You can fully customize formatting, time stamps, log levels, etc.
 
 🤝 Contributing
-We welcome contributions!
-
-Please check the CONTRIBUTING.md for:
-
-PR workflow
-
-Coding guidelines
-
-Backend contribution rules
-
-Issue reporting format
+We welcome contributions of all kinds — backend work, sample demos, bug fixes, and documentation improvements.
+See CONTRIBUTING.md for
+Contribution workflow
+Coding standards
+Backend architecture rules
+Issue and PR templates
 
 🧑‍🤝‍🧑 Community / Discord
-Join the RenderX community for help, backend architecture discussions, shader debugging, and engine design chat:
+Join the RenderX community for backend discussions, shader debugging, and engine design help:
 
 👉 Discord: https://discord.gg/YOUR_INVITE
+(Replace with your active invite!)
 
 📄 License
 RenderX is licensed under the MIT License.
-See LICENSE for full details.
+See LICENSE for details.
 
 ⭐ Acknowledgements
 RenderX is inspired by:
-
 BGFX
-
 Granite
-
 Hazel Engine RHI
-
 Mini-engine renderers
+OpenGL & Vulkan learning resources
 
-OpenGL & Vulkan best practices
-
-Special thanks to open-source graphics communities!
+Special thanks to all open-source graphics communities!
