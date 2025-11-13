@@ -127,11 +127,11 @@ You can fully customize formatting, time stamps, log levels, etc.
 
 🤝 Contributing
 We welcome contributions of all kinds — backend work, sample demos, bug fixes, and documentation improvements.
-See CONTRIBUTING.md for
-Contribution workflow
-Coding standards
-Backend architecture rules
-Issue and PR templates
+ - See CONTRIBUTING.md for
+ - Contribution workflow
+ - Coding standards
+ - Backend architecture rules
+ - Issue and PR templates
 
 🧑‍🤝‍🧑 Community / Discord
 Join the RenderX community for backend discussions, shader debugging, and engine design help:
@@ -141,7 +141,7 @@ Join the RenderX community for backend discussions, shader debugging, and engine
 
 📄 License
 RenderX is licensed under the MIT License.
-See LICENSE for details.
+- See LICENSE for details.
 
 ⭐ Acknowledgements
 - RenderX is inspired by:
