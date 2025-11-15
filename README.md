@@ -2,7 +2,7 @@
 
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)]()
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-blue)]()
-[![Language](https://img.shields.io/badge/C%2B%2B-20-green)]()
+[![Language](https://img.shields.io/badge/C%2B%2B-17-green)]()
 
 RenderX is a modern, lightweight **Render Hardware Interface (RHI)** designed to unify multiple low-level graphics APIs under a clean, engine-friendly abstraction.  
 It enables you to write rendering code **once**, and run it across different backends with minimal changes.

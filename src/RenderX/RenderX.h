@@ -131,5 +131,15 @@ namespace Lgt {
 	 * @return Handle to the created buffer.
 	 */
 	 const BufferHandle RENDERX_API CreateVertexBuffer(size_t size, const void* data, BufferUsage use);
+	 const VertexLayoutHandle RENDERX_API CreateVertexLayout(const VertexLayout& layout);
+	 const void RENDERX_API BindLayout(const VertexLayoutHandle handle);
+
+	 const void RENDERX_API Draw(uint32_t vertexCount , uint32_t instanceCount , uint32_t firstVertex , uint32_t firstInstance);
+	 const void RENDERX_API DrawIndexed(uint32_t indexCount , uint32_t instanceCount , uint32_t firstIndex , int32_t vertexOffset , uint32_t firstInstance);
+	 const void RENDERX_API BindPipeline(const PipelineHandle handle);		
+	 const void RENDERX_API BindVertexBuffer(const BufferHandle handle);
+	 const void RENDERX_API BindIndexBuffer(const BufferHandle handle);
+	 const void RENDERX_API Begin();
+	 const void RENDERX_API End();
 
 } // namespace Lng
