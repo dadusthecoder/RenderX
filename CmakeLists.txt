@@ -8,6 +8,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 add_subdirectory(External/glm)
 add_subdirectory(External/spdlog)
 add_subdirectory(External/glew-2.1.0/build/cmake)
+add_subdirectory(External/glfw)
 add_subdirectory(test)
 
 
@@ -24,9 +25,11 @@ target_include_directories(${PROJECT_NAME}
                             PUBLIC "${CMAKE_SOURCE_DIR}/External/glm"
                             PRIVATE "${CMAKE_SOURCE_DIR}/External/spdlog/include"
                             PRIVATE "${CMAKE_SOURCE_DIR}/External/glew-2.1.0/include"
+                            PRIVATE "${CMAKE_SOURCE_DIR}/External/glfw/include"
   )
 
   target_link_libraries(${PROJECT_NAME} PRIVATE glm
                                         PRIVATE spdlog
                                         PRIVATE glew_s
+                                        PRIVATE glfw
                                       )

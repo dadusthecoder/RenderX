@@ -4,8 +4,6 @@
 namespace Lgt {
 
 #define RENDERER_FUNC(_ret, _name, ...)inline _ret _name(__VA_ARGS__);
-RENDERER_FUNC(void,BindPipeline, const PipelineHandle handle)
-RENDERER_FUNC(void,Draw,uint32_t vertexCount)
 #include "RenderXAPI.def"
 #undef RENDERER_FUNC
 

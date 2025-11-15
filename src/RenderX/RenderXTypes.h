@@ -11,6 +11,7 @@
 namespace Lgt {
 
 	// Resource handles (opaque types)
+	using VertexLayoutHandle = uint32_t;
 	using BufferHandle = uint32_t;
 	using TextureHandle = uint32_t;
 	using SamplerHandle = uint32_t;
@@ -204,12 +205,12 @@ namespace Lgt {
 	// Vertex input description
 	struct VertexAttribute {
 		uint32_t location;
-		uint32_t binding;
+		uint32_t count;
 		TextureFormat format;
 		uint32_t offset;
 
-		VertexAttribute(uint32_t loc, uint32_t bind, TextureFormat fmt, uint32_t off)
-			: location(loc), binding(bind), format(fmt), offset(off) {
+		VertexAttribute(uint32_t loc, uint32_t count, TextureFormat fmt, uint32_t off)
+			: location(loc), count(count), format(fmt), offset(off) {
 		}
 	};
 
@@ -226,6 +227,7 @@ namespace Lgt {
 	struct VertexLayout {
 		std::vector<VertexAttribute> attributes;
 		std::vector<VertexBinding> bindings;
+		uint32_t totalStride;
 	};
 
 	// Resource descriptions
