@@ -2,58 +2,49 @@
 #include "RenderXTypes.h"
 
 //------------------------------------------------------------------------------
+// PLATFORM DETECTION
+//------------------------------------------------------------------------------
+
+#if defined(_WIN32) || defined(_WIN64)
+#define RENDERX_PLATFORM_WINDOWS
+#elif defined(__APPLE__) || defined(__MACH__)
+#define RENDERX_PLATFORM_MACOS
+#elif defined(__linux__)
+#define RENDERX_PLATFORM_LINUX
+#else
+#define RENDERX_PLATFORM_UNKNOWN
+#endif
+
+//------------------------------------------------------------------------------
+// EXPORT / IMPORT MACROS
+//------------------------------------------------------------------------------
+
+#if defined(RENDERX_STATIC)
+#define RENDERX_API
+#else
+#if defined(RENDERX_PLATFORM_WINDOWS)
+#if defined(RENDERX_BUILD_DLL)
+#define RENDERX_API __declspec(dllexport)
+#else
+#define RENDERX_API __declspec(dllimport)
+#endif
+#elif defined(__GNUC__) || defined(__clang__)
+#define RENDERX_API __attribute__((visibility("default")))
+#else
+#define RENDERX_API
+#pragma warning Unknown dynamic link import / export semantics.
+#endif
+#endif
+
+//------------------------------------------------------------------------------
 // RENDERING HARDWARE INTERFACE (RHI)
 //------------------------------------------------------------------------------
 // Defines the runtime-dispatchable abstraction for graphics APIs.
-// Backend modules (e.g., OpenGL, Vulkan, DirectX) provide the actual
-// implementations, which are routed dynamically through the dispatch table.
+// Backend modules (OpenGL, Vulkan, DirectX, etc.) provide actual
+// implementations routed through the dispatch table.
 //------------------------------------------------------------------------------
 
 namespace Lgt {
-
-	//------------------------------------------------------------------------------
-	// PUBLIC API WRAPPERS
-	//------------------------------------------------------------------------------
-	// Inline wrappers that forward calls to the active backend via the global
-	// dispatch table. These provide backend-agnostic access to GPU operations.
-	//------------------------------------------------------------------------------
-
-
-#pragma once
-
-// Detect platform
-#if defined(_WIN32) || defined(_WIN64)
-  #define RENDERX_PLATFORM_WINDOWS
-#elif defined(__APPLE__) || defined(__MACH__)
-  #define RENDERX_PLATFORM_MACOS
-#elif defined(__linux__)
-  #define RENDERX_PLATFORM_LINUX
-#else
-  #define RENDERX_PLATFORM_UNKNOWN
-#endif
-
-// Export / import macros
-#if defined(RENDERX_STATIC)
-  // Building or using static library
-  #define RENDERX_API
-#else
-  // Shared library (DLL / .so / .dylib)
-  #if defined(RENDERX_PLATFORM_WINDOWS)
-    #if defined(RENDERX_BUILD_DLL)
-      #define RENDERX_API __declspec(dllexport)
-    #else
-      #define RENDERX_API __declspec(dllimport)
-    #endif
-  #elif defined(__GNUC__) || defined(__clang__)
-    // GCC / Clang on Linux, macOS, MinGW, etc.
-    #define RENDERX_API __attribute__((visibility("default")))
-  #else
-    // Unknown compiler/platform
-    #define RENDERX_API
-    #pragma warning Unknown dynamic link import/export semantics.
-  #endif
-#endif
-
 
 	//------------------------------------------------------------------------------
 	// API INITIALIZATION
@@ -62,85 +53,172 @@ namespace Lgt {
 	/**
 	 * @brief Loads and initializes the selected rendering backend.
 	 *
-	 * Populates the global dispatch table (`g_DispatchTable`) with backend
-	 * function pointers and prepares the graphics subsystem for use.
+	 * Populates the global dispatch table with backend function pointers and
+	 * prepares the graphics subsystem for usage.
 	 *
-	 * @param api The backend to initialize (e.g., RendererAPI::OpenGL).
+	 * @param api The backend to initialize (e.g., RenderXAPI::OpenGL).
 	 *
 	 * @note Must be called before any rendering operations.
 	 */
 	void RENDERX_API LoadAPI(RenderXAPI api);
 
 	//------------------------------------------------------------------------------
-	// INLINE CREATION WRAPPERS (DIRECT DISPATCH)
+	// PIPELINE CREATION (GRAPHICS)
 	//------------------------------------------------------------------------------
 
 	/**
-	 * @brief Creates a GPU graphics pipeline.
+	 * @brief Creates a GPU graphics pipeline using a full PipelineDesc.
 	 *
-	 * Use `PipelineDesc` to specify pipeline states (blend, raster, depth, etc.),
-	 * or `ShaderDesc` when providing precompiled shader bytecode.
-	 *
-	 * @param desc Pipeline description.
-	 * @return Handle to the created graphics pipeline.
+	 * @param desc Full graphics pipeline state description.
+	 * @return Created graphics pipeline handle.
 	 */
-	 const PipelineHandle RENDERX_API CreatePipelineGFX(const PipelineDesc& desc);
-
-	/// @brief Creates a graphics pipeline from raw shader source code with Default Pipeline States(blend, raster, depth, etc.)..
-	 const PipelineHandle RENDERX_API CreatePipelineGFX(const std::string& vertSrc, const std::string& fragSrc);
+	const PipelineHandle RENDERX_API CreatePipelineGFX(const PipelineDesc& desc);
 
 	/**
-	 *@brief Creates a graphics pipeline using precompiled shader descriptors or can also use the source code from ShaderDesc
-	 * with Default Pipeline States(blend, raster, depth, etc.).
-	.*/
-	 const PipelineHandle RENDERX_API CreatePipelineGFX(const ShaderDesc& vertDesc, const ShaderDesc& fragDesc);
+	 * @brief Creates a graphics pipeline from raw shader source.
+	 *
+	 * Default states (blend, raster, depth) will be automatically applied.
+	 */
+	const PipelineHandle RENDERX_API CreatePipelineGFX(const std::string& vertSrc,
+		const std::string& fragSrc);
 
 	/**
-	 * @brief Creates a compute pipeline.
-	 * Use `PipelineDesc` to specify pipeline states (blend, raster, depth, etc.),
-	 * Similar to graphics pipelines, this encapsulates a compute shader and
-	 * associated state for dispatching GPU workloads.
+	 * @brief Creates a graphics pipeline from shader descriptors.
+	 *
+	 * Accepts source or precompiled shader data through ShaderDesc.
 	 */
-	 const PipelineHandle RENDERX_API CreatePipelineCOMP(const PipelineDesc& desc);
+	const PipelineHandle RENDERX_API CreatePipelineGFX(const ShaderDesc& vertDesc,
+		const ShaderDesc& fragDesc);
 
-	/// @brief Creates a Compute  pipeline from raw shader source code with Default Pipeline States(blend, raster, depth, etc.).
-	 const PipelineHandle RENDERX_API CreatePipelineCOMP(const std::string& compSrc);
+	//------------------------------------------------------------------------------
+	// PIPELINE CREATION (COMPUTE)
+	//------------------------------------------------------------------------------
 
-	/// @brief Creates a Compute pipeline  Default Pipeline States (blend, raster, depth, etc.) using precompiled shader descriptors or can also use the source code.
-	 const PipelineHandle RENDERX_API CreatePipelineCOMP(const ShaderDesc& compDesc);
+	/**
+	 * @brief Creates a compute pipeline using a full PipelineDesc.
+	 */
+	const PipelineHandle RENDERX_API CreatePipelineCOMP(const PipelineDesc& desc);
 
+	/**
+	 * @brief Creates a compute pipeline from raw compute shader source.
+	 */
+	const PipelineHandle RENDERX_API CreatePipelineCOMP(const std::string& compSrc);
+
+	/**
+	 * @brief Creates a compute pipeline from a compute shader descriptor.
+	 */
+	const PipelineHandle RENDERX_API CreatePipelineCOMP(const ShaderDesc& compDesc);
+
+	//------------------------------------------------------------------------------
+	// SHADER CREATION
+	//------------------------------------------------------------------------------
 
 	/**
 	 * @brief Creates and compiles a GPU shader.
 	 *
-	 * Compiles shader source or loads precompiled bytecode depending on backend.
-	 *
-	 * @param desc Shader description (stage, source, parameters).
-	 * @return Handle to the created shader.
+	 * Compiles from source or loads precompiled bytecode based on backend.
 	 */
-	 const ShaderHandle RENDERX_API CreateShader(const ShaderDesc& desc);
+	const ShaderHandle RENDERX_API CreateShader(const ShaderDesc& desc);
+
+	//------------------------------------------------------------------------------
+	// BUFFER CREATION
+	//------------------------------------------------------------------------------
 
 	/**
 	 * @brief Creates a GPU vertex buffer.
 	 *
-	 * Allocates and uploads vertex data to GPU memory.
-	 *
-	 * @param size Size of the data in bytes.
-	 * @param data Pointer to vertex data (nullable).
-	 * @param use  Usage pattern (Static, Dynamic, Stream).
-	 * @return Handle to the created buffer.
+	 * @param size Size in bytes.
+	 * @param data Optional pointer to initial data.
+	 * @param use Buffer usage pattern.
 	 */
-	 const BufferHandle RENDERX_API CreateVertexBuffer(size_t size, const void* data, BufferUsage use);
-	 const void RENDERX_API CreateVertexLayout(const VertexLayout& layout);
-	 const VertexArrayHandle RENDERX_API CreateVertexArray();
-	 const void RENDERX_API BindVertexArray(const VertexArrayHandle handle);
+	const BufferHandle RENDERX_API CreateVertexBuffer(size_t size, const void* data, BufferUsage use);
 
-	 const void RENDERX_API Draw(uint32_t vertexCount , uint32_t instanceCount , uint32_t firstVertex , uint32_t firstInstance);
-	 const void RENDERX_API DrawIndexed(uint32_t indexCount , uint32_t instanceCount , uint32_t firstIndex , int32_t vertexOffset , uint32_t firstInstance);
-	 const void RENDERX_API BindPipeline(const PipelineHandle handle);		
-	 const void RENDERX_API BindVertexBuffer(const BufferHandle handle);
-	 const void RENDERX_API BindIndexBuffer(const BufferHandle handle);
-	 const void RENDERX_API Begin();
-	 const void RENDERX_API End();
+	//------------------------------------------------------------------------------
+	// VERTEX INPUT LAYOUT & VERTEX ARRAY
+	//------------------------------------------------------------------------------
 
-} // namespace Lng
+	/**
+	 * @brief Creates a vertex layout (attribute format, stride, semantics).
+	 * @note In OpenGL, this configures the currently bound VAO , Bind The VAO Before Calling This.
+	 * @note In DirectX/Vulkan, this defines the input assembly state for pipelines.
+	 */
+	const void RENDERX_API CreateVertexLayout(const VertexLayout& layout);
+
+	/**
+	 * @brief Creates a GPU Vertex Array Object (VAO).
+	 */
+	const VertexArrayHandle RENDERX_API CreateVertexArray();
+
+	/**
+	 * @brief Binds an existing VAO.
+	 * @note Required before setting up vertex layouts in OpenGL.
+	 */
+	const void RENDERX_API BindVertexArray(const VertexArrayHandle handle);
+
+	//------------------------------------------------------------------------------
+	// RESOURCE BINDING
+	//------------------------------------------------------------------------------
+
+	/**
+	 * @brief Binds a graphics or compute pipeline for subsequent draw/dispatch calls.
+	 */
+	const void RENDERX_API BindPipeline(const PipelineHandle handle);
+
+	/**
+	 * @brief Binds a vertex buffer for input assembly .
+	 * @note OPENGL requires binding the VAO first.
+	 */
+	const void RENDERX_API BindVertexBuffer(const BufferHandle handle);
+
+	/**
+	 * @brief Binds an index buffer for indexed drawing.
+	 */
+	const void RENDERX_API BindIndexBuffer(const BufferHandle handle);
+
+	//------------------------------------------------------------------------------
+	// DRAW COMMANDS
+	//------------------------------------------------------------------------------
+
+	/**
+	 * @brief Issues a non-indexed instanced draw call .
+	 *
+	 * @param vertexCount Number of vertices.
+	 * @param instanceCount Instance count for instanced rendering.
+	 * @param firstVertex First vertex index.
+	 * @param firstInstance First instance index.
+	 */
+	const void RENDERX_API Draw(uint32_t vertexCount,
+		uint32_t instanceCount,
+		uint32_t firstVertex,
+		uint32_t firstInstance);
+
+	/**
+	 * @brief Issues an indexed draw call.
+	 *
+	 * @param indexCount Number of indices.
+	 * @param instanceCount Instance count.
+	 * @param firstIndex Starting index.
+	 * @param vertexOffset Added to vertex index base.
+	 * @param firstInstance First instance.
+	 */
+	const void RENDERX_API DrawIndexed(uint32_t indexCount,
+		uint32_t instanceCount,
+		uint32_t firstIndex,
+		int32_t vertexOffset,
+		uint32_t firstInstance);
+
+	//------------------------------------------------------------------------------
+	// FRAME CONTROL
+	//------------------------------------------------------------------------------
+
+	/**
+	 * @brief Begins a new rendering frame or command batch.
+	 */
+	const void RENDERX_API Begin();
+
+	/**
+	 * @brief Ends and submits the currently recorded frame or command batch.
+	 */
+	const void RENDERX_API End();
+
+} // namespace Lgt
