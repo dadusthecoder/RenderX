@@ -10,4 +10,4 @@ add_executable(HelloTriangle Test.cpp)
 
 target_link_directories(HelloTriangle PRIVATE "${CMAKE_SOURCE_DIR}/Build")
 target_link_libraries(HelloTriangle PRIVATE RenderX)
-target_include_directories(HelloTriangle PRIVATE "${CMAKE_SOURCE_DIR}/src")
+target_include_directories(HelloTriangle PRIVATE "${CMAKE_SOURCE_DIR}/include")
