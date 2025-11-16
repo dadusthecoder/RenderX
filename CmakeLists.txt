@@ -10,7 +10,7 @@ add_subdirectory(External/glm)
 add_subdirectory(External/spdlog)
 add_subdirectory(External/glew-2.1.0/build/cmake)
 add_subdirectory(External/glfw)
-add_subdirectory(test)
+add_subdirectory(test/HelloTriangle)
 
 # ───── Source Files ────────────────────────────────────────────────
 file(GLOB_RECURSE SOURCES
@@ -58,7 +58,7 @@ add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "$<TARGET_FILE:${PROJECT_NAME}>"
-        "${CMAKE_BINARY_DIR}/test"
+        "${CMAKE_BINARY_DIR}/test/HelloTriangle"
 )
 
 # Example: Copy GLEW DLL (if it's shared)
