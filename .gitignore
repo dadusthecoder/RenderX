@@ -1,4 +1,6 @@
-## Visual Studio C++ Project .gitignore
+## ------------------------------
+## Visual Studio C++ Project
+## ------------------------------
 
 # User-specific files
 *.rsuser
@@ -68,13 +70,7 @@ ipch/
 *.tmp_proj
 *.bak
 
-# External dependencies
-node_modules/
-packages/
-*.nuget.props
-*.nuget.targets
-
-# Python cache (if using scripts/tools)
+# Python cache
 __pycache__/
 *.pyc
 
@@ -82,9 +78,13 @@ __pycache__/
 *.log
 log.txt
 
-# Assets & shader files to ignore
-*.vert
-*.frag
+# Shader files (OPTIONAL — remove if you want to commit shaders)
+# *.vert
+# *.frag
+
+## ------------------------------
+## CMake
+## ------------------------------
 
 # Ignore all CMake-generated files
 CMakeCache.txt
@@ -96,62 +96,77 @@ compile_commands.json
 CTestTestfile.cmake
 Makefile
 
-# Ignore all subdirectory CMakeLists.txt, but not the root one
+# Allow real CMakeLists.txt files
 !**/CMakeLists.txt
 
-# Allow the main CMakeLists.txt at project root
+# Root CMake file
 !CMakeLists.txt
 
-.lib 
-.a 
-.dll
-.json
-.so
-.dylib
-.out
-.o
-.ipdb
-.asm
-.obj
-.swp
+## ------------------------------
+## Build directories
+## ------------------------------
+build/
+Build/
+build-*/
+
+## ------------------------------
+## External Libraries
+## ------------------------------
+
+# DO NOT ignore External/ (contains submodules)
+# Only ignore extracted libs — keep submodules!
+
+# Example extracted library (GLEW download folder)
+External/glew-2.1.0/
+
+# Ignore libs (compiled)
+*.lib
+*.a
+*.dll
+*.so
+*.dylib
+
+# Ignore other binary artifacts
+*.out
+*.o
+*.ipdb
+*.asm
+*.swp
 .cache
-*.DS_Store
-*.log
-*.bak
 *.old
 *.orig
-*.swp
 *.swo
 
-# Ignore build directories
-build/
-# Ignore external libraries
-
-# Ignore generated documentation
+## ------------------------------
+## Documentation
+## ------------------------------
 docs/
 doc/
-# Ignore coverage reports
 
+## ------------------------------
+## Coverage
+## ------------------------------
 coverage/
-coverage/
-# Ignore temporary files
+
+## ------------------------------
+## Temporary files
+## ------------------------------
 tmp/
 
-# Ignore IDE specific files
+## ------------------------------
+## IDE & Editor files
+## ------------------------------
 .idea/
 .vscode/
 *.code-workspace
 *.sublime-project
 *.sublime-workspace
-# Ignore system files
+
+## ------------------------------
+## System files
+## ------------------------------
 .DS_Store
 Thumbs.db
 ehthumbs.db
 Desktop.ini
 $RECYCLE.BIN/
-# Ignore other common files
-*.log
-*.tmp
-
-/External/glew-2.1.0/
-
