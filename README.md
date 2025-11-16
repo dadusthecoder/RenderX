@@ -47,6 +47,7 @@ RenderX uses a lightweight and common dependency set:
 
 | Library | Purpose |
 |--------|---------|
+| **GLFW** | for debug purpose only |
 | **GLEW** | OpenGL function loader |
 | **GLM** | Math (vectors/matrices) |
 | **spdlog** | Logging system |
