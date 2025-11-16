@@ -104,7 +104,7 @@ Soft Body (XPBD) → Physics experiment using RHI buffers
 
 🧱 Example Code — Creating a Vertex Buffer
 ```cpp
-Ref<Buffer> vbo = device->CreateVertexBuffer(
+Ref<Buffer> vbo = Lgt::CreateVertexBuffer(
     vertices.data(),
     vertices.size() * sizeof(Vertex)
 );
