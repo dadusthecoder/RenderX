@@ -30,14 +30,18 @@ namespace Lgt {
 		return g_DispatchTable.BindIndexBuffer(handle);
 	}
 
-	const VertexLayoutHandle CreateVertexLayout(const VertexLayout& layout) {
+	const void CreateVertexLayout(const VertexLayout& layout) {
 		return g_DispatchTable.CreateVertexLayout(layout);
 	}
 
-	const void BindLayout(const VertexLayoutHandle handle) {
-		return g_DispatchTable.BindLayout(handle);
+	const VertexArrayHandle CreateVertexArray() {
+		return g_DispatchTable.CreateVertexArray();
 	}
 
+	const void BindVertexArray(const VertexArrayHandle handle) {
+		return g_DispatchTable.BindVertexArray(handle);
+	}
+	
 	const void Begin() {
 		return g_DispatchTable.Begin();
 	}

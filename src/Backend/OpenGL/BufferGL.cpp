@@ -21,72 +21,73 @@ namespace Lgt {
 		return GL_STATIC_DRAW;
 	};
 
-	static inline GLuint TOGLFormat(TextureFormat format) {
+	static inline GLuint TOGLDataType(DataType format) {
 		switch (format) {
-		case TextureFormat::R8:
-			return GL_RED;
-		case TextureFormat::RG8:
-			return GL_RG;
-		case TextureFormat::RGB8:
-			return GL_RGB;
-		case TextureFormat::RGBA8:
-			return GL_RGBA;
-		case TextureFormat::Depth24Stencil8:
-			return GL_DEPTH_STENCIL;
+		case DataType::Float:
+			return GL_FLOAT;
+		case DataType::Int:
+			return GL_INT;
+		case DataType::UInt:
+			return GL_UNSIGNED_INT;
+		case DataType::Short:
+			return GL_SHORT;
+		case DataType::UShort:
+			return GL_UNSIGNED_SHORT;
+		case DataType::Byte:
+			return GL_BYTE;
+		case DataType::UByte:
+			return GL_UNSIGNED_BYTE;
 		default:
-			RENDERX_ERROR("OpenGL : Unsupported Texture Format");
-			break;
+			return GL_FLOAT;
 		}
-		return GL_RGBA;
-	}; 
-    
-	// namespace RenderXGL
-	namespace RenderXGL {
+};
 
-		const BufferHandle GLCreateVertexBuffer(size_t size,
-			const void* data,
-			BufferUsage use) {
-			BufferHandle id;
-			glGenBuffers(1, &id);
-			glBindBuffer(GL_ARRAY_BUFFER, id);
-			glBufferData(GL_ARRAY_BUFFER, size, data, TOGLBufferUse(use));
-			RENDERX_INFO("OpenGL: Created Vertex Buffer | ID: {} | Size: {} bytes", id, size);
-			return id;
-		}
+// namespace RenderXGL
+namespace RenderXGL {
 
-		const VertexLayoutHandle GLCreateVertexLayout(const VertexLayout& layout) {
-			GLuint vao;
-			glGenVertexArrays(1, &vao);
-			glBindVertexArray(vao);
-
-			for (const auto& element : layout.attributes) {
-				glEnableVertexAttribArray(element.location);
-				glVertexAttribPointer(
-					element.location,
-					element.count,
-					TOGLFormat(element.format),	
-					GL_FALSE,
-					layout.totalStride, 
-					(void*)(element.offset));
-			}
-
-			RENDERX_INFO("OpenGL: Created Vertex Layout | VAO ID: {}", vao);
-			return vao;
-		}
-
-		const void GLBindVertexBuffer(const BufferHandle handle) {
-			glBindBuffer(GL_ARRAY_BUFFER, handle);
-		}
-
-		const void GLBindLayout(const VertexLayoutHandle handle) {
-			glBindVertexArray(handle);
-		}
-
-		const void GLBindIndexBuffer(const BufferHandle handle) {
-			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, handle);
-		}
-
+	const BufferHandle GLCreateVertexBuffer(size_t size,
+		const void* data,
+		BufferUsage use) {
+		BufferHandle id;
+		glGenBuffers(1, &id);
+		glBindBuffer(GL_ARRAY_BUFFER, id);
+		glBufferData(GL_ARRAY_BUFFER, size, data, TOGLBufferUse(use));
+		RENDERX_INFO("OpenGL: Created Vertex Buffer | ID: {} | Size: {} bytes", id, size);
+		return id;
 	}
 
+	const VertexArrayHandle GLCreateVertexArray() {
+		VertexArrayHandle vao;
+		glGenVertexArrays(1, &vao);
+		glBindVertexArray(vao);
+		RENDERX_INFO("OpenGL: Created Vertex Array Object | ID: {}", vao);
+		return vao;
+	}
 
+	const void GLBindVertexArray(const VertexArrayHandle handle) {
+		glBindVertexArray(handle);
+	}
+
+	const void GLCreateVertexLayout(const VertexLayout& layout) {
+		for (const auto& element : layout.attributes) {
+			glVertexAttribPointer(
+				element.location,
+				element.count,
+				GL_FLOAT,
+				TOGLDataType(element.datatype),
+				layout.totalStride,
+				(void*)(element.offset));
+			glEnableVertexAttribArray(element.location);
+		}
+		}
+
+	const void GLBindVertexBuffer(const BufferHandle handle) {
+		glBindBuffer(GL_ARRAY_BUFFER, handle);
+	}
+
+	const void GLBindIndexBuffer(const BufferHandle handle) {
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, handle);
+	}
+
+}
 }

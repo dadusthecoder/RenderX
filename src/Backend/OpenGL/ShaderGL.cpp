@@ -173,7 +173,7 @@ namespace Lgt {
 		return program;
 	}
 
-	//Binding functions
+	// Binding functions
 
 	const void RenderXGL::GLBindPipeline(const PipelineHandle handle) {
 		glUseProgram(handle);

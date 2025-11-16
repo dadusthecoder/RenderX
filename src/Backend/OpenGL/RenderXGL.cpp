@@ -33,11 +33,10 @@ namespace Lgt {
 			return;
 		}
 
-		glEnable(GL_CULL_FACE);
-		glEnable(GL_BLEND);
-		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-		glEnable(GL_DEPTH_TEST);
-
+ 		//glEnable(GL_CULL_FACE);
+		//glEnable(GL_BLEND);
+		//glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+		//glEnable(GL_DEPTH_TEST);
 		RENDERX_INFO("OpenGL initialized successfully (GLEW + GL states configured).");
 	}
 
@@ -51,14 +50,19 @@ namespace Lgt {
         // Swap buffers (assuming double buffering)
         glfwSwapBuffers(window);
         glfwPollEvents();
+        if(glfwWindowShouldClose(window)) {
+            glfwTerminate();
+            RENDERX_INFO("GLFW window closed, terminating application.");
+            exit(0);
+        }
 	}
 
     const void RenderXGL::GLDraw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance) {
-        glDrawArraysInstanced(GL_TRIANGLES, firstVertex, vertexCount, instanceCount);
-    }
+        glDrawArraysInstanced(GL_TRIANGLES,firstVertex,vertexCount,instanceCount);
+    }   
 
     const void RenderXGL::GLDrawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance) {
-        glDrawElementsInstanced(GL_TRIANGLES, indexCount, GL_UNSIGNED_INT, (void*)(firstIndex * sizeof(GLuint)), instanceCount);
+        glDrawElementsInstanced(GL_TRIANGLES, indexCount, GL_UNSIGNED_INT,(void*)(firstIndex * sizeof(GLuint)), instanceCount);
     }
 
 }
