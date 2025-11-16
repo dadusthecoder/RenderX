@@ -5,6 +5,9 @@ project(RenderX VERSION 1.0)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
+
 # ────────────────────────────────────────────────────────────────
 #   OUTPUT FOLDERS (Debug/Release separated)
 # ────────────────────────────────────────────────────────────────
@@ -40,7 +43,7 @@ add_subdirectory(External/glm)
 add_subdirectory(External/spdlog)
 add_subdirectory(External_local/glew-2.1.0/build/cmake)
 add_subdirectory(External/glfw)
-add_subdirectory(test/HelloTriangle)
+add_subdirectory(Test/HelloTriangle)
 
 # ────────────────────────────────────────────────────────────────
 #   Source Files
@@ -63,7 +66,7 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE RENDERX_BUILD_DLL)
 
 target_include_directories(${PROJECT_NAME}
     PRIVATE "${CMAKE_SOURCE_DIR}/src"
-    PUBLIC  "${CMAKE_SOURCE_DIR}/include"
+    PUBLIC  "${CMAKE_SOURCE_DIR}/Include"
     PUBLIC  "${CMAKE_SOURCE_DIR}/External/glm"
     PRIVATE "${CMAKE_SOURCE_DIR}/External/spdlog/include"
     PRIVATE "${CMAKE_SOURCE_DIR}/External_local/glew-2.1.0/include"

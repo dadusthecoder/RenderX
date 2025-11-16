@@ -132,7 +132,7 @@ namespace Lgt {
 	 * @param use Buffer usage pattern.
 	 */
 	const BufferHandle RENDERX_API CreateVertexBuffer(size_t size, const void* data, BufferUsage use);
-
+		
 	//------------------------------------------------------------------------------
 	// VERTEX INPUT LAYOUT & VERTEX ARRAY
 	//------------------------------------------------------------------------------
@@ -142,7 +142,7 @@ namespace Lgt {
 	 * @note In OpenGL, this configures the currently bound VAO , Bind The VAO Before Calling This.
 	 * @note In DirectX/Vulkan, this defines the input assembly state for pipelines.
 	 */
-	const void RENDERX_API CreateVertexLayout(const VertexLayout& layout);
+	void  RENDERX_API CreateVertexLayout(const VertexLayout& layout);
 
 	/**
 	 * @brief Creates a GPU Vertex Array Object (VAO).
@@ -153,7 +153,7 @@ namespace Lgt {
 	 * @brief Binds an existing VAO.
 	 * @note Required before setting up vertex layouts in OpenGL.
 	 */
-	const void RENDERX_API BindVertexArray(const VertexArrayHandle handle);
+	void  RENDERX_API BindVertexArray(const VertexArrayHandle handle);
 
 	//------------------------------------------------------------------------------
 	// RESOURCE BINDING
@@ -162,18 +162,18 @@ namespace Lgt {
 	/**
 	 * @brief Binds a graphics or compute pipeline for subsequent draw/dispatch calls.
 	 */
-	const void RENDERX_API BindPipeline(const PipelineHandle handle);
+	void  RENDERX_API BindPipeline(const PipelineHandle handle);
 
 	/**
 	 * @brief Binds a vertex buffer for input assembly .
 	 * @note OPENGL requires binding the VAO first.
 	 */
-	const void RENDERX_API BindVertexBuffer(const BufferHandle handle);
+	void  RENDERX_API BindVertexBuffer(const BufferHandle handle);
 
 	/**
 	 * @brief Binds an index buffer for indexed drawing.
 	 */
-	const void RENDERX_API BindIndexBuffer(const BufferHandle handle);
+	void  RENDERX_API BindIndexBuffer(const BufferHandle handle);
 
 	//------------------------------------------------------------------------------
 	// DRAW COMMANDS
@@ -187,7 +187,7 @@ namespace Lgt {
 	 * @param firstVertex First vertex index.
 	 * @param firstInstance First instance index.
 	 */
-	const void RENDERX_API Draw(uint32_t vertexCount,
+	void  RENDERX_API Draw(uint32_t vertexCount,
 		uint32_t instanceCount,
 		uint32_t firstVertex,
 		uint32_t firstInstance);
@@ -201,7 +201,7 @@ namespace Lgt {
 	 * @param vertexOffset Added to vertex index base.
 	 * @param firstInstance First instance.
 	 */
-	const void RENDERX_API DrawIndexed(uint32_t indexCount,
+	void  RENDERX_API DrawIndexed(uint32_t indexCount,
 		uint32_t instanceCount,
 		uint32_t firstIndex,
 		int32_t vertexOffset,
@@ -214,11 +214,11 @@ namespace Lgt {
 	/**
 	 * @brief Begins a new rendering frame or command batch.
 	 */
-	const void RENDERX_API Begin();
+	void  RENDERX_API Begin();
 
 	/**
 	 * @brief Ends and submits the currently recorded frame or command batch.
 	 */
-	const void RENDERX_API End();
+	void  RENDERX_API End();
 
 } // namespace Lgt

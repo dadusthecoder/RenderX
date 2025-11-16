@@ -1,7 +1,8 @@
-#include "RenderX.h"
-#include "RenderXCore.h"
+#include "RenderX/RenderX.h"
+#include "RenderX/RenderXCore.h"
 #include "Backend/OpenGL/RenderXGL.h"
 #include "Log.h"
+#include <cstring>
 
 namespace Lgt {
 
@@ -16,15 +17,14 @@ namespace Lgt {
 		switch (api) {
 		case RenderXAPI::OpenGL: {
 			RENDERX_INFO("Initializing OpenGL backend...");
-
-#define RENDERER_FUNC(_ret, _name, ...) g_DispatchTable._name = RenderXGL::GL##_name;
-#include "RenderXAPI.def"
+#define RENDERER_FUNC(_ret, _name, ...)g_DispatchTable._name = RenderXGL::GL##_name;
+#include "RenderX/RenderXAPI.def"
 #undef RENDERER_FUNC
 
 			if (g_DispatchTable.Init)
 				g_DispatchTable.Init();
 
-			API = api;
+				API = api;
 			RENDERX_INFO("OpenGL backend loaded successfully.");
 			break;
 		}

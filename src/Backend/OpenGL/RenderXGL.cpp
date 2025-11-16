@@ -1,7 +1,7 @@
 #include <GL/glew.h>
 #include "RenderXGL.h"
 #include "RenderX/Log.h"
-#include <glfw/glfw3.h>
+#include <GLFW/glfw3.h>
 
 namespace Lgt {
     
@@ -40,13 +40,13 @@ namespace Lgt {
 		RENDERX_INFO("OpenGL initialized successfully (GLEW + GL states configured).");
 	}
 
-	const void RenderXGL::GLBegin() {
+	void RenderXGL::GLBegin() {
 		// Clear the screen
 		glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	}
 
-	const void RenderXGL::GLEnd() {
+	void RenderXGL::GLEnd() {
         // Swap buffers (assuming double buffering)
         glfwSwapBuffers(window);
         glfwPollEvents();
@@ -57,11 +57,11 @@ namespace Lgt {
         }
 	}
 
-    const void RenderXGL::GLDraw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance) {
+    void RenderXGL::GLDraw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance) {
         glDrawArraysInstanced(GL_TRIANGLES,firstVertex,vertexCount,instanceCount);
     }   
 
-    const void RenderXGL::GLDrawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance) {
+    void RenderXGL::GLDrawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance) {
         glDrawElementsInstanced(GL_TRIANGLES, indexCount, GL_UNSIGNED_INT,(void*)(firstIndex * sizeof(GLuint)), instanceCount);
     }
 

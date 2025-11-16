@@ -64,11 +64,11 @@ namespace RenderXGL {
 		return vao;
 	}
 
-	const void GLBindVertexArray(const VertexArrayHandle handle) {
+	void GLBindVertexArray(const VertexArrayHandle handle) {
 		glBindVertexArray(handle);
 	}
 
-	const void GLCreateVertexLayout(const VertexLayout& layout) {
+	void GLCreateVertexLayout(const VertexLayout& layout) {
 		for (const auto& element : layout.attributes) {
 			glVertexAttribPointer(
 				element.location,
@@ -81,11 +81,11 @@ namespace RenderXGL {
 		}
 		}
 
-	const void GLBindVertexBuffer(const BufferHandle handle) {
+	void GLBindVertexBuffer(const BufferHandle handle) {
 		glBindBuffer(GL_ARRAY_BUFFER, handle);
 	}
 
-	const void GLBindIndexBuffer(const BufferHandle handle) {
+	void GLBindIndexBuffer(const BufferHandle handle) {
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, handle);
 	}
 
