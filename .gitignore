@@ -126,7 +126,7 @@ Makefile
 # Ignore build directories
 build/
 # Ignore external libraries
-External/
+
 # Ignore generated documentation
 docs/
 doc/
@@ -152,4 +152,6 @@ $RECYCLE.BIN/
 # Ignore other common files
 *.log
 *.tmp
+
+/External/glew-2.1.0/
 
