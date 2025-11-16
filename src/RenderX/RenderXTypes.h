@@ -11,7 +11,7 @@
 namespace Lgt {
 
 	// Resource handles (opaque types)
-	using VertexLayoutHandle = uint32_t;
+	using VertexArrayHandle = uint32_t;
 	using BufferHandle = uint32_t;
 	using TextureHandle = uint32_t;
 	using SamplerHandle = uint32_t;
@@ -67,6 +67,27 @@ namespace Lgt {
 		Texture3D,
 		TextureCube,
 		Texture2DArray };
+
+    enum class AttachmentLoadOp {
+		Load,
+		Clear,
+		DontCare
+	};
+
+	enum class AttachmentStoreOp {
+		Store,
+		DontCare
+	};
+
+	enum class DataType {
+		Float,
+		Int,
+		UInt,
+		Short,
+		UShort,
+		Byte,
+		UByte
+	};
 
 	enum class TextureFormat {
 		// Color formats
@@ -206,11 +227,11 @@ namespace Lgt {
 	struct VertexAttribute {
 		uint32_t location;
 		uint32_t count;
-		TextureFormat format;
+		DataType datatype;
 		uint32_t offset;
 
-		VertexAttribute(uint32_t loc, uint32_t count, TextureFormat fmt, uint32_t off)
-			: location(loc), count(count), format(fmt), offset(off) {
+		VertexAttribute(uint32_t loc, uint32_t count, DataType datatype, uint32_t off)
+			: location(loc), count(count), datatype(datatype), offset(off) {
 		}
 	};
 
