@@ -57,6 +57,7 @@ file(GLOB_RECURSE SOURCES
     "${CMAKE_SOURCE_DIR}/src/Backend/Vulkan/*.h"
 )
 
+find_package(Vulkan REQUIRED)
 # ────────────────────────────────────────────────────────────────
 #   RenderX Shared Library
 # ────────────────────────────────────────────────────────────────
@@ -74,14 +75,17 @@ target_include_directories(${PROJECT_NAME}
     PUBLIC "${CMAKE_SOURCE_DIR}/External_local/ProLog/include"
 )
 
+
 target_link_directories(RenderX PUBLIC External_local/ProLog/bin)
 
 target_link_libraries(${PROJECT_NAME}
     PRIVATE glm
     PRIVATE spdlog
-    PRIVATE glew_s
     PRIVATE glfw
     PUBLIC  ProLog
+    PRIVATE Vulkan::Vulkan
+    PRIVATE glew_s
+
 )
 
 # ────────────────────────────────────────────────────────────────
