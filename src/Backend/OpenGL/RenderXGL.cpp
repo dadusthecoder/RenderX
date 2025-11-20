@@ -2,30 +2,33 @@
 #include "RenderXGL.h"
 #include "RenderX/Log.h"
 #include <GLFW/glfw3.h>
+#include "ProLog/ProLog.h"
 
-namespace Lgt {
-    
-    static GLFWwindow* window = nullptr;
+namespace RenderX {
 
-    void CreateContext_OpenGL(int width, int height, bool fullscreen) {
-        
-        if (!glfwInit()) {
-            RENDERX_CRITICAL("Failed to initialize GLFW!");
-            return;     
-        }
-        glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);  
-        glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-        window = glfwCreateWindow(width, height, "RenderX",nullptr, nullptr);
-        if (!window) {
-            RENDERX_CRITICAL("Failed to create GLFW window!");
-            glfwTerminate();
-            return;
-        }
-        glfwMakeContextCurrent(window);
-    }
+	static GLFWwindow* window = nullptr;
+
+	void CreateContext_OpenGL(int width, int height, bool fullscreen) {
+		PROFILE_FUNCTION();
+
+		if (!glfwInit()) {
+			RENDERX_CRITICAL("Failed to initialize GLFW!");
+			return;
+		}
+		glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+		glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
+		glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+		window = glfwCreateWindow(width, height, "RenderX", nullptr, nullptr);
+		if (!window) {
+			RENDERX_CRITICAL("Failed to create GLFW window!");
+			glfwTerminate();
+			return;
+		}
+		glfwMakeContextCurrent(window);
+	}
 
 	void RenderXGL::GLInit() {
+		PROFILE_FUNCTION();
 		CreateContext_OpenGL(800, 800, false);
 
 		if (glewInit() != GLEW_OK) {
@@ -33,36 +36,39 @@ namespace Lgt {
 			return;
 		}
 
- 		//glEnable(GL_CULL_FACE);
-		//glEnable(GL_BLEND);
-		//glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-		//glEnable(GL_DEPTH_TEST);
+		glEnable(GL_CULL_FACE);
+		glEnable(GL_BLEND);
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+		glEnable(GL_DEPTH_TEST);
 		RENDERX_INFO("OpenGL initialized successfully (GLEW + GL states configured).");
 	}
 
-	void RenderXGL::GLBegin() {
+	void RenderXGL::GLBeginFrame() {
 		// Clear the screen
+		PROFILE_FUNCTION();
 		glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	}
 
-	void RenderXGL::GLEnd() {
-        // Swap buffers (assuming double buffering)
-        glfwSwapBuffers(window);
-        glfwPollEvents();
-        if(glfwWindowShouldClose(window)) {
-            glfwTerminate();
-            RENDERX_INFO("GLFW window closed, terminating application.");
-            exit(0);
-        }
+	void RenderXGL::GLEndFrame() {
+		PROFILE_FUNCTION();
+
+		// Swap buffers (assuming double buffering)
+		glfwSwapBuffers(window);
+		glfwPollEvents();
+	}
+	
+	bool RenderXGL::GLShouldClose(){
+		return glfwWindowShouldClose(window);
 	}
 
-    void RenderXGL::GLDraw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance) {
-        glDrawArraysInstanced(GL_TRIANGLES,firstVertex,vertexCount,instanceCount);
-    }   
+	void RenderXGL::GLDraw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance) {
+		PROFILE_FUNCTION();
+		glDrawArraysInstanced(GL_TRIANGLES, firstVertex, vertexCount, instanceCount);
+	}
 
-    void RenderXGL::GLDrawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance) {
-        glDrawElementsInstanced(GL_TRIANGLES, indexCount, GL_UNSIGNED_INT,(void*)(firstIndex * sizeof(GLuint)), instanceCount);
-    }
+	void RenderXGL::GLDrawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance) {
+		glDrawElementsInstanced(GL_TRIANGLES, indexCount, GL_UNSIGNED_INT, (void*)(firstIndex * sizeof(GLuint)), instanceCount);
+	}
 
 }

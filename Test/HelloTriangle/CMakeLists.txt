@@ -21,48 +21,6 @@ target_include_directories(HelloTriangle PRIVATE
 #  Link with RenderX library built in /build/bin/<config>/
 # ──────────────────────────────────────────────++
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 target_link_directories(HelloTriangle PRIVATE
     "${CMAKE_SOURCE_DIR}/../../build/bin/${CMAKE_BUILD_TYPE}"
 )

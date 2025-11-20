@@ -2,11 +2,13 @@
 
 #include "RenderXGL.h"
 #include "RenderX/Log.h"
+#include "ProLog/ProLog.h"
 
-// namespace Lng
-namespace Lgt {
 
-	static inline GLuint TOGLBufferUse(BufferUsage usages) {
+
+namespace RenderX {
+
+	static inline GLenum TOGLBufferUse(BufferUsage usages) {
 		switch (usages) {
 		case BufferUsage::Static:
 			return GL_STATIC_DRAW;
@@ -21,7 +23,7 @@ namespace Lgt {
 		return GL_STATIC_DRAW;
 	};
 
-	static inline GLuint TOGLDataType(DataType format) {
+	static inline GLenum TOGLDataType(DataType format) {
 		switch (format) {
 		case DataType::Float:
 			return GL_FLOAT;
@@ -40,54 +42,102 @@ namespace Lgt {
 		default:
 			return GL_FLOAT;
 		}
-};
+	};
 
-// namespace RenderXGL
-namespace RenderXGL {
-
-	const BufferHandle GLCreateVertexBuffer(size_t size,
-		const void* data,
-		BufferUsage use) {
-		BufferHandle id;
-		glGenBuffers(1, &id);
-		glBindBuffer(GL_ARRAY_BUFFER, id);
-		glBufferData(GL_ARRAY_BUFFER, size, data, TOGLBufferUse(use));
-		RENDERX_INFO("OpenGL: Created Vertex Buffer | ID: {} | Size: {} bytes", id, size);
-		return id;
-	}
-
-	const VertexArrayHandle GLCreateVertexArray() {
-		VertexArrayHandle vao;
-		glGenVertexArrays(1, &vao);
-		glBindVertexArray(vao);
-		RENDERX_INFO("OpenGL: Created Vertex Array Object | ID: {}", vao);
-		return vao;
-	}
-
-	void GLBindVertexArray(const VertexArrayHandle handle) {
-		glBindVertexArray(handle);
-	}
-
-	void GLCreateVertexLayout(const VertexLayout& layout) {
-		for (const auto& element : layout.attributes) {
-			glVertexAttribPointer(
-				element.location,
-				element.count,
-				GL_FLOAT,
-				TOGLDataType(element.datatype),
-				layout.totalStride,
-				(void*)(element.offset));
-			glEnableVertexAttribArray(element.location);
+	static inline GLenum TOGLBufferTarget(BufferType type) {
+		switch (type) {
+		case BufferType::Vertex:
+			return GL_ARRAY_BUFFER;
+		case BufferType::Index:
+			return GL_ELEMENT_ARRAY_BUFFER;
+		case BufferType::Uniform:
+			return GL_UNIFORM_BUFFER;
+		case BufferType::Storage:
+			return GL_SHADER_STORAGE_BUFFER;
+		case BufferType::Indirect:
+			return GL_DRAW_INDIRECT_BUFFER;
+		case BufferType::CopySrc:
+			return GL_COPY_READ_BUFFER;
+		case BufferType::CopyDst:
+			return GL_COPY_WRITE_BUFFER;
+		default:
+			return GL_ARRAY_BUFFER;
 		}
+	}
+
+	// namespace RenderXGL
+	namespace RenderXGL {
+
+		const BufferHandle GLCreateBuffer(size_t size,
+			const void* data,
+			BufferType type,
+			BufferUsage use) {
+			PROFILE_FUNCTION();
+			BufferHandle handle;
+			glGenBuffers(1, &handle.id);
+			glBindBuffer(TOGLBufferTarget(type), handle.id);
+			glBufferData(GL_ARRAY_BUFFER, size, data, TOGLBufferUse(use));
+			RENDERX_INFO("OpenGL: Created Vertex Buffer | ID: {} | Size: {} bytes", handle.id, size);
+			return handle;
+		}
+        
+		void GLDestroyBuffer(BufferHandle handle){
+			PROFILE_FUNCTION();
+            glDeleteBuffers(1 , const_cast<GLuint*>(&handle.id));
 		}
 
-	void GLBindVertexBuffer(const BufferHandle handle) {
-		glBindBuffer(GL_ARRAY_BUFFER, handle);
-	}
+		const BufferHandle GLCreateVertexBuffer(size_t size,
+			const void* data,
+			BufferUsage use) {
+			PROFILE_FUNCTION();
+			BufferHandle handle;
+			glGenBuffers(1, &handle.id);
+			glBindBuffer(GL_ARRAY_BUFFER, handle.id);
+			glBufferData(GL_ARRAY_BUFFER, size, data, TOGLBufferUse(use));
+			RENDERX_INFO("OpenGL: Created Vertex Buffer | ID: {} | Size: {} bytes", handle.id, size);
+			return handle;
+		}
 
-	void GLBindIndexBuffer(const BufferHandle handle) {
-		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, handle);
-	}
+		void GLBindIndexBuffer(const BufferHandle handle) {
+			PROFILE_FUNCTION();
+			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, handle.id);
+		}
 
-}
+		void GLBindVertexBuffer(const BufferHandle handle) {
+			PROFILE_FUNCTION();
+			glBindBuffer(GL_ARRAY_BUFFER, handle.id);
+		}
+
+		const VertexArrayHandle GLCreateVertexArray() {
+			PROFILE_FUNCTION();
+			VertexArrayHandle vao;
+			glGenVertexArrays(1, &vao.id);
+			glBindVertexArray(vao.id);
+			RENDERX_INFO("OpenGL: Created Vertex Array Object | ID: {}", vao.id);
+			return vao;
+		}
+
+		void GLBindVertexArray(const VertexArrayHandle handle) {
+			PROFILE_FUNCTION();
+			glBindVertexArray(handle.id);
+		}
+
+		void GLCreateVertexLayout(const VertexLayout& layout) {
+			PROFILE_FUNCTION();
+			for (const auto& element : layout.attributes) {
+				glVertexAttribPointer(
+					element.location,
+					element.count,
+					GL_FLOAT,
+					TOGLDataType(element.datatype),
+					layout.totalStride,
+					(void*)(element.offset));
+				glEnableVertexAttribArray(element.location);
+			}
+		}
+
+
+
+
+	}
 }

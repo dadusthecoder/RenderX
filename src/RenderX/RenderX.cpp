@@ -2,29 +2,32 @@
 #include "RenderX/RenderXCore.h"
 #include "Backend/OpenGL/RenderXGL.h"
 #include "Log.h"
+#include "ProLog/ProLog.h"
 #include <cstring>
 
-namespace Lgt {
+namespace RenderX {
 
 	// Global Variables
 	RenderDispatchTable g_DispatchTable;
 	RenderXAPI API = RenderXAPI::None;
 
+
 	void LoadAPI(RenderXAPI api) {
 		RENDERX_LOG_INIT();
 		RENDERX_INFO("Loading Renderer API...");
+		PROFILE_FUNCTION();
 
 		switch (api) {
 		case RenderXAPI::OpenGL: {
 			RENDERX_INFO("Initializing OpenGL backend...");
-#define RENDERER_FUNC(_ret, _name, ...)g_DispatchTable._name = RenderXGL::GL##_name;
+#define RENDERER_FUNC(_ret, _name, ...) g_DispatchTable._name = RenderXGL::GL##_name;
 #include "RenderX/RenderXAPI.def"
 #undef RENDERER_FUNC
 
 			if (g_DispatchTable.Init)
 				g_DispatchTable.Init();
 
-				API = api;
+			API = api;
 			RENDERX_INFO("OpenGL backend loaded successfully.");
 			break;
 		}
@@ -38,6 +41,5 @@ namespace Lgt {
 			break;
 		}
 	}
-
 
 } // namespace Lng

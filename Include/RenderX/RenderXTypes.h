@@ -8,17 +8,34 @@
 #include <string>
 #include <vector>
 
-namespace Lgt {
+namespace RenderX {
+
+
+
+	/// Lightweight strongly-typed wrapper around a 32-bit resource id.
+	/// All GPU-resident objects in RenderX are referenced via Handle-based aliases.
+	struct Handle {
+		uint32_t id = 0;
+
+		Handle() = default;
+		Handle(uint32_t handleId) : id(handleId) {}
+
+		bool IsValid() const { return id != 0; }
+
+		bool operator==(const Handle& other) const { return id == other.id; }
+		bool operator!=(const Handle& other) const { return id != other.id; }
+		bool operator<(const Handle& other) const { return id < other.id; }
+	};
 
 	// Resource handles (opaque types)
-	using VertexArrayHandle = uint32_t;
-	using BufferHandle = uint32_t;
-	using TextureHandle = uint32_t;
-	using SamplerHandle = uint32_t;
-	using ShaderHandle = uint32_t;
-	using PipelineHandle = uint32_t;
-	using FramebufferHandle = uint32_t;
-	using RenderPassHandle = uint32_t;
+	using VertexArrayHandle = Handle;
+	using BufferHandle = Handle;
+	using TextureHandle = Handle;
+	using SamplerHandle = Handle;
+	using ShaderHandle = Handle;
+	using PipelineHandle = Handle;
+	using FramebufferHandle = Handle;
+	using RenderPassHandle = Handle;
 
 	constexpr uint32_t INVALID_HANDLE = 0;
 
@@ -36,6 +53,9 @@ namespace Lgt {
 	using UVec4 = glm::uvec4;
 	using Quat = glm::quat;
 
+	struct CommandList {
+	};
+
 	enum class RenderXAPI {
 		None,
 		OpenGL,
@@ -51,11 +71,16 @@ namespace Lgt {
 		Compute
 	};
 
-	enum class BufferType { Vertex,
+	enum class BufferType {
+		Vertex,
 		Index,
 		Uniform,
 		Storage,
-		Staging };
+		Indirect,
+		CopySrc,
+		CopyDst
+	};
+
 
 	enum class BufferUsage {
 		Static,	 // Data never changes
@@ -68,7 +93,7 @@ namespace Lgt {
 		TextureCube,
 		Texture2DArray };
 
-    enum class AttachmentLoadOp {
+	enum class AttachmentLoadOp {
 		Load,
 		Clear,
 		DontCare
@@ -246,9 +271,11 @@ namespace Lgt {
 	};
 
 	struct VertexLayout {
+		// Interleaved vertex attributes for a single vertex stream.
 		std::vector<VertexAttribute> attributes;
 		std::vector<VertexBinding> bindings;
-		uint32_t totalStride;
+		// Total size in bytes of one vertex for the primary binding.
+		uint32_t totalStride = 0;
 	};
 
 	// Resource descriptions
@@ -451,7 +478,9 @@ namespace Lgt {
 
 	// Resource binding
 	struct ResourceBinding {
+		// Binding index in the shader (set-specific if the backend supports sets).
 		uint32_t binding;
+		// Descriptor set index (Vulkan-style); unused on backends without sets.
 		uint32_t set;
 		enum Type {
 			UniformBuffer,
@@ -476,11 +505,7 @@ namespace Lgt {
 		}
 	};
 
-} // namespace Lgx
-
-namespace Lgx {
-
-	// Statistics and debug info
+	// Statistics and debug info for a single frame.
 	struct RenderStats {
 		uint32_t drawCalls;
 		uint32_t triangles;
@@ -489,9 +514,15 @@ namespace Lgx {
 		uint32_t textureBinds;
 		uint32_t shaderBinds;
 
+		RenderStats()
+			: drawCalls(0), triangles(0), vertices(0), bufferBinds(0), textureBinds(0),
+			  shaderBinds(0) {
+		}
+
 		void Reset() {
 			drawCalls = triangles = vertices = bufferBinds = textureBinds =
 				shaderBinds = 0;
 		}
 	};
-}; // namespace Lgx
+
+} // namespace RenderX

@@ -68,16 +68,20 @@ target_include_directories(${PROJECT_NAME}
     PRIVATE "${CMAKE_SOURCE_DIR}/src"
     PUBLIC  "${CMAKE_SOURCE_DIR}/Include"
     PUBLIC  "${CMAKE_SOURCE_DIR}/External/glm"
-    PRIVATE "${CMAKE_SOURCE_DIR}/External/spdlog/include"
-    PRIVATE "${CMAKE_SOURCE_DIR}/External_local/glew-2.1.0/include"
+    PUBLIC "${CMAKE_SOURCE_DIR}/External/spdlog/include"
     PRIVATE "${CMAKE_SOURCE_DIR}/External/glfw/include"
+    PRIVATE "${CMAKE_SOURCE_DIR}/External_local/glew-2.1.0/include"
+    PUBLIC "${CMAKE_SOURCE_DIR}/External_local/ProLog/include"
 )
+
+target_link_directories(RenderX PUBLIC External_local/ProLog/bin)
 
 target_link_libraries(${PROJECT_NAME}
     PRIVATE glm
     PRIVATE spdlog
     PRIVATE glew_s
     PRIVATE glfw
+    PUBLIC  ProLog
 )
 
 # ────────────────────────────────────────────────────────────────
