@@ -7,6 +7,10 @@
 namespace RenderX {
 
 
+	static std::unordered_map<uint32_t, PipelineDesc> PipelineCache;
+
+
+
 	// Convert engine ShaderType to OpenGL shader enums
 	const static inline GLenum TOGLShaderType(ShaderType type) {
 		switch (type) {
@@ -20,6 +24,61 @@ namespace RenderX {
 			RENDERX_ERROR("Unknown ShaderType: {}", static_cast<int>(type));
 			return 0;
 		}
+	}
+
+	static inline GLenum TOGLPrimitive(PrimitiveType p) {
+		switch (p) {
+		case PrimitiveType::Points: return GL_POINTS;
+		case PrimitiveType::Lines: return GL_LINES;
+		case PrimitiveType::LineStrip: return GL_LINE_STRIP;
+		case PrimitiveType::Triangles: return GL_TRIANGLES;
+		case PrimitiveType::TriangleStrip: return GL_TRIANGLE_STRIP;
+		case PrimitiveType::TriangleFan: return GL_TRIANGLE_FAN;
+		}
+		return GL_TRIANGLES;
+	}
+
+	static inline GLenum TOGLCompare(CompareFunc f) {
+		switch (f) {
+		case CompareFunc::Never: return GL_NEVER;
+		case CompareFunc::Less: return GL_LESS;
+		case CompareFunc::Equal: return GL_EQUAL;
+		case CompareFunc::LessEqual: return GL_LEQUAL;
+		case CompareFunc::Greater: return GL_GREATER;
+		case CompareFunc::NotEqual: return GL_NOTEQUAL;
+		case CompareFunc::GreaterEqual: return GL_GEQUAL;
+		case CompareFunc::Always: return GL_ALWAYS;
+		}
+		return GL_LESS;
+	}
+
+	static inline GLenum TOGLBlendFunc(BlendFunc f) {
+		switch (f) {
+		case BlendFunc::Zero: return GL_ZERO;
+		case BlendFunc::One: return GL_ONE;
+		case BlendFunc::SrcColor: return GL_SRC_COLOR;
+		case BlendFunc::OneMinusSrcColor: return GL_ONE_MINUS_SRC_COLOR;
+		case BlendFunc::DstColor: return GL_DST_COLOR;
+		case BlendFunc::OneMinusDstColor: return GL_ONE_MINUS_DST_COLOR;
+		case BlendFunc::SrcAlpha: return GL_SRC_ALPHA;
+		case BlendFunc::OneMinusSrcAlpha: return GL_ONE_MINUS_SRC_ALPHA;
+		case BlendFunc::DstAlpha: return GL_DST_ALPHA;
+		case BlendFunc::OneMinusDstAlpha: return GL_ONE_MINUS_DST_ALPHA;
+		case BlendFunc::ConstantColor: return GL_CONSTANT_COLOR;
+		case BlendFunc::OneMinusConstantColor: return GL_ONE_MINUS_CONSTANT_COLOR;
+		}
+		return GL_ONE;
+	}
+
+	static inline GLenum TOGLBlendOp(BlendOp op) {
+		switch (op) {
+		case BlendOp::Add: return GL_FUNC_ADD;
+		case BlendOp::Subtract: return GL_FUNC_SUBTRACT;
+		case BlendOp::ReverseSubtract: return GL_FUNC_REVERSE_SUBTRACT;
+		case BlendOp::Min: return GL_MIN;
+		case BlendOp::Max: return GL_MAX;
+		}
+		return GL_FUNC_ADD;
 	}
 
 	// Helper: Compile a single shader
@@ -75,25 +134,17 @@ namespace RenderX {
 		return ShaderHandle(shader);
 	}
 
-	const PipelineHandle RenderXGL::GLCreatePipelineGFX_Src(const std::string& vertsrc,
-		const std::string& fragsrc) {
+
+	const PipelineHandle RenderXGL::GLCreatePipeline(PipelineDesc& desc) {
 		PROFILE_FUNCTION();
+
 		GLuint program = glCreateProgram();
-		GLuint vs = compileShader(GL_VERTEX_SHADER, vertsrc);
-		GLuint fs = compileShader(GL_FRAGMENT_SHADER, fragsrc);
 
-		if (vs == 0 || fs == 0) {
-			RENDERX_ERROR("Shader compilation failed program creation aborted.");
-			if (vs)
-				glDeleteShader(vs);
-			if (fs)
-				glDeleteShader(fs);
-			glDeleteProgram(program);
-			return PipelineHandle(0);
-		}
+		PipelineCache[program] = desc;
 
-		glAttachShader(program, vs);
-		glAttachShader(program, fs);
+		for (auto shader : desc.shaders)
+			glAttachShader(program, shader.id);
+
 		glLinkProgram(program);
 
 		GLint success = 0;
@@ -106,8 +157,6 @@ namespace RenderX {
 
 			RENDERX_ERROR("Shader program linking error:\n{}", errorLog.data());
 
-			glDeleteShader(vs);
-			glDeleteShader(fs);
 			glDeleteProgram(program);
 			return PipelineHandle(0);
 		}
@@ -118,67 +167,10 @@ namespace RenderX {
 		if (!success)
 			RENDERX_WARN("Shader program validation failed | Program ID: {}", program);
 
-		// Cleanup shaders after linking
-		glDeleteShader(vs);
-		glDeleteShader(fs);
+		// Shader Deletion Is Handled By The Client Side
 
 		RENDERX_INFO("Shader program linked successfully | Program ID: {}", program);
-		return PipelineHandle(program);
-	}
 
-	const PipelineHandle RenderXGL::GLCreatePipelineGFX_Desc(const PipelineDesc& desc) {
-		PROFILE_FUNCTION();
-		RENDERX_WARN("GLCreatePipelineGFX_Desc not yet implemented.");
-		return PipelineHandle(0);
-	}
-
-	const PipelineHandle RenderXGL::GLCreatePipelineGFX_Shader(const ShaderDesc& vertdesc,
-		const ShaderDesc& fragdesc) {
-		PROFILE_FUNCTION();
-		RENDERX_WARN("GLCreatePipelineGFX_Shader not yet implemented.");
-		return PipelineHandle(0);
-	}
-
-	const PipelineHandle RenderXGL::GLCreatePipelineCOMP_Desc(const PipelineDesc& desc) {
-		PROFILE_FUNCTION();
-		RENDERX_WARN("GLCreatePipelineCOMP_Desc not yet implemented.");
-		return PipelineHandle(0);
-	}
-
-	const PipelineHandle RenderXGL::GLCreatePipelineCOMP_Shader(const ShaderDesc& shaderdesc) {
-		PROFILE_FUNCTION();
-		RENDERX_WARN("GLCreatePipelineCOMP_Shader not yet implemented.");
-		return PipelineHandle(0);
-	}
-
-	const PipelineHandle RenderXGL::GLCreatePipelineCOMP_Src(const std::string& compsrc) {
-		PROFILE_FUNCTION();
-		GLuint cs = compileShader(GL_COMPUTE_SHADER, compsrc);
-		if (!cs) {
-			RENDERX_ERROR("Compute shader compilation failed cannot create program.");
-			return PipelineHandle(0);
-		}
-
-		GLuint program = glCreateProgram();
-		glAttachShader(program, cs);
-		glLinkProgram(program);
-
-		GLint success = 0;
-		glGetProgramiv(program, GL_LINK_STATUS, &success);
-		if (!success) {
-			GLint length;
-			glGetProgramiv(program, GL_INFO_LOG_LENGTH, &length);
-			std::vector<char> errorLog(length);
-			glGetProgramInfoLog(program, length, &length, errorLog.data());
-
-			RENDERX_ERROR("Compute shadeFrentr linking error:\n{}", errorLog.data());
-			glDeleteShader(cs);
-			glDeleteProgram(program);
-			return PipelineHandle(0);
-		}
-
-		glDeleteShader(cs);
-		RENDERX_INFO("Compute shader pipeline created successfully | Program ID: {}", program);
 		return PipelineHandle(program);
 	}
 
@@ -186,6 +178,98 @@ namespace RenderX {
 
 	void RenderXGL::GLBindPipeline(const PipelineHandle handle) {
 		PROFILE_FUNCTION();
+
+		glUseProgram(handle.id);
+
+		// return if the pipeline is Compute!
+		if (PipelineCache[handle.id].type == PipelineType::Compute)
+			return;
+
+		// Fill mode
+		switch (PipelineCache[handle.id].rasterizer.fillMode) {
+		case FillMode::Solid: glPolygonMode(GL_FRONT_AND_BACK, GL_FILL); break;
+		case FillMode::Wireframe: glPolygonMode(GL_FRONT_AND_BACK, GL_LINE); break;
+		case FillMode::Point: glPolygonMode(GL_FRONT_AND_BACK, GL_POINT); break;
+		}
+
+		// Culling
+		switch (PipelineCache[handle.id].rasterizer.cullMode) {
+		case CullMode::None:
+			glDisable(GL_CULL_FACE);
+			break;
+
+		case CullMode::Front:
+			glEnable(GL_CULL_FACE);
+			glCullFace(GL_FRONT);
+			break;
+
+		case CullMode::Back:
+			glEnable(GL_CULL_FACE);
+			glCullFace(GL_BACK);
+			break;
+
+		case CullMode::FrontAndBack:
+			glEnable(GL_CULL_FACE);
+			glCullFace(GL_FRONT_AND_BACK);
+			break;
+		}
+
+		// Front winding
+		glFrontFace(PipelineCache[handle.id].rasterizer.frontCounterClockwise ? GL_CCW : GL_CW);
+
+		// Depth bias
+		if (PipelineCache[handle.id].rasterizer.depthBias != 0.0f ||
+			PipelineCache[handle.id].rasterizer.slopeScaledDepthBias != 0.0f) {
+			glEnable(GL_POLYGON_OFFSET_FILL);
+			glPolygonOffset(PipelineCache[handle.id].rasterizer.slopeScaledDepthBias,
+				PipelineCache[handle.id].rasterizer.depthBias);
+		}
+		else {
+			glDisable(GL_POLYGON_OFFSET_FILL);
+		}
+
+		// Depth-Stencil State
+		if (PipelineCache[handle.id].depthStencil.depthEnable) {
+			glEnable(GL_DEPTH_TEST);
+			glDepthFunc(TOGLCompare(PipelineCache[handle.id].depthStencil.depthFunc));
+			glDepthMask(PipelineCache[handle.id].depthStencil.depthWriteEnable ? GL_TRUE : GL_FALSE);
+		}
+		else {
+			glDisable(GL_DEPTH_TEST);
+		}
+
+		if (PipelineCache[handle.id].depthStencil.stencilEnable) {
+			glEnable(GL_STENCIL_TEST);
+			glStencilMask(PipelineCache[handle.id].depthStencil.stencilWriteMask);
+		}
+		else {
+			glDisable(GL_STENCIL_TEST);
+		}
+
+		// Blending State
+
+		if (PipelineCache[handle.id].blend.enable) {
+			glEnable(GL_BLEND);
+
+			glBlendFuncSeparate(
+				TOGLBlendFunc(PipelineCache[handle.id].blend.srcColor),
+				TOGLBlendFunc(PipelineCache[handle.id].blend.dstColor),
+				TOGLBlendFunc(PipelineCache[handle.id].blend.srcAlpha),
+				TOGLBlendFunc(PipelineCache[handle.id].blend.dstAlpha));
+
+			glBlendEquationSeparate(
+				TOGLBlendOp(PipelineCache[handle.id].blend.colorOp),
+				TOGLBlendOp(PipelineCache[handle.id].blend.alphaOp));
+
+			glBlendColor(PipelineCache[handle.id].blend.blendFactor.r,
+				PipelineCache[handle.id].blend.blendFactor.g,
+				PipelineCache[handle.id].blend.blendFactor.b,
+				PipelineCache[handle.id].blend.blendFactor.a);
+		}
+		else {
+			glDisable(GL_BLEND);
+		}
+
 		glUseProgram(handle.id);
 	}
 

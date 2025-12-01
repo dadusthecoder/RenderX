@@ -271,10 +271,8 @@ namespace RenderX {
 	};
 
 	struct VertexLayout {
-		// Interleaved vertex attributes for a single vertex stream.
 		std::vector<VertexAttribute> attributes;
 		std::vector<VertexBinding> bindings;
-		// Total size in bytes of one vertex for the primary binding.
 		uint32_t totalStride = 0;
 	};
 
@@ -401,8 +399,29 @@ namespace RenderX {
 		}
 	};
 
+	// Pipeline Type
+	enum class PipelineType {
+		Graphics,
+		Compute
+	};
+
+	enum class PipelinStage {
+		Vertex,
+		Fragment
+	};
+
+	enum class ResourceType {
+		ConstantBuffer,
+		DynamicBUffer,
+		Texture_SRV,
+		Texture_UAV,
+
+	};
+
+
 	// Pipeline description
 	struct PipelineDesc {
+		PipelineType type;
 		std::vector<ShaderHandle> shaders;
 		VertexLayout vertexLayout;
 		PrimitiveType primitiveType;

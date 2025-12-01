@@ -5,14 +5,8 @@ RENDERER_FUNC(void, BeginFrame)
 RENDERER_FUNC(void, EndFrame)
 
 // pipeline Graphics
-RENDERER_FUNC(const PipelineHandle, CreatePipelineGFX_Desc, const PipelineDesc& desc)
-RENDERER_FUNC(const PipelineHandle, CreatePipelineGFX_Src, const std::string& vertsrc, const std::string& fragsrc)
-RENDERER_FUNC(const PipelineHandle, CreatePipelineGFX_Shader, const ShaderDesc& vertdesc, const ShaderDesc& fragdesc)
+RENDERER_FUNC(const PipelineHandle, CreatePipeline,PipelineDesc& desc)
 
-// pepline Compute
-RENDERER_FUNC(const PipelineHandle, CreatePipelineCOMP_Desc, const PipelineDesc& desc)
-RENDERER_FUNC(const PipelineHandle, CreatePipelineCOMP_Shader, const ShaderDesc& compdesc)
-RENDERER_FUNC(const PipelineHandle, CreatePipelineCOMP_Src, const std::string& compsrc)
 
 // resource Creation
 RENDERER_FUNC(const ShaderHandle, CreateShader, const ShaderDesc& desc)

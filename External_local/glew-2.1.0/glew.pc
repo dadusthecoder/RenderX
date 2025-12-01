@@ -1,6 +1,6 @@
-prefix=D:/dev/cpp/RenderX/out/install/x64-Debug
+prefix=C:/Program Files (x86)/RenderX
 exec_prefix=${prefix}
-libdir=D:/dev/cpp/RenderX/out/install/x64-Debug/lib
+libdir=C:/Program Files (x86)/RenderX/lib
 includedir=${prefix}/include
 
 Name: glew

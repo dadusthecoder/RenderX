@@ -63,6 +63,16 @@ namespace RenderX {
 	void RENDERX_API LoadAPI(RenderXAPI api);
 
 	//------------------------------------------------------------------------------
+	// SHADER CREATION
+	//------------------------------------------------------------------------------
+
+	/**
+	 * @brief Creates and compiles a GPU shader.
+	 * Compiles from source or loads precompiled bytecode based on backend.
+	 */
+	const ShaderHandle RENDERX_API CreateShader(const ShaderDesc& desc);
+
+	//------------------------------------------------------------------------------
 	// PIPELINE CREATION (GRAPHICS)
 	//------------------------------------------------------------------------------
 
@@ -72,53 +82,7 @@ namespace RenderX {
 	 * @param desc Full graphics pipeline state description.
 	 * @return Created graphics pipeline handle.
 	 */
-	const PipelineHandle RENDERX_API CreatePipelineGFX(const PipelineDesc& desc);
-
-	/**
-	 * @brief Creates a graphics pipeline from raw shader source.
-	 *
-	 * Default states (blend, raster, depth) will be automatically applied.
-	 */
-	const PipelineHandle RENDERX_API CreatePipelineGFX(const std::string& vertSrc,
-		const std::string& fragSrc);
-
-	/**
-	 * @brief Creates a graphics pipeline from shader descriptors.
-	 *
-	 * Accepts source or precompiled shader data through ShaderDesc.
-	 */
-	const PipelineHandle RENDERX_API CreatePipelineGFX(const ShaderDesc& vertDesc,
-		const ShaderDesc& fragDesc);
-
-	//------------------------------------------------------------------------------
-	// PIPELINE CREATION (COMPUTE)
-	//------------------------------------------------------------------------------
-
-	/**
-	 * @brief Creates a compute pipeline using a full PipelineDesc.
-	 */
-	const PipelineHandle RENDERX_API CreatePipelineCOMP(const PipelineDesc& desc);
-
-	/**
-	 * @brief Creates a compute pipeline from raw compute shader source.
-	 */
-	const PipelineHandle RENDERX_API CreatePipelineCOMP(const std::string& compSrc);
-
-	/**
-	 * @brief Creates a compute pipeline from a compute shader descriptor.
-	 */
-	const PipelineHandle RENDERX_API CreatePipelineCOMP(const ShaderDesc& compDesc);
-
-	//------------------------------------------------------------------------------
-	// SHADER CREATION
-	//------------------------------------------------------------------------------
-
-	/**
-	 * @brief Creates and compiles a GPU shader.
-	 *
-	 * Compiles from source or loads precompiled bytecode based on backend.
-	 */
-	const ShaderHandle RENDERX_API CreateShader(const ShaderDesc& desc);
+	const PipelineHandle RENDERX_API CreatePipeline(PipelineDesc& desc);
 
 	//------------------------------------------------------------------------------
 	// BUFFER CREATION
@@ -133,27 +97,11 @@ namespace RenderX {
 	 */
 	const BufferHandle RENDERX_API CreateVertexBuffer(size_t size, const void* data, BufferUsage use);
 
-	//------------------------------------------------------------------------------
-	// VERTEX INPUT LAYOUT & VERTEX ARRAY
-	//------------------------------------------------------------------------------
-
 	/**
-	 * @brief Creates a vertex layout (attribute format, stride, semantics).
-	 * @note In OpenGL, this configures the currently bound VAO , Bind The VAO Before Calling This.
-	 * @note In DirectX/Vulkan, this defines the input assembly state for pipelines.
+	 * @brief Creates a GPU buffer.
+	 * @param BufferDesc configuration of the buffer.
 	 */
-	void RENDERX_API CreateVertexLayout(const VertexLayout& layout);
-
-	/**
-	 * @brief Creates a GPU Vertex Array Object (VAO).
-	 */
-	const VertexArrayHandle RENDERX_API CreateVertexArray();
-
-	/**
-	 * @brief Binds an existing VAO.
-	 * @note Required before setting up vertex layouts in OpenGL.
-	 */
-	void RENDERX_API BindVertexArray(const VertexArrayHandle handle);
+	// const BufferHandle RENDERX_API CreateBuffer(BufferDesc& desc);
 
 	//------------------------------------------------------------------------------
 	// RESOURCE BINDING
@@ -222,7 +170,7 @@ namespace RenderX {
 	void RENDERX_API EndFrame();
 
 
-	//temp 
+	// temp
 	bool RENDERX_API ShouldClose();
 
 } // namespace RenderX
