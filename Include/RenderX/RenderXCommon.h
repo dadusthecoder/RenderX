@@ -8,10 +8,9 @@
 #include <string>
 #include <vector>
 
-namespace RenderX {
-
-
-
+namespace  RenderX
+{
+    
 	/// Lightweight strongly-typed wrapper around a 32-bit resource id.
 	/// All GPU-resident objects in RenderX are referenced via Handle-based aliases.
 	struct Handle {
@@ -54,9 +53,29 @@ namespace RenderX {
 	using Quat = glm::quat;
 
 	struct CommandList {
+
+		Handle handle;
+		
+
+		void begin();
+		void end();
+
+		void setPipeline(const PipelineHandle pipeline);
+		void setVertexBuffer(const BufferHandle buffer, uint64_t offset = 0);
+		void setIndexBuffer(const BufferHandle buffer, uint64_t offset = 0);
+		void draw(uint32_t vertexCount, uint32_t instanceCount = 1,
+			uint32_t firstVertex = 0, uint32_t firstInstance = 0);
+		void drawIndexed(uint32_t indexCount, int32_t vertexOffset = 0,
+			uint32_t instanceCount = 1, uint32_t firstIndex = 0, uint32_t firstInstance = 0);
 	};
 
-	enum class RenderXAPI {
+	// for now, simple command list creation function
+	CommandList createCommandList();
+	void execute(CommandList& cmdList);
+
+
+	// Enums and structs for various RenderX configurations and description
+	enum class GraphicsAPI {
 		None,
 		OpenGL,
 		Vulkan
@@ -71,22 +90,20 @@ namespace RenderX {
 		Compute
 	};
 
-	enum class BufferType {
+	enum class BufferType : uint8_t {
 		Vertex,
 		Index,
 		Uniform,
 		Storage,
-		Indirect,
-		CopySrc,
-		CopyDst
+		Indirect
 	};
 
-
-	enum class BufferUsage {
-		Static,	 // Data never changes
-		Dynamic, // Data changes occasionally
-		Stream	 // Data changes every frame
+	enum class BufferUsage : uint8_t {
+		Static,	 // CPU upload once, GPU reads
+		Dynamic, // CPU updates often
+		Stream	 // CPU updates every frame
 	};
+
 
 	enum class TextureType { Texture2D,
 		Texture3D,
@@ -104,14 +121,19 @@ namespace RenderX {
 		DontCare
 	};
 
-	enum class DataType {
-		Float,
-		Int,
-		UInt,
-		Short,
-		UShort,
-		Byte,
-		UByte
+	enum class DataFormat {
+		R8,
+		RG8,
+		RGB8,
+		RGBA8,
+		R16F,
+		RG16F,
+		RGB16F,
+		RGBA16F,
+		R32F,
+		RG32F,
+		RGB32F,
+		RGBA32F,
 	};
 
 	enum class TextureFormat {
@@ -251,11 +273,12 @@ namespace RenderX {
 	// Vertex input description
 	struct VertexAttribute {
 		uint32_t location;
+		uint32_t binding;
 		uint32_t count;
-		DataType datatype;
+		DataFormat datatype;
 		uint32_t offset;
 
-		VertexAttribute(uint32_t loc, uint32_t count, DataType datatype, uint32_t off)
+		VertexAttribute(uint32_t loc, uint32_t count, DataFormat datatype, uint32_t off)
 			: location(loc), count(count), datatype(datatype), offset(off) {
 		}
 	};
@@ -276,7 +299,8 @@ namespace RenderX {
 		uint32_t totalStride = 0;
 	};
 
-	// Resource descriptions
+	// Resource descriptions for craeation
+
 	struct BufferDesc {
 		BufferType type;
 		BufferUsage usage;
@@ -332,16 +356,16 @@ namespace RenderX {
 
 	struct ShaderDesc {
 		ShaderType type;
-		std::string source;			   // GLSL source or HLSL
-		std::vector<uint8_t> bytecode; // SPIR-V or compiled bytecode
-		std::string entryPoint;		   // Entry function name (for HLSL/SPIR-V)
+		std::string source;				// GLSL source or HLSL
+		std::vector<uint32_t> bytecode; // SPIR-V or compiled bytecode
+		std::string entryPoint;			// Entry function name (for HLSL/SPIR-V)
 
 		ShaderDesc(ShaderType t, const std::string& src)
 			: type(t), source(src), entryPoint("main") {
 		}
 
-		ShaderDesc(ShaderType t, const std::vector<uint8_t>& code,
-			const std::string& entry = "main")
+		ShaderDesc(ShaderType t, const std::vector<uint32_t>& code,
+			const std::string entry = "main")
 			: type(t), bytecode(code), entryPoint(entry) {
 		}
 	};
@@ -385,10 +409,10 @@ namespace RenderX {
 		bool enable;
 		BlendFunc srcColor;
 		BlendFunc dstColor;
-		BlendOp colorOp;
 		BlendFunc srcAlpha;
 		BlendFunc dstAlpha;
 		BlendOp alphaOp;
+		BlendOp colorOp;
 		Vec4 blendFactor;
 
 		BlendState()
@@ -544,4 +568,4 @@ namespace RenderX {
 		}
 	};
 
-} // namespace RenderX
+} // namespace  RenderX

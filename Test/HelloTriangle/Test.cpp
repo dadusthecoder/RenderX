@@ -1,16 +1,10 @@
 #include "RenderX/RenderX.h"
-#include "ProLog/ProLog.h"
 #include <iostream>
 
 int main() {
-		ProLog::ProfilerConfig config;
-		config.enableProfiling = true;
-		config.enableLogging = true;
-		config.bufferSize = 500;
-		config.autoFlush = true;
-		ProLog::SetConfig(config);
-        PROFILE_START_SESSION("RenderX_Api_Loading" ,"RenderX_Api_Loading.json");
-	RenderX::LoadAPI(RenderX::RenderXAPI::OpenGL);
+	
+	RenderX::Init();
+	RenderX::SetBackend(RenderX::GraphicsAPI::Vulkan);
 
 	float vertices[] = {
 		-0.5f, -0.5f, 0.0f,
@@ -18,16 +12,15 @@ int main() {
 		0.0f, 0.5f, 0.0f
 	};
 
-	RenderX::VertexAttribute posAttr(0, 3, RenderX::DataType::Float, 0);
+	RenderX::VertexAttribute posAttr(0, 3, RenderX::DataFormat::RGBA32F, 0);
 	RenderX::VertexBinding binding(0, sizeof(float) * 3, false);
-	auto Layout = RenderX::VertexLayout();
-	Layout.totalStride = sizeof(float) * 3;
-	Layout.attributes.push_back(posAttr);
-	Layout.bindings.push_back(binding);
 
-	auto VAO = RenderX::CreateVertexArray();
-	auto vertexBuffer = RenderX::CreateVertexBuffer(sizeof(vertices), (void*)vertices, RenderX::BufferUsage::Static);
-	RenderX::CreateVertexLayout(Layout);
+	auto vertexBuffer = RenderX::CreateBuffer(RenderX::BufferDesc(
+		RenderX::BufferType::Vertex,
+		sizeof(vertices),
+		RenderX::BufferUsage::Static,
+		vertices
+	));
 
 	std::string vertSrc = R"(
 		#version 460 core
@@ -48,18 +41,33 @@ int main() {
 					}
 				)";
 
-	auto pipeline = RenderX::CreatePipelineGFX(vertSrc, fragSrc);
-	RenderX::PipelineDesc comp;
-	// auto PipelineCOMP = RenderX::CreatePipelineCOMP(comp);
+	auto vertexShader = RenderX::CreateShader(RenderX::ShaderDesc(RenderX::ShaderType::Vertex, vertSrc));
+	auto fragmentShader = RenderX::CreateShader(RenderX::ShaderDesc(RenderX::ShaderType::Fragment, fragSrc));
+	RenderX::PipelineDesc pipelineDesc;
+	pipelineDesc.shaders = { vertexShader, fragmentShader };
+	pipelineDesc.vertexLayout.attributes.push_back(posAttr);
+	pipelineDesc.vertexLayout.bindings.push_back(binding);
+	RenderX::RasterizerState rasterzier;
+	rasterzier.cullMode = RenderX::CullMode::Front;
+	rasterzier.depthBias = 0.0f;
+	rasterzier.fillMode = RenderX::FillMode::Solid;
+    
+
+	pipelineDesc.rasterizer = rasterzier;
+	
+	auto pipeline = RenderX::CreateGraphicsPipeline(pipelineDesc);
+
+    RenderX::CommandList cmdList = RenderX::CreateCommandList();
+    // cmdList.begin();
+	// cmdList.setPipeline(pipeline);
+	// cmdList.setVertexBuffer(vertexBuffer);
+	// cmdList.draw(3 , 1 , 0 , 0);
+	// cmdList.end();
 
 	while (!RenderX::ShouldClose()) {
-		RenderX::BeginFrame();
-		RenderX::BindPipeline(pipeline);
-		RenderX::Draw(3, 1, 0, 0);
-		RenderX::EndFrame();
-	}
-
-	PROFILE_PRINT_STATS();
-    PROFILE_END_SESSION();
+       RenderX::ExecuteCommandList(cmdList);  
+	} 
+    
+	RenderX::ShutDown();
 	return 0;
 }

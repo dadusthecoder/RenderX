@@ -1,5 +1,5 @@
 #pragma once
-#include "RenderXTypes.h"
+#include  "RenderXCommon.h"
 
 //------------------------------------------------------------------------------
 // PLATFORM DETECTION
@@ -60,7 +60,7 @@ namespace RenderX {
 	 *
 	 * @note Must be called before any rendering operations.
 	 */
-	void RENDERX_API LoadAPI(RenderXAPI api);
+	void RENDERX_API SetBackend(GraphicsAPI api);
 
 	//------------------------------------------------------------------------------
 	// SHADER CREATION
@@ -70,7 +70,7 @@ namespace RenderX {
 	 * @brief Creates and compiles a GPU shader.
 	 * Compiles from source or loads precompiled bytecode based on backend.
 	 */
-	const ShaderHandle RENDERX_API CreateShader(const ShaderDesc& desc);
+	ShaderHandle RENDERX_API CreateShader(const ShaderDesc& desc);
 
 	//------------------------------------------------------------------------------
 	// PIPELINE CREATION (GRAPHICS)
@@ -82,7 +82,7 @@ namespace RenderX {
 	 * @param desc Full graphics pipeline state description.
 	 * @return Created graphics pipeline handle.
 	 */
-	const PipelineHandle RENDERX_API CreatePipeline(PipelineDesc& desc);
+	const PipelineHandle RENDERX_API CreateGraphicsPipeline(PipelineDesc& desc);
 
 	//------------------------------------------------------------------------------
 	// BUFFER CREATION
@@ -95,80 +95,21 @@ namespace RenderX {
 	 * @param data Optional pointer to initial data.
 	 * @param use Buffer usage pattern.
 	 */
-	const BufferHandle RENDERX_API CreateVertexBuffer(size_t size, const void* data, BufferUsage use);
+	// const BufferHandle RENDERX_API CreateVertexBuffer(size_t size, const void* data, BufferUsage use);
 
 	/**
 	 * @brief Creates a GPU buffer.
 	 * @param BufferDesc configuration of the buffer.
 	 */
-	// const BufferHandle RENDERX_API CreateBuffer(BufferDesc& desc);
+	const BufferHandle RENDERX_API CreateBuffer(const BufferDesc& desc);
+
+    CommandList RENDERX_API CreateCommandList();
+	void RENDERX_API DestroyCommandList(const CommandList& cmdList);
+	void RENDERX_API ExecuteCommandList(const CommandList& cmdList);
 
 	//------------------------------------------------------------------------------
-	// RESOURCE BINDING
-	//------------------------------------------------------------------------------
-
-	/**
-	 * @brief Binds a graphics or compute pipeline for subsequent draw/dispatch calls.
-	 */
-	void RENDERX_API BindPipeline(const PipelineHandle handle);
-
-	/**
-	 * @brief Binds a vertex buffer for input assembly .
-	 * @note OPENGL requires binding the VAO first.
-	 */
-	void RENDERX_API BindVertexBuffer(const BufferHandle handle);
-
-	/**
-	 * @brief Binds an index buffer for indexed drawing.
-	 */
-	void RENDERX_API BindIndexBuffer(const BufferHandle handle);
-
-	//------------------------------------------------------------------------------
-	// DRAW COMMANDS
-	//------------------------------------------------------------------------------
-
-	/**
-	 * @brief Issues a non-indexed instanced draw call .
-	 *
-	 * @param vertexCount Number of vertices.
-	 * @param instanceCount Instance count for instanced rendering.
-	 * @param firstVertex First vertex index.
-	 * @param firstInstance First instance index.
-	 */
-	void RENDERX_API Draw(uint32_t vertexCount,
-		uint32_t instanceCount,
-		uint32_t firstVertex,
-		uint32_t firstInstance);
-
-	/**
-	 * @brief Issues an indexed draw call.
-	 *
-	 * @param indexCount Number of indices.
-	 * @param instanceCount Instance count.
-	 * @param firstIndex Starting index.
-	 * @param vertexOffset Added to vertex index base.
-	 * @param firstInstance First instance.
-	 */
-	void RENDERX_API DrawIndexed(uint32_t indexCount,
-		uint32_t instanceCount,
-		uint32_t firstIndex,
-		int32_t vertexOffset,
-		uint32_t firstInstance);
-
-	//------------------------------------------------------------------------------
-	// FRAME CONTROL
-	//------------------------------------------------------------------------------
-
-	/**
-	 * @brief Begins a new rendering frame or command batch.
-	 */
-	void RENDERX_API BeginFrame();
-
-	/**
-	 * @brief Ends and submits the currently recorded frame or command batch.
-	 */
-	void RENDERX_API EndFrame();
-
+    void RENDERX_API Init();
+	void RENDERX_API ShutDown();
 
 	// temp
 	bool RENDERX_API ShouldClose();

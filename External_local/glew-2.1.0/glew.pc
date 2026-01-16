@@ -1,6 +1,6 @@
-prefix=C:/Program Files (x86)/RenderX
+prefix=C:/Program Files/RenderX
 exec_prefix=${prefix}
-libdir=C:/Program Files (x86)/RenderX/lib
+libdir=C:/Program Files/RenderX/lib
 includedir=${prefix}/include
 
 Name: glew

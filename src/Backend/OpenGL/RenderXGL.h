@@ -1,19 +1,19 @@
-#pragma once
-#include "RenderX/RenderXTypes.h"
-#include <string>
+// #pragma once
+// #include "RenderX/RenderXTypes.h"
+// #include <string>
 
-// sorting
-//  rendercommands
-namespace RenderX {
+// // sorting
+// //  rendercommands
+// namespace RenderX {
 
-namespace RenderXGL {
+// namespace RenderXGL {
 
-// Declear Backend Functions
-#undef RENDERER_FUNC
-#define RENDERER_FUNC(_ret, _name, ...) _ret GL##_name(__VA_ARGS__);
-#include "RenderX/RenderXAPI.def"
-#undef RENDERER_FUNC
+// // Declear Backend Functions
+// #undef RENDERER_FUNC
+// #define RENDERER_FUNC(_ret, _name, ...) _ret GL##_name(__VA_ARGS__);
+// #include "RenderX/RenderXAPI.def"
+// #undef RENDERER_FUNC
 
-} // namespace RenderXGL
+// } // namespace RenderXGL
 
-} // namespace Lng
+// } // namespace Lng

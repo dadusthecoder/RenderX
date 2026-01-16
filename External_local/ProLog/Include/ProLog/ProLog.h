@@ -47,144 +47,138 @@
 
 namespace ProLog {
 
-// ============================================================================
-// Forward Declarations
-// ============================================================================
-struct ProfileResult;
-struct ProfileStatistics;
-class ProfilerSession;
-class Timer;
-class Logger;
-class PerformanceMarker;
-// ============================================================================
-// Configuration
-// ============================================================================
-struct PROLOG_API ProfilerConfig {
-    bool enableProfiling = true;
-    bool enableLogging = true;
-    size_t bufferSize = 1000;
-    bool autoFlush = false;
-    std::string outputFormat = "chrome";
-};
+	// ============================================================================
+	// Forward Declarations
+	// ============================================================================
+	struct ProfileResult;
+	struct ProfileStatistics;
+	class ProfilerSession;
+	class Timer;
+	class Logger;
+	class PerformanceMarker;
+	// ============================================================================
+	// Configuration
+	// ============================================================================
+	struct PROLOG_API ProfilerConfig {
+		bool enableProfiling = true;
+		bool enableLogging = true;
+		size_t bufferSize = 1000;
+		bool autoFlush = false;
+		std::string outputFormat = "chrome";
+	};
 
-// ============================================================================
-// Profile Result Structures
-// ============================================================================
-struct PROLOG_API ProfileResult {
-    std::string name;
-    std::string category;
-    long long start;
-    long long duration;
-    std::thread::id threadID;
-    size_t depth;
-    std::unordered_map<std::string, std::string> metadata;
-};
+	// ============================================================================
+	// Profile Result Structures
+	// ============================================================================
+	struct PROLOG_API ProfileResult {
+		std::string name;
+		std::string category;
+		long long start;
+		long long duration;
+		std::thread::id threadID;
+		size_t depth;
+		std::unordered_map<std::string, std::string> metadata;
+	};
 
-struct PROLOG_API ProfileStatistics {
-    std::string functionName;
-    size_t callCount = 0;
-    long long totalDuration = 0;
-    long long minDuration = LLONG_MAX;
-    long long maxDuration = 0;
-    double avgDuration = 0.0;
-};
+	struct PROLOG_API ProfileStatistics {
+		std::string functionName;
+		size_t callCount = 0;
+		long long totalDuration = 0;
+		long long minDuration = LLONG_MAX;
+		long long maxDuration = 0;
+		double avgDuration = 0.0;
+	};
 
-// ============================================================================
-// Profiler Session
-// ============================================================================
-class PROLOG_API ProfilerSession {
-public:
-    static ProfilerSession& Get();
+	// ============================================================================
+	// Profiler Session
+	// ============================================================================
+	class PROLOG_API ProfilerSession {
+	public:
+		static ProfilerSession& Get();
 
-    void BeginSession(const std::string& name, const std::string& filepath = "profile_results.json");
-    void EndSession();
-    void WriteProfile(const ProfileResult& result);
-    void SetConfig(const ProfilerConfig& config);
-    std::unordered_map<std::string, ProfileStatistics> GetStatistics();
-    void PrintStatistics();
+		void BeginSession(const std::string& name, const std::string& filepath = "profile_results.json");
+		void EndSession();
+		void WriteProfile(const ProfileResult& result);
+		void SetConfig(const ProfilerConfig& config);
+		std::unordered_map<std::string, ProfileStatistics> GetStatistics();
+		void PrintStatistics();
+	private:
+		ProfilerSession() = default;
+		~ProfilerSession();
+		ProfilerSession(const ProfilerSession&) = delete;
+		ProfilerSession& operator=(const ProfilerSession&) = delete;
 
-private:
-    ProfilerSession() = default;
-    ~ProfilerSession();
-    ProfilerSession(const ProfilerSession&) = delete;
-    ProfilerSession& operator=(const ProfilerSession&) = delete;
+		void WriteHeader();
+		void WriteFooter();
+		void FlushBuffer();
+		void WriteStatisticsFile();
 
-    void WriteHeader();
-    void WriteFooter();
-    void FlushBuffer();
-    void WriteStatisticsFile();
+		std::string m_CurrentSession;
+		std::ofstream m_OutputStream;
+		int m_ProfileCount = 0;
+		std::mutex m_Mutex;
+		ProfilerConfig m_Config;
+		std::unordered_map<std::string, ProfileStatistics> m_Statistics;
+		std::vector<ProfileResult> m_Buffer;
+		std::chrono::time_point<std::chrono::high_resolution_clock> m_StartTime;
+	};
 
-    std::string m_CurrentSession;
-    std::ofstream m_OutputStream;
-    int m_ProfileCount = 0;
-    std::mutex m_Mutex;
-    ProfilerConfig m_Config;
-    std::unordered_map<std::string, ProfileStatistics> m_Statistics;
-    std::vector<ProfileResult> m_Buffer;
-    std::chrono::time_point<std::chrono::high_resolution_clock> m_StartTime;
-};
+	// ============================================================================
+	// Timer
+	// ============================================================================
+	class PROLOG_API Timer {
+	public:
+		Timer(const char* name, const char* category = "function");
+		~Timer();
 
-// ============================================================================
-// Timer
-// ============================================================================
-class PROLOG_API Timer {
-public:
-    Timer(const char* name, const char* category = "function");
-    ~Timer();
+		void Stop();
+		void AddMetadata(const std::string& key, const std::string& value);
+	private:
+		const char* m_Name;
+		const char* m_Category;
+		std::chrono::time_point<std::chrono::high_resolution_clock> m_StartTimepoint;
+		bool m_Stopped;
+		size_t m_Depth;
+		std::unordered_map<std::string, std::string> m_Metadata;
+	};
 
-    void Stop();
-    void AddMetadata(const std::string& key, const std::string& value);
+	// ============================================================================
+	// Logger
+	// ============================================================================
+	class PROLOG_API Logger {
+	public:
+		static Logger& Get();
 
-private:
-    const char* m_Name;
-    const char* m_Category;
-    std::chrono::time_point<std::chrono::high_resolution_clock> m_StartTimepoint;
-    bool m_Stopped;
-    size_t m_Depth;
-    std::unordered_map<std::string, std::string> m_Metadata;
-    
-    static thread_local size_t s_CurrentDepth;
-};
+		void Init(const std::string& logFile = "application.log",
+			size_t maxSize = 1024 * 1024 * 5,
+			size_t maxFiles = 3);
 
-// ============================================================================
-// Logger
-// ============================================================================
-class PROLOG_API Logger {
-public:
-    static Logger& Get();
+		std::shared_ptr<spdlog::logger>& GetLogger();
+		void SetLevel(spdlog::level::level_enum level);
+		void Flush();
+	private:
+		Logger() = default;
+		Logger(const Logger&) = delete;
+		Logger& operator=(const Logger&) = delete;
 
-    void Init(const std::string& logFile = "application.log", 
-              size_t maxSize = 1024 * 1024 * 5, 
-              size_t maxFiles = 3);
-    
-    std::shared_ptr<spdlog::logger>& GetLogger();
-    void SetLevel(spdlog::level::level_enum level);
-    void Flush();
+		std::shared_ptr<spdlog::logger> m_Logger;
+	};
 
-private:
-    Logger() = default;
-    Logger(const Logger&) = delete;
-    Logger& operator=(const Logger&) = delete;
+	// ============================================================================
+	// Performance Marker
+	// ============================================================================
+	class PROLOG_API PerformanceMarker {
+	public:
+		static void BeginEvent(const std::string& name, const std::string& category = "marker");
+		static void EndEvent(const std::string& name);
+	private:
+		static std::unordered_map<std::string, std::unique_ptr<Timer>> s_ActiveMarkers;
+		static std::mutex s_Mutex;
+	};
 
-    std::shared_ptr<spdlog::logger> m_Logger;
-};
-
-// ============================================================================
-// Performance Marker
-// ============================================================================
-class PROLOG_API PerformanceMarker {
-public:
-    static void BeginEvent(const std::string& name, const std::string& category = "marker");
-    static void EndEvent(const std::string& name);
-
-private:
-    static std::unordered_map<std::string, std::unique_ptr<Timer>> s_ActiveMarkers;
-    static std::mutex s_Mutex;
-};
-
-static void SetConfig(ProfilerConfig config){
-    ProLog::ProfilerSession::Get().SetConfig(config);
-}
+	static void SetConfig(ProfilerConfig config) {
+		ProLog::ProfilerSession::Get().SetConfig(config);
+	}
 
 }; // namespace Prolog
 
@@ -199,14 +193,15 @@ static void SetConfig(ProfilerConfig config){
 #define PROFILE_BEGIN(name) ::ProLog::PerformanceMarker::BeginEvent(name)
 #define PROFILE_END(name) ::ProLog::PerformanceMarker::EndEvent(name)
 
-#define LOG_TRACE(...)    ::ProLog::Logger::Get().GetLogger()->trace(__VA_ARGS__)
-#define LOG_DEBUG(...)    ::ProLog::Logger::Get().GetLogger()->debug(__VA_ARGS__)
-#define LOG_INFO(...)     ::ProLog::Logger::Get().GetLogger()->info(__VA_ARGS__)
-#define LOG_WARN(...)     ::ProLog::Logger::Get().GetLogger()->warn(__VA_ARGS__)
-#define LOG_ERROR(...)    ::ProLog::Logger::Get().GetLogger()->error(__VA_ARGS__)
+#define LOG_TRACE(...) ::ProLog::Logger::Get().GetLogger()->trace(__VA_ARGS__)
+#define LOG_DEBUG(...) ::ProLog::Logger::Get().GetLogger()->debug(__VA_ARGS__)
+#define LOG_INFO(...) ::ProLog::Logger::Get().GetLogger()->info(__VA_ARGS__)
+#define LOG_WARN(...) ::ProLog::Logger::Get().GetLogger()->warn(__VA_ARGS__)
+#define LOG_ERROR(...) ::ProLog::Logger::Get().GetLogger()->error(__VA_ARGS__)
 #define LOG_CRITICAL(...) ::ProLog::Logger::Get().GetLogger()->critical(__VA_ARGS__)
 
-#define LOG_IF(condition, level, ...) if(condition) LOG_##level(__VA_ARGS__)
+#define LOG_IF(condition, level, ...) \
+	if (condition) LOG_##level(__VA_ARGS__)
 
 #define PROFILE_START_SESSION(name, filepath) ProLog::ProfilerSession::Get().BeginSession(name, filepath)
 #define PROFILE_END_SESSION() ::ProLog::ProfilerSession::Get().EndSession()
