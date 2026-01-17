@@ -7,33 +7,65 @@ namespace RenderX {
 namespace RenderXVK {
 
 	std::unordered_map<uint32_t, VulkanCommandList> s_CommandLists;
+	static uint32_t s_NextCommandlistId = 1;
 
-	void OpenCommandListVK(CommandList& cmdList) {
+	void VKCmdBegin(CommandList& cmdList) {
 		PROFILE_FUNCTION();
-		auto it = s_CommandLists.find(cmdList.handle.id);
-		if (it == s_CommandLists.end())
-			return;
+
+		RENDERX_ASSERT_MSG(cmdList.IsValid(), "Invalid Command List");
+
+		auto ctx = GetVulkanContext();
 		VkCommandBufferBeginInfo beginInfo{};
 		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 		beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-		vkBeginCommandBuffer(it->second.commandBuffer, &beginInfo);
-		it->second.isRecording = true;
+		vkBeginCommandBuffer(s_CommandLists[cmdList.id].commandBuffer, &beginInfo);
+		s_CommandLists[cmdList.id].isRecording = true;
+
+		VkRenderPassBeginInfo rpbi{};
+		rpbi.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+		VkClearValue clear{};
+		clear.color = { { 1.0f,
+			0.0f,
+			0.0f,
+			1.0f } };
+
+		rpbi.clearValueCount = 1;
+		rpbi.pClearValues = &clear;
+
+		rpbi.renderArea.offset = { 0, 0 };
+		rpbi.renderArea.extent = ctx.swapchainExtent;
+
+		// temp
+		rpbi.renderPass = ctx.RenderPass;
+
+		// temp
+		rpbi.framebuffer = ctx.swapchainFrambuffers;
+
+		vkCmdBeginRenderPass(s_CommandLists[cmdList.id].commandBuffer, &rpbi, VK_SUBPASS_CONTENTS_INLINE);
 	}
 
-	void CloseCommandListVK(CommandList& cmdList) {
+	void VKCmdEnd(CommandList& cmdList) {
 		PROFILE_FUNCTION();
-		auto it = s_CommandLists.find(cmdList.handle.id);
-		if (it == s_CommandLists.end())
-			return;
-		vkEndCommandBuffer(it->second.commandBuffer);
-		it->second.isRecording = false;
+		RENDERX_ASSERT_MSG(cmdList.IsValid(), "Invalid CommandList");
+		vkCmdEndRenderPass(s_CommandLists[cmdList.id].commandBuffer);
+		vkEndCommandBuffer(s_CommandLists[cmdList.id].commandBuffer);
+		s_CommandLists[cmdList.id].isRecording = false;
 	}
 
-	void DrawVK(CommandList& cmdList, uint32_t vertexCount, uint32_t instanceCount,
+	void VKCmdDraw(CommandList& cmdList, uint32_t vertexCount, uint32_t instanceCount,
 		uint32_t firstVertex, uint32_t firstInstance) {
 		PROFILE_FUNCTION();
-		vkCmdDraw(s_CommandLists[cmdList.handle.id].commandBuffer,
+		RENDERX_ASSERT_MSG(cmdList.IsValid(), "Invalid CommandList");
+		vkCmdDraw(s_CommandLists[cmdList.id].commandBuffer,
 			vertexCount, instanceCount, firstVertex, firstInstance);
+	}
+
+	void VKCmdDrawIndexed(CommandList& cmdList,
+		uint32_t indexCount, int32_t vertexOffset,
+		uint32_t instanceCount, uint32_t firstIndex, uint32_t firstInstance) {
+		PROFILE_FUNCTION();
+		RENDERX_ASSERT_MSG(cmdList.IsValid(), "Invalid CommandList")
+		vkCmdDrawIndexed(s_CommandLists[cmdList.id].commandBuffer, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
 	}
 
 	CommandList VKCreateCommandList() {
@@ -52,26 +84,29 @@ namespace RenderXVK {
 			return CommandList{};
 		}
 		vulkanCmdList.isRecording = false;
-		cmdList.handle.id = static_cast<uint32_t>(s_CommandLists.size() + 1);
-		s_CommandLists[cmdList.handle.id] = vulkanCmdList;
+		cmdList.id = s_NextCommandlistId++;
+		s_CommandLists[cmdList.id] = vulkanCmdList;
 		return cmdList;
 	}
 
-	void VKDestroyCommandList(const CommandList& cmdList) {
+	void VKDestroyCommandList(CommandList& cmdList) {
 		PROFILE_FUNCTION();
 		VulkanContext& ctx = GetVulkanContext();
-		auto it = s_CommandLists.find(cmdList.handle.id);
-		if (it == s_CommandLists.end())
-			return;
 
-		vkFreeCommandBuffers(ctx.device, ctx.graphicsCommandPool, 1, &it->second.commandBuffer);
-		s_CommandLists.erase(it);
+#ifdef _DEBUG
+		auto it = s_CommandLists.find(cmdList.id);
+		RENDERX_ASSERT(it != s_CommandLists.end());
+#endif
+		RENDERX_ASSERT_MSG(cmdList.IsValid(), "Invalid CommandList")
+		vkFreeCommandBuffers(ctx.device, ctx.graphicsCommandPool, 1, &s_CommandLists[cmdList.id].commandBuffer);
+		s_CommandLists.erase(cmdList.id);
+		cmdList.id = 0;
 	}
 
-	void VKExecuteCommandList(const CommandList& cmdList) {
+	void VKExecuteCommandList(CommandList& cmdList) {
 		PROFILE_FUNCTION();
 		glfwPollEvents();
-		auto it = s_CommandLists.find(cmdList.handle.id);
+		auto it = s_CommandLists.find(cmdList.id);
 		if (it == s_CommandLists.end())
 			return;
 		VulkanContext& ctx = GetVulkanContext();

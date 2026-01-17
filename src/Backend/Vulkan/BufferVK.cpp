@@ -73,7 +73,7 @@ namespace RenderX {
 			// Create staging buffer
 			VulkanBuffer stagingBuffer{};
 			stagingBuffer.size = size;
-			stagingBuffer.offset = 0;
+
 			VkBufferCreateInfo bufferInfo{};
 			bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 			bufferInfo.size = size;
@@ -100,9 +100,9 @@ namespace RenderX {
 			}
 
 			// Upload data to staging buffer
-			vkBindBufferMemory(ctx.device, stagingBuffer.buffer, stagingBuffer.memory, stagingBuffer.offset);
+			vkBindBufferMemory(ctx.device, stagingBuffer.buffer, stagingBuffer.memory, 0);
 			void* ptr;
-			vkMapMemory(ctx.device, stagingBuffer.memory, stagingBuffer.offset, stagingBuffer.size, 0, &ptr);
+			vkMapMemory(ctx.device, stagingBuffer.memory, 0, stagingBuffer.size, 0, &ptr);
 			memcpy(ptr, data, size);
 			vkUnmapMemory(ctx.device, stagingBuffer.memory);
 
@@ -143,13 +143,6 @@ namespace RenderX {
 			vkFreeMemory(ctx.device, stagingBuffer.memory, nullptr);
 		}
 
-		// command list related functions can go here
-		void setVertexBufferVK(CommandList cmdList, BufferHandle handle) {
-			PROFILE_FUNCTION();
-			vkCmdBindVertexBuffers(s_CommandLists[cmdList.handle.id].commandBuffer, 0, 1,
-				&s_Buffers[handle.id].buffer, &s_Buffers[handle.id].offset);
-		}
-
 		// ===================== BUFFER =====================
 		const BufferHandle VKCreateBuffer(const BufferDesc& desc) {
 			PROFILE_FUNCTION();
@@ -158,7 +151,6 @@ namespace RenderX {
 			// Create buffer
 			VulkanBuffer vulkanBuffer{};
 			vulkanBuffer.size = desc.size;
-			vulkanBuffer.offset = 0;
 
 			VkBufferCreateInfo bufferInfo{};
 			bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -186,7 +178,7 @@ namespace RenderX {
 			}
 
 
-			vkBindBufferMemory(ctx.device, vulkanBuffer.buffer, vulkanBuffer.memory, vulkanBuffer.offset);
+			vkBindBufferMemory(ctx.device, vulkanBuffer.buffer, vulkanBuffer.memory, 0);
 			if (desc.initialData) {
 				if (desc.usage == BufferUsage::Static) {
 					UploadViaStagingBufferVK(vulkanBuffer, desc.initialData, desc.size);
@@ -194,7 +186,7 @@ namespace RenderX {
 				else {
 					// Direct upload for dynamic and stream buffers
 					void* ptr;
-					vkMapMemory(ctx.device, vulkanBuffer.memory, vulkanBuffer.offset, vulkanBuffer.size, 0, &ptr);
+					vkMapMemory(ctx.device, vulkanBuffer.memory, 0, vulkanBuffer.size, 0, &ptr);
 					memcpy(ptr, desc.initialData, desc.size);
 					vkUnmapMemory(ctx.device, vulkanBuffer.memory);
 				}
@@ -217,6 +209,26 @@ namespace RenderX {
 			vkDestroyBuffer(ctx.device, it->second.buffer, nullptr);
 			vkFreeMemory(ctx.device, it->second.memory, nullptr);
 			RenderXVK::s_Buffers.erase(it);
+		}
+
+		// command list related functions can go here
+		void VKCmdSetVertexBuffer(CommandList& cmdList, BufferHandle handle, uint64_t offset) {
+			PROFILE_FUNCTION();
+			RENDERX_ASSERT_MSG(cmdList.IsValid(), "Invalid Command list");
+
+			if (!s_CommandLists[cmdList.id].isRecording)
+				return;
+			vkCmdBindVertexBuffers(s_CommandLists[cmdList.id].commandBuffer, 0, 1,
+				&s_Buffers[handle.id].buffer, &offset);
+		}
+
+		void VKCmdSetIndexBuffer(CommandList& cmdList, BufferHandle buffer, uint64_t offset) {
+			PROFILE_FUNCTION();
+			RENDERX_ASSERT_MSG(cmdList.IsValid(), "Invalid Command list");
+			if (!s_CommandLists[cmdList.id].isRecording)
+				return;
+			vkCmdBindIndexBuffer(s_CommandLists[cmdList.id].commandBuffer,
+				s_Buffers[buffer.id].buffer, offset, VK_INDEX_TYPE_UINT32);
 		}
 
 	} // namespace RenderXVk

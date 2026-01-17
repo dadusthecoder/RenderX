@@ -61,7 +61,7 @@ find_package(Vulkan REQUIRED)
 # ────────────────────────────────────────────────────────────────
 #   RenderX Shared Library
 # ────────────────────────────────────────────────────────────────
-add_library(${PROJECT_NAME} SHARED ${SOURCES})
+add_library(${PROJECT_NAME} SHARED ${SOURCES} "src/Backend/Vulkan/FrameBufferVK.cpp")
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE RENDERX_BUILD_DLL)
 

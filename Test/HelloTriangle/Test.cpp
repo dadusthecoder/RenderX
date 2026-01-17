@@ -1,8 +1,8 @@
 #include "RenderX/RenderX.h"
+#include "Files.h"
 #include <iostream>
 
 int main() {
-	
 	RenderX::Init();
 	RenderX::SetBackend(RenderX::GraphicsAPI::Vulkan);
 
@@ -12,62 +12,43 @@ int main() {
 		0.0f, 0.5f, 0.0f
 	};
 
-	RenderX::VertexAttribute posAttr(0, 3, RenderX::DataFormat::RGBA32F, 0);
-	RenderX::VertexBinding binding(0, sizeof(float) * 3, false);
-
 	auto vertexBuffer = RenderX::CreateBuffer(RenderX::BufferDesc(
 		RenderX::BufferType::Vertex,
 		sizeof(vertices),
-		RenderX::BufferUsage::Static,
-		vertices
-	));
+		RenderX::BufferUsage::Dynamic,
+		vertices));
 
-	std::string vertSrc = R"(
-		#version 460 core
-		layout(location = 0) in vec3 aPos;
-        layout(location = 0) out vec3 fragPos;
-		void main() {
-		    fragPos = aPos;
-			gl_Position = vec4(aPos, 1.0);
-			}
-			)";
+	// Create shaders
+	std::vector<uint8_t> vertexShaderSrc = Files::ReadBinaryFile("D:/dev/cpp/RenderX/Test/HelloTriangle/Shaders/bsc.vert.spv");
+	std::vector<uint8_t> fragmentShaderSrc = Files::ReadBinaryFile("D:/dev/cpp/RenderX/Test/HelloTriangle/Shaders/bsc.frag.spv");
 
-	std::string fragSrc = R"(
-				#version 460 core
-				layout(location = 0) in vec3 fragPos;
-				out vec4 FragColor;
-				void main() {
-					FragColor = vec4(fragPos, 1.0);
-					}
-				)";
+	auto vertexShader = RenderX::CreateShader(RenderX::ShaderDesc(
+		RenderX::ShaderType::Vertex,
+		vertexShaderSrc));
 
-	auto vertexShader = RenderX::CreateShader(RenderX::ShaderDesc(RenderX::ShaderType::Vertex, vertSrc));
-	auto fragmentShader = RenderX::CreateShader(RenderX::ShaderDesc(RenderX::ShaderType::Fragment, fragSrc));
+	auto fragmentShader = RenderX::CreateShader(RenderX::ShaderDesc(
+		RenderX::ShaderType::Fragment,
+		fragmentShaderSrc));
+
+	// Create pipeline
+
+	std::vector<RenderX::ShaderHandle> shaders = { vertexShader, fragmentShader };
+
 	RenderX::PipelineDesc pipelineDesc;
-	pipelineDesc.shaders = { vertexShader, fragmentShader };
-	pipelineDesc.vertexLayout.attributes.push_back(posAttr);
-	pipelineDesc.vertexLayout.bindings.push_back(binding);
-	RenderX::RasterizerState rasterzier;
-	rasterzier.cullMode = RenderX::CullMode::Front;
-	rasterzier.depthBias = 0.0f;
-	rasterzier.fillMode = RenderX::FillMode::Solid;
-    
-
-	pipelineDesc.rasterizer = rasterzier;
-	
+	pipelineDesc.shaders = shaders;
 	auto pipeline = RenderX::CreateGraphicsPipeline(pipelineDesc);
 
-    RenderX::CommandList cmdList = RenderX::CreateCommandList();
-    // cmdList.begin();
-	// cmdList.setPipeline(pipeline);
-	// cmdList.setVertexBuffer(vertexBuffer);
-	// cmdList.draw(3 , 1 , 0 , 0);
-	// cmdList.end();
-
+	RenderX::CommandList cmdList = RenderX::CreateCommandList();
 	while (!RenderX::ShouldClose()) {
-       RenderX::ExecuteCommandList(cmdList);  
-	} 
-    
+		cmdList.begin();
+		cmdList.setPipeline(pipeline);
+		cmdList.setVertexBuffer(vertexBuffer);
+		cmdList.draw(3); // Draw 3 vertices (triangle)
+		cmdList.end();
+		RenderX::ExecuteCommandList(cmdList);
+	}
+
+	RenderX::DestroyCommandList(cmdList);
 	RenderX::ShutDown();
 	return 0;
 }

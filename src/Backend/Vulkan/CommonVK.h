@@ -17,9 +17,9 @@
 namespace RenderX {
 namespace RenderXVK {
 
-// Internal Vulkan backend helpers. These are NOT part of the public RenderX API.
-// They are kept inline so they can be used privately from backend sources without
-// exposing device/swapchain creation details to library users.
+	// Internal Vulkan backend helpers. These are NOT part of the public RenderX API.
+	// They are kept inline so they can be used privately from backend sources without
+	// exposing device/swapchain creation details to library users.
 
 #define VK_CHECK(x)                                                                                      \
 	do {                                                                                                 \
@@ -46,9 +46,17 @@ namespace RenderXVK {
 		VkCommandPool graphicsCommandPool;
 
 		VkSurfaceKHR surface = VK_NULL_HANDLE;
+
+		// swapchain related stuff
 		VkSwapchainKHR swapchain = VK_NULL_HANDLE;
 		VkFormat swapchainImageFormat = VK_FORMAT_UNDEFINED;
 		VkExtent2D swapchainExtent{ 0, 0 };
+
+		std::vector<VkImage> swapchainImages;
+		std::vector<VkImageView> swapchainImageviews;
+		VkFramebuffer swapchainFrambuffers = VK_NULL_HANDLE;
+
+		VkRenderPass RenderPass = VK_NULL_HANDLE;
 	};
 
 	struct VulkanCommandList {
@@ -60,7 +68,6 @@ namespace RenderXVK {
 		VkDeviceMemory memory;
 		VkBuffer buffer;
 		size_t size;
-		VkDeviceSize offset;
 	};
 
 	struct VulkanShader {

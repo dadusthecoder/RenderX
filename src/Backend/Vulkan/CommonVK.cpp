@@ -1,18 +1,73 @@
 #include "CommonVK.h"
 
 
+#ifndef NDEBUG
+const bool enableValidationLayers = true;
+#else
+const bool enableValidationLayers = false;
+#endif
+
 namespace RenderX {
 namespace RenderXVK {
 
-	//  GLOBAL STORAGE 
-	static VulkanContext s_Context;
+
 	VulkanContext& GetVulkanContext() {
-		return s_Context;
+		static VulkanContext g_Context;
+		return g_Context;
 	}
 
-	// INSTANCE 
+	std::vector<VkDynamicState> g_DynamicStates{
+		VK_DYNAMIC_STATE_VIEWPORT,
+		VK_DYNAMIC_STATE_SCISSOR
+	};
+
+	std::vector<const char*> g_RequestedValidationLayers{
+		"VK_LAYER_KHRONOS_validation"
+	};
+
+	std::vector<const char*> g_RequestedDeviceExtensions{
+		VK_KHR_SWAPCHAIN_EXTENSION_NAME
+	};
+
+	// -------------------- helpers to query layers/extensions --------------------
+	void GetEnabledValidationLayers(std::vector<const char*>& out) {
+		uint32_t count = 0;
+		vkEnumerateInstanceLayerProperties(&count, nullptr);
+		if (count == 0)
+			return;
+
+		std::vector<VkLayerProperties> props(count);
+		vkEnumerateInstanceLayerProperties(&count, props.data());
+
+		for (auto* req : g_RequestedValidationLayers) {
+			for (const auto& p : props)
+				if (strcmp(req, p.layerName) == 0)
+					out.push_back(req);
+		}
+	}
+
+	void GetEnabledExtensionsVk(VkPhysicalDevice device, std::vector<const char*>& out) {
+		uint32_t count = 0;
+		vkEnumerateDeviceExtensionProperties(device, nullptr, &count, nullptr);
+		if (count == 0)
+			return;
+
+		std::vector<VkExtensionProperties> props(count);
+		vkEnumerateDeviceExtensionProperties(device, nullptr, &count, props.data());
+
+		for (auto* req : g_RequestedDeviceExtensions) {
+			for (const auto& p : props)
+				if (strcmp(req, p.extensionName) == 0)
+					out.push_back(req);
+		}
+	}
+
+	// INSTANCE
 	bool CreateInstance(VkInstance* outInstance) {
 		PROFILE_FUNCTION();
+		std::vector<const char*> validationLayers;
+		if (enableValidationLayers)
+			GetEnabledValidationLayers(validationLayers);
 
 		VkApplicationInfo appInfo{};
 		appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
@@ -32,6 +87,14 @@ namespace RenderXVK {
 		createInfo.ppEnabledExtensionNames = glfwExtensions;
 		createInfo.enabledLayerCount = 0;
 
+		if (!validationLayers.empty()) {
+			createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
+			createInfo.ppEnabledLayerNames = validationLayers.data();
+		}
+		else {
+			createInfo.enabledLayerCount = 0;
+		}
+
 		return vkCreateInstance(&createInfo, nullptr, outInstance) == VK_SUCCESS;
 	}
 
@@ -39,7 +102,7 @@ namespace RenderXVK {
 
 	bool PickPhysicalDevice(VkInstance instance, VkSurfaceKHR surface,
 		VkPhysicalDevice* outPhysicalDevice, uint32_t* outGraphicsQueueFamily) {
-        PROFILE_FUNCTION();
+		PROFILE_FUNCTION();
 		uint32_t deviceCount = 0;
 		vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
 
@@ -58,6 +121,11 @@ namespace RenderXVK {
 				vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &presentSupport);
 
 				if ((queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) && presentSupport) {
+					VkPhysicalDeviceProperties2 deviceProps{};
+					deviceProps.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+					vkGetPhysicalDeviceProperties2(device, &deviceProps);
+
+					RENDERX_INFO("Device: {}", deviceProps.properties.deviceName);
 					*outPhysicalDevice = device;
 					*outGraphicsQueueFamily = i;
 					return true;
@@ -71,7 +139,8 @@ namespace RenderXVK {
 
 	bool CreateLogicalDevice(VkPhysicalDevice physicalDevice, uint32_t graphicsQueueFamily,
 		VkDevice* outDevice, VkQueue* outGraphicsQueue) {
-        PROFILE_FUNCTION();
+		PROFILE_FUNCTION();
+		auto ctx = GetVulkanContext();
 		float queuePriority = 1.0f;
 		VkDeviceQueueCreateInfo queueCreateInfo{};
 		queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
@@ -79,14 +148,15 @@ namespace RenderXVK {
 		queueCreateInfo.queueCount = 1;
 		queueCreateInfo.pQueuePriorities = &queuePriority;
 
-		const char* deviceExtensions[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
+		std::vector<const char*> deviceExtensions;
+		GetEnabledExtensionsVk(ctx.physicalDevice, deviceExtensions);
 
 		VkDeviceCreateInfo createInfo{};
 		createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
 		createInfo.queueCreateInfoCount = 1;
 		createInfo.pQueueCreateInfos = &queueCreateInfo;
-		createInfo.enabledExtensionCount = 1;
-		createInfo.ppEnabledExtensionNames = deviceExtensions;
+		createInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
+		createInfo.ppEnabledExtensionNames = deviceExtensions.empty() ? nullptr : deviceExtensions.data();
 
 		if (vkCreateDevice(physicalDevice, &createInfo, nullptr, outDevice) != VK_SUCCESS)
 			return false;
@@ -98,7 +168,7 @@ namespace RenderXVK {
 	// ===================== SWAPCHAIN =====================
 
 	SwapchainSupportDetails QuerySwapchainSupport(VkPhysicalDevice device, VkSurfaceKHR surface) {
-        PROFILE_FUNCTION();
+		PROFILE_FUNCTION();
 		SwapchainSupportDetails details{};
 		vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &details.capabilities);
 
@@ -115,7 +185,7 @@ namespace RenderXVK {
 	}
 
 	VkSurfaceFormatKHR ChooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& formats) {
-        PROFILE_FUNCTION();
+		PROFILE_FUNCTION();
 		for (const auto& f : formats) {
 			if (f.format == VK_FORMAT_B8G8R8A8_UNORM)
 				return f;
@@ -124,7 +194,7 @@ namespace RenderXVK {
 	}
 
 	VkPresentModeKHR ChoosePresentMode(const std::vector<VkPresentModeKHR>& modes) {
-        PROFILE_FUNCTION();
+		PROFILE_FUNCTION();
 		for (auto m : modes) {
 			if (m == VK_PRESENT_MODE_MAILBOX_KHR)
 				return m;
@@ -133,7 +203,7 @@ namespace RenderXVK {
 	}
 
 	VkExtent2D ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& caps, GLFWwindow* window) {
-        PROFILE_FUNCTION();
+		PROFILE_FUNCTION();
 		if (caps.currentExtent.width != UINT32_MAX)
 			return caps.currentExtent;
 
@@ -143,7 +213,7 @@ namespace RenderXVK {
 	}
 
 	bool CreateSwapchain(VulkanContext& ctx, GLFWwindow* window) {
-        PROFILE_FUNCTION();
+		PROFILE_FUNCTION();
 		auto support = QuerySwapchainSupport(ctx.physicalDevice, ctx.surface);
 		auto surfaceFormat = ChooseSwapSurfaceFormat(support.formats);
 		auto presentMode = ChoosePresentMode(support.presentModes);
@@ -169,13 +239,36 @@ namespace RenderXVK {
 
 		ctx.swapchainImageFormat = surfaceFormat.format;
 		ctx.swapchainExtent = extent;
+
+		uint32_t imageCount;
+		vkGetSwapchainImagesKHR(ctx.device, ctx.swapchain, &imageCount, nullptr);
+		ctx.swapchainImages.resize(imageCount);
+		vkGetSwapchainImagesKHR(ctx.device, ctx.swapchain, &imageCount, ctx.swapchainImages.data());
+
+		for (auto& image : ctx.swapchainImages) {
+			VkImageViewCreateInfo ivci{};
+			ivci.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+			ivci.image = image;
+			ivci.format = ctx.swapchainImageFormat;
+			ivci.viewType = VK_IMAGE_VIEW_TYPE_2D;
+			ivci.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			ivci.subresourceRange.baseArrayLayer = 0;
+			ivci.subresourceRange.layerCount = 1;
+			ivci.subresourceRange.baseMipLevel = 0;
+			ivci.subresourceRange.levelCount = 1;
+
+			VkImageView iv;
+			VK_CHECK(vkCreateImageView(ctx.device, &ivci, nullptr, &iv));
+			ctx.swapchainImageviews.push_back(iv);
+		}
+
 		return true;
 	}
 
 	// ===================== COMMAND POOL =====================
 
 	void CreateCommandPool() {
-        PROFILE_FUNCTION();
+		PROFILE_FUNCTION();
 		VulkanContext& ctx = GetVulkanContext();
 
 		VkCommandPoolCreateInfo info{};

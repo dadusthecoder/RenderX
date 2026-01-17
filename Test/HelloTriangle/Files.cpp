@@ -119,7 +119,7 @@ namespace Files {
         wchar_t fileName[MAX_PATH] = L"";   // Use wchar_t
         OPENFILENAMEW ofn = { 0 };          // Use the wide version
         ofn.lStructSize = sizeof(ofn);
-        ofn.lpstrFilter = L"All Files\0*.*\0Text Files\0*.TXT\0"; // L prefix for wide string
+        ofn.lpstrFilter = L"All Files/0*.*/0Text Files/0*.TXT/0"; // L prefix for wide string
         ofn.lpstrFile = fileName;
         ofn.nMaxFile = MAX_PATH;
         ofn.Flags = OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_NOCHANGEDIR;

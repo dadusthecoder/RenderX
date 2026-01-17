@@ -18,9 +18,9 @@ namespace RenderX {
 		switch (api) {
 		case GraphicsAPI::OpenGL: {
 			RENDERX_INFO("Initializing OpenGL backend...");
-			// #define RENDERER_FUNC(_ret, _name, ...) g_DispatchTable._name = RenderXGL::GL##_name;
-			// #include "RenderX/RenderXAPI.def"
-			// #undef RENDERER_FUNC
+#define RENDERER_FUNC(_ret, _name, ...) g_DispatchTable._name = RenderXGL::GL##_name;
+#include "RenderX/RenderXAPI.def"
+#undef RENDERER_FUNC
 
 			if (g_DispatchTable.Init)
 				g_DispatchTable.Init();
@@ -64,7 +64,7 @@ namespace RenderX {
 		ProLog::SetConfig(config);
 		PROFILE_START_SESSION("RenderX", "RenderX.json");
 		RENDERX_LOG_INIT();
-		return ;
+		return;
 	}
 
 	void ShutDown() {
@@ -78,8 +78,21 @@ namespace RenderX {
 	const PipelineHandle CreateGraphicsPipeline(PipelineDesc& desc) { return g_DispatchTable.CreateGraphicsPipeline(desc); }
 	const BufferHandle CreateBuffer(const BufferDesc& desc) { return g_DispatchTable.CreateBuffer(desc); }
 	bool ShouldClose() { return g_DispatchTable.ShouldClose(); }
+
 	CommandList CreateCommandList() { return g_DispatchTable.CreateCommandList(); }
-	void DestroyCommandList(const CommandList& cmdList) { g_DispatchTable.DestroyCommandList(cmdList); }
-	void ExecuteCommandList(const CommandList& cmdList) { g_DispatchTable.ExecuteCommandList(cmdList); }
+	void DestroyCommandList(CommandList& cmdList) { g_DispatchTable.DestroyCommandList(cmdList); }
+	void ExecuteCommandList(CommandList& cmdList) { g_DispatchTable.ExecuteCommandList(cmdList); }
+
+	void CommandList::begin() { g_DispatchTable.CmdBegin(*this); }
+	void CommandList::end() { g_DispatchTable.CmdEnd(*this); }
+	void CommandList::setPipeline(const PipelineHandle& pipeline) { g_DispatchTable.CmdSetPipeline(*this, pipeline); }
+	void CommandList::setIndexBuffer(const BufferHandle& buffer, uint64_t offset) { g_DispatchTable.CmdSetIndexBuffer(*this, buffer, offset); }
+	void CommandList::setVertexBuffer(const BufferHandle& buffer, uint64_t offset) { g_DispatchTable.CmdSetVertexBuffer(*this, buffer, offset); }
+	void CommandList::draw(uint32_t vertexCount, uint32_t instanceCount,
+		uint32_t firstVertex, uint32_t firstInstance) { g_DispatchTable.CmdDraw(*this, vertexCount, instanceCount, firstVertex, firstInstance); }
+	void CommandList::drawIndexed(uint32_t indexCount, int32_t vertexOffset,
+		uint32_t instanceCount, uint32_t firstIndex, uint32_t firstInstance) { g_DispatchTable.CmdDrawIndexed(*this, indexCount,
+		vertexOffset, instanceCount, firstIndex, firstInstance); }
+
 
 } // namespace RenderX

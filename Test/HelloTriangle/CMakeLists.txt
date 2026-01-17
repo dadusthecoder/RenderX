@@ -8,7 +8,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # ──────────────────────────────────────────────
 #  Create executable
 # ──────────────────────────────────────────────
-add_executable(HelloTriangle Test.cpp)
+add_executable(HelloTriangle Test.cpp Files.cpp)
 
 # ──────────────────────────────────────────────
 #  Include RenderX headers (from engine project)

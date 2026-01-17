@@ -11,9 +11,25 @@ RENDERER_FUNC(ShaderHandle, CreateShader, const ShaderDesc& desc)
 RENDERER_FUNC(const BufferHandle, CreateBuffer , const BufferDesc& desc)
 
 RENDERER_FUNC(bool, ShouldClose)
-
+    
 // Command List Creation and Management
 RENDERER_FUNC(CommandList ,  CreateCommandList)
-RENDERER_FUNC(void , DestroyCommandList, const CommandList& cmdList)
-RENDERER_FUNC(void , ExecuteCommandList, const CommandList& cmdList)
+RENDERER_FUNC(void , DestroyCommandList,  CommandList& cmdList)
+RENDERER_FUNC(void , ExecuteCommandList,  CommandList& cmdList)
+
+// Command List Recording Operations
+RENDERER_FUNC(void, CmdBegin, CommandList& cmd)
+RENDERER_FUNC(void, CmdEnd, CommandList& cmd)
+
+RENDERER_FUNC(void, CmdSetPipeline, CommandList& cmd, const PipelineHandle pipeline)
+RENDERER_FUNC(void, CmdSetVertexBuffer, CommandList& cmd, const BufferHandle buffer, uint64_t offset)
+RENDERER_FUNC(void, CmdSetIndexBuffer, CommandList& cmd, const BufferHandle buffer, uint64_t offset)
+
+RENDERER_FUNC(void, CmdDraw, CommandList& cmd,
+              uint32_t vertexCount, uint32_t instanceCount,
+              uint32_t firstVertex, uint32_t firstInstance)
+
+RENDERER_FUNC(void, CmdDrawIndexed, CommandList& cmd,
+              uint32_t indexCount, int32_t vertexOffset,
+              uint32_t instanceCount, uint32_t firstIndex, uint32_t firstInstance)
 

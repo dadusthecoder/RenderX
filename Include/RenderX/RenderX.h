@@ -1,40 +1,7 @@
 #pragma once
-#include  "RenderXCommon.h"
+#include "RenderXCommon.h"
 
-//------------------------------------------------------------------------------
-// PLATFORM DETECTION
-//------------------------------------------------------------------------------
 
-#if defined(_WIN32) || defined(_WIN64)
-#define RENDERX_PLATFORM_WINDOWS
-#elif defined(__APPLE__) || defined(__MACH__)
-#define RENDERX_PLATFORM_MACOS
-#elif defined(__linux__)
-#define RENDERX_PLATFORM_LINUX
-#else
-#define RENDERX_PLATFORM_UNKNOWN
-#endif
-
-//------------------------------------------------------------------------------
-// EXPORT / IMPORT MACROS
-//------------------------------------------------------------------------------
-
-#if defined(RENDERX_STATIC)
-#define RENDERX_API
-#else
-#if defined(RENDERX_PLATFORM_WINDOWS)
-#if defined(RENDERX_BUILD_DLL)
-#define RENDERX_API __declspec(dllexport)
-#else
-#define RENDERX_API __declspec(dllimport)
-#endif
-#elif defined(__GNUC__) || defined(__clang__)
-#define RENDERX_API __attribute__((visibility("default")))
-#else
-#define RENDERX_API
-#pragma warning Unknown dynamic link import / export semantics.
-#endif
-#endif
 
 //------------------------------------------------------------------------------
 // RENDERING HARDWARE INTERFACE (RHI)
@@ -103,12 +70,12 @@ namespace RenderX {
 	 */
 	const BufferHandle RENDERX_API CreateBuffer(const BufferDesc& desc);
 
-    CommandList RENDERX_API CreateCommandList();
-	void RENDERX_API DestroyCommandList(const CommandList& cmdList);
-	void RENDERX_API ExecuteCommandList(const CommandList& cmdList);
+	CommandList RENDERX_API CreateCommandList();
+	void RENDERX_API DestroyCommandList(CommandList& cmdList);
+	void RENDERX_API ExecuteCommandList(CommandList& cmdList);
 
 	//------------------------------------------------------------------------------
-    void RENDERX_API Init();
+	void RENDERX_API Init();
 	void RENDERX_API ShutDown();
 
 	// temp

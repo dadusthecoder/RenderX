@@ -1,19 +1,18 @@
-// #pragma once
-// #include "RenderX/RenderXTypes.h"
-// #include <string>
+#pragma once
+#include "RenderX/RenderXCommon.h"
 
-// // sorting
-// //  rendercommands
-// namespace RenderX {
+namespace RenderX {
 
-// namespace RenderXGL {
+namespace RenderXGL {
 
-// // Declear Backend Functions
-// #undef RENDERER_FUNC
-// #define RENDERER_FUNC(_ret, _name, ...) _ret GL##_name(__VA_ARGS__);
-// #include "RenderX/RenderXAPI.def"
-// #undef RENDERER_FUNC
+// Declare backend functions matching RenderXAPI.def
+#undef RENDERER_FUNC
+#define RENDERER_FUNC(_ret, _name, ...) _ret GL##_name(__VA_ARGS__);
+#include "RenderX/RenderXAPI.def"
+#undef RENDERER_FUNC
 
-// } // namespace RenderXGL
+void GLBindPipeline(const PipelineHandle pipeline);
 
-// } // namespace Lng
+} // namespace RenderXGL
+
+} // namespace RenderX

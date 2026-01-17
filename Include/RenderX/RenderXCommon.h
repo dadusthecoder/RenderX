@@ -8,12 +8,72 @@
 #include <string>
 #include <vector>
 
-namespace  RenderX
-{
-    
+
+#if defined(_MSC_VER)
+#define RENDERX_DEBUGBREAK() __debugbreak()
+#elif defined(__GNUC__) || defined(__clang__)
+#define RENDERX_DEBUGBREAK() __builtin_trap()
+#else
+#define RENDERX_DEBUGBREAK() std::abort()
+#endif
+
+// ==================== Assert Macros ====================
+#ifdef _DEBUG
+#define RENDERX_ASSERT(expr)                                    \
+	{                                                           \
+		if (!(expr)) {                                          \
+			spdlog::error("Assertion Failed! Expr: {}", #expr); \
+			RENDERX_DEBUGBREAK();                               \
+		}                                                       \
+	}
+
+#define RENDERX_ASSERT_MSG(expr, msg, ...)                   \
+	{                                                        \
+		if (!(expr)) {                                       \
+			spdlog::error("Assertion Failed: {} | Expr: {}", \
+				fmt::format(msg, ##__VA_ARGS__), #expr);     \
+			RENDERX_DEBUGBREAK();                            \
+		}                                                    \
+	}
+#else
+#define RENDERX_ASSERT(expr) (void)0
+#define RENDERX_ASSERT_MSG(expr, msg, ...) (void)0
+#endif
+
+// PLATFORM DETECTION
+#if defined(_WIN32) || defined(_WIN64)
+#define RENDERX_PLATFORM_WINDOWS
+#elif defined(__APPLE__) || defined(__MACH__)
+#define RENDERX_PLATFORM_MACOS
+#elif defined(__linux__)
+#define RENDERX_PLATFORM_LINUX
+#else
+#define RENDERX_PLATFORM_UNKNOWN
+#endif
+
+// EXPORT / IMPORT MACROS
+#if defined(RENDERX_STATIC)
+#define RENDERX_API
+#else
+#if defined(RENDERX_PLATFORM_WINDOWS)
+#if defined(RENDERX_BUILD_DLL)
+#define RENDERX_API __declspec(dllexport)
+#else
+#define RENDERX_API __declspec(dllimport)
+#endif
+#elif defined(__GNUC__) || defined(__clang__)
+#define RENDERX_API __attribute__((visibility("default")))
+#else
+#define RENDERX_API
+#pragma warning Unknown dynamic link import / export semantics.
+#endif
+#endif
+
+namespace RenderX {
+
 	/// Lightweight strongly-typed wrapper around a 32-bit resource id.
 	/// All GPU-resident objects in RenderX are referenced via Handle-based aliases.
-	struct Handle {
+	struct RENDERX_API Handle {
 		uint32_t id = 0;
 
 		Handle() = default;
@@ -26,8 +86,6 @@ namespace  RenderX
 		bool operator<(const Handle& other) const { return id < other.id; }
 	};
 
-	// Resource handles (opaque types)
-	using VertexArrayHandle = Handle;
 	using BufferHandle = Handle;
 	using TextureHandle = Handle;
 	using SamplerHandle = Handle;
@@ -52,17 +110,13 @@ namespace  RenderX
 	using UVec4 = glm::uvec4;
 	using Quat = glm::quat;
 
-	struct CommandList {
-
-		Handle handle;
-		
-
+	struct RENDERX_API CommandList : public Handle {
 		void begin();
 		void end();
 
-		void setPipeline(const PipelineHandle pipeline);
-		void setVertexBuffer(const BufferHandle buffer, uint64_t offset = 0);
-		void setIndexBuffer(const BufferHandle buffer, uint64_t offset = 0);
+		void setPipeline(const PipelineHandle& pipeline);
+		void setVertexBuffer(const BufferHandle& buffer, uint64_t offset = 0);
+		void setIndexBuffer(const BufferHandle& buffer, uint64_t offset = 0);
 		void draw(uint32_t vertexCount, uint32_t instanceCount = 1,
 			uint32_t firstVertex = 0, uint32_t firstInstance = 0);
 		void drawIndexed(uint32_t indexCount, int32_t vertexOffset = 0,
@@ -278,8 +332,8 @@ namespace  RenderX
 		DataFormat datatype;
 		uint32_t offset;
 
-		VertexAttribute(uint32_t loc, uint32_t count, DataFormat datatype, uint32_t off)
-			: location(loc), count(count), datatype(datatype), offset(off) {
+		VertexAttribute(uint32_t loc, uint32_t binding, uint32_t count, DataFormat datatype, uint32_t off)
+			: location(loc), binding(binding), count(count), datatype(datatype), offset(off) {
 		}
 	};
 
@@ -356,15 +410,15 @@ namespace  RenderX
 
 	struct ShaderDesc {
 		ShaderType type;
-		std::string source;				// GLSL source or HLSL
-		std::vector<uint32_t> bytecode; // SPIR-V or compiled bytecode
-		std::string entryPoint;			// Entry function name (for HLSL/SPIR-V)
+		std::string source;			   // GLSL source or HLSL
+		std::vector<uint8_t> bytecode; // SPIR-V or compiled bytecode
+		std::string entryPoint;		   // Entry function name (for HLSL/SPIR-V)
 
 		ShaderDesc(ShaderType t, const std::string& src)
 			: type(t), source(src), entryPoint("main") {
 		}
 
-		ShaderDesc(ShaderType t, const std::vector<uint32_t>& code,
+		ShaderDesc(ShaderType t, const std::vector<uint8_t>& code,
 			const std::string entry = "main")
 			: type(t), bytecode(code), entryPoint(entry) {
 		}
@@ -501,23 +555,6 @@ namespace  RenderX
 		}
 	};
 
-	// Draw command
-	struct DrawCommand {
-		PipelineHandle pipeline;
-		std::vector<BufferHandle> vertexBuffers;
-		std::vector<uint32_t> vertexOffsets;
-		BufferHandle indexBuffer;
-		uint32_t indexOffset;
-		uint32_t indexCount;
-		uint32_t vertexCount;
-		uint32_t instanceCount;
-		uint32_t firstInstance;
-
-		DrawCommand()
-			: pipeline(INVALID_HANDLE), indexBuffer(INVALID_HANDLE), indexOffset(0),
-			  indexCount(0), vertexCount(0), instanceCount(1), firstInstance(0) {
-		}
-	};
 
 	// Resource binding
 	struct ResourceBinding {
