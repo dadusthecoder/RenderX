@@ -6,6 +6,7 @@
 #include <locale>
 #include <codecvt>
 #include <vector>
+#include <cstdint>
 
 
 namespace Files{

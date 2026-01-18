@@ -24,7 +24,7 @@ namespace RenderXVK {
 		}
 
 		// VULKAN SETUP
-		if (!CreateInstance(&ctx.instance)) return;
+		if (!InitInstance(&ctx.instance)) return;
 
 		if (glfwCreateWindowSurface(
 				ctx.instance,
@@ -40,20 +40,21 @@ namespace RenderXVK {
 				&ctx.graphicsQueueFamilyIndex))
 			return;
 
-		if (!CreateLogicalDevice(
+		if (!InitLogicalDevice(
 				ctx.physicalDevice,
 				ctx.graphicsQueueFamilyIndex,
 				&ctx.device,
 				&ctx.graphicsQueue))
 			return;
 
-		if (!CreateSwapchain(ctx, ctx.window))
+		if (!InitSwapchain(ctx, ctx.window))
 			return;
 
-		CreateCommandPool();
+		InitFrameContex();
+
 		return;
 	}
-    
+
 	bool VKShouldClose() {
 		VulkanContext& ctx = GetVulkanContext();
 		return glfwWindowShouldClose(ctx.window);

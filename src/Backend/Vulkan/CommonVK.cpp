@@ -10,10 +10,16 @@ const bool enableValidationLayers = false;
 namespace RenderX {
 namespace RenderXVK {
 
+	static FrameContex g_Frames[MAX_FRAMES_IN_FLIGHT];
+	uint32_t g_CurrentFrame = 0;
 
 	VulkanContext& GetVulkanContext() {
 		static VulkanContext g_Context;
 		return g_Context;
+	}
+
+	FrameContex& GetCurrentFrameContex() {
+		return g_Frames[g_CurrentFrame];
 	}
 
 	std::vector<VkDynamicState> g_DynamicStates{
@@ -63,7 +69,7 @@ namespace RenderXVK {
 	}
 
 	// INSTANCE
-	bool CreateInstance(VkInstance* outInstance) {
+	bool InitInstance(VkInstance* outInstance) {
 		PROFILE_FUNCTION();
 		std::vector<const char*> validationLayers;
 		if (enableValidationLayers)
@@ -137,7 +143,7 @@ namespace RenderXVK {
 
 	// ===================== LOGICAL DEVICE =====================
 
-	bool CreateLogicalDevice(VkPhysicalDevice physicalDevice, uint32_t graphicsQueueFamily,
+	bool InitLogicalDevice(VkPhysicalDevice physicalDevice, uint32_t graphicsQueueFamily,
 		VkDevice* outDevice, VkQueue* outGraphicsQueue) {
 		PROFILE_FUNCTION();
 		auto ctx = GetVulkanContext();
@@ -212,7 +218,7 @@ namespace RenderXVK {
 		return { (uint32_t)w, (uint32_t)h };
 	}
 
-	bool CreateSwapchain(VulkanContext& ctx, GLFWwindow* window) {
+	bool InitSwapchain(VulkanContext& ctx, GLFWwindow* window) {
 		PROFILE_FUNCTION();
 		auto support = QuerySwapchainSupport(ctx.physicalDevice, ctx.surface);
 		auto surfaceFormat = ChooseSwapSurfaceFormat(support.formats);
@@ -265,18 +271,221 @@ namespace RenderXVK {
 		return true;
 	}
 
-	// ===================== COMMAND POOL =====================
-
-	void CreateCommandPool() {
-		PROFILE_FUNCTION();
+	void CreateSwapchainFramebuffers(RenderPassHandle renderPass) {
 		VulkanContext& ctx = GetVulkanContext();
+		VkRenderPass& vkPass = s_RenderPasses[renderPass.id];
 
-		VkCommandPoolCreateInfo info{};
-		info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-		info.queueFamilyIndex = ctx.graphicsQueueFamilyIndex;
-		info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+		ctx.swapchainFramebuffers.resize(ctx.swapchainImageviews.size());
 
-		vkCreateCommandPool(ctx.device, &info, nullptr, &ctx.graphicsCommandPool);
+		for (size_t i = 0; i < ctx.swapchainImageviews.size(); i++) {
+			VkImageView attachments[] = {
+				ctx.swapchainImageviews[i]
+			};
+
+			VkFramebufferCreateInfo ci{};
+			ci.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+			ci.renderPass = vkPass;
+			ci.attachmentCount = 1;
+			ci.pAttachments = attachments;
+			ci.width = ctx.swapchainExtent.width;
+			ci.height = ctx.swapchainExtent.height;
+			ci.layers = 1;
+
+			VK_CHECK(vkCreateFramebuffer(
+				ctx.device,
+				&ci,
+				nullptr,
+				&ctx.swapchainFramebuffers[i]));
+		}
+	}
+
+
+	void InitFrameContex() {
+		auto& ctx = GetVulkanContext();
+
+		for (auto& frame : g_Frames) {
+			VkFenceCreateInfo fci{};
+			fci.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+			fci.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+			VkSemaphoreCreateInfo sci{};
+			sci.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+			VK_CHECK(vkCreateSemaphore(ctx.device, &sci, nullptr, &frame.presentSemaphore));
+			VK_CHECK(vkCreateSemaphore(ctx.device, &sci, nullptr, &frame.renderSemaphore));
+			VK_CHECK(vkCreateFence(ctx.device, &fci, nullptr, &frame.fence));
+
+			VkCommandPoolCreateInfo cpci{};
+			cpci.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+			cpci.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+			cpci.queueFamilyIndex = ctx.graphicsQueueFamilyIndex;
+			VK_CHECK(vkCreateCommandPool(ctx.device, &cpci, nullptr, &frame.commandPool));
+		}
+	}
+
+	// vulkan helpers
+
+	VkRenderPass GetVulkanRenderPass(RenderPassHandle handle) {
+		auto it = s_RenderPasses.find(handle.id);
+		if (it == s_RenderPasses.end())
+			return VK_NULL_HANDLE;
+		return it->second;
+	}
+
+	VkFormat ToVkFormat(DataFormat format) {
+		switch (format) {
+		case DataFormat::R8:
+			return VK_FORMAT_R8_UNORM;
+
+		case DataFormat::RG8:
+			return VK_FORMAT_R8G8_UNORM;
+
+		case DataFormat::RGBA8:
+			return VK_FORMAT_R8G8B8A8_UNORM;
+
+		// NOTE: Vulkan has NO RGB8 format for vertex / textures
+		case DataFormat::RGB8:
+			RENDERX_ERROR("RGB8 is not supported in Vulkan. Use RGBA8 instead.");
+			return VK_FORMAT_UNDEFINED;
+
+		case DataFormat::R16F:
+			return VK_FORMAT_R16_SFLOAT;
+
+		case DataFormat::RG16F:
+			return VK_FORMAT_R16G16_SFLOAT;
+
+		case DataFormat::RGBA16F:
+			return VK_FORMAT_R16G16B16A16_SFLOAT;
+
+		// No native RGB16F
+		case DataFormat::RGB16F:
+			RENDERX_ERROR("RGB16F is not supported in Vulkan. Use RGBA16F instead.");
+			return VK_FORMAT_UNDEFINED;
+
+		case DataFormat::R32F:
+			return VK_FORMAT_R32_SFLOAT;
+
+		case DataFormat::RG32F:
+			return VK_FORMAT_R32G32_SFLOAT;
+
+		case DataFormat::RGBA32F:
+			return VK_FORMAT_R32G32B32A32_SFLOAT;
+
+		// Vulkan supports this ONLY for vertex buffers (not textures)
+		case DataFormat::RGB32F:
+			return VK_FORMAT_R32G32B32_SFLOAT;
+
+		default:
+			RENDERX_ERROR("Unknown DataFormat");
+			return VK_FORMAT_UNDEFINED;
+		}
+	}
+
+
+	VkFormat ToVkTextureFormat(TextureFormat format) {
+		switch (format) {
+		case TextureFormat::R8: return VK_FORMAT_R8_UNORM;
+		case TextureFormat::RG8: return VK_FORMAT_R8G8_UNORM;
+		case TextureFormat::RGB8: return VK_FORMAT_R8G8B8_UNORM;
+
+		case TextureFormat::RGBA8: return VK_FORMAT_R8G8B8A8_UNORM;
+		case TextureFormat::R16F: return VK_FORMAT_R16_SFLOAT;
+		case TextureFormat::RG16F: return VK_FORMAT_R16G16_SFLOAT;
+		case TextureFormat::RGB16F: return VK_FORMAT_R16G16B16_SFLOAT;
+		case TextureFormat::RGBA16F: return VK_FORMAT_R16G16B16A16_SFLOAT;
+		case TextureFormat::R32F: return VK_FORMAT_R32_SFLOAT;
+		case TextureFormat::RG32F: return VK_FORMAT_R32G32_SFLOAT;
+		case TextureFormat::RGB32F: return VK_FORMAT_R32G32B32_SFLOAT;
+		case TextureFormat::RGBA32F: return VK_FORMAT_R32G32B32A32_SFLOAT;
+		case TextureFormat::Depth16: return VK_FORMAT_D16_UNORM;
+		case TextureFormat::Depth24: return VK_FORMAT_D24_UNORM_S8_UINT;
+		case TextureFormat::Depth32F: return VK_FORMAT_D32_SFLOAT;
+		case TextureFormat::Depth24Stencil8: return VK_FORMAT_D24_UNORM_S8_UINT;
+		case TextureFormat::Depth32FStencil8: return VK_FORMAT_D32_SFLOAT_S8_UINT;
+		case TextureFormat::BGRA8: return VK_FORMAT_B8G8R8A8_UNORM;
+		// Compressed formats
+		case TextureFormat::BC1: return VK_FORMAT_BC1_RGBA_UNORM_BLOCK;
+		case TextureFormat::BC2: return VK_FORMAT_BC2_UNORM_BLOCK;
+		case TextureFormat::BC3: return VK_FORMAT_BC3_UNORM_BLOCK;
+		case TextureFormat::BC4: return VK_FORMAT_BC4_UNORM_BLOCK;
+		case TextureFormat::BC5: return VK_FORMAT_BC5_UNORM_BLOCK;
+		default:
+			RENDERX_ERROR("Unknown TextureFormat");
+			return VK_FORMAT_UNDEFINED;
+		}
+	}
+
+	VkShaderStageFlagBits ToVkShaderStage(ShaderType type) {
+		switch (type) {
+		case ShaderType::Vertex: return VK_SHADER_STAGE_VERTEX_BIT;
+		case ShaderType::Fragment: return VK_SHADER_STAGE_FRAGMENT_BIT;
+		case ShaderType::Compute: return VK_SHADER_STAGE_COMPUTE_BIT;
+		case ShaderType::Geometry: return VK_SHADER_STAGE_GEOMETRY_BIT;
+		case ShaderType::TessControl: return VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
+		case ShaderType::TessEvaluation: return VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
+		default:
+			RENDERX_ERROR("Unknown ShaderType");
+			return VK_SHADER_STAGE_VERTEX_BIT;
+		}
+	}
+
+	VkPrimitiveTopology ToVkPrimitiveTopology(PrimitiveType type) {
+		switch (type) {
+		case PrimitiveType::Points: return VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
+		case PrimitiveType::Lines: return VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
+		case PrimitiveType::LineStrip: return VK_PRIMITIVE_TOPOLOGY_LINE_STRIP;
+		case PrimitiveType::Triangles: return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+		case PrimitiveType::TriangleStrip: return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+		case PrimitiveType::TriangleFan: return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN;
+		default:
+			RENDERX_ERROR("Unknown PrimitiveType");
+			return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+		}
+	}
+
+	VkCullModeFlags ToVkCullMode(CullMode mode) {
+		switch (mode) {
+		case CullMode::None: return VK_CULL_MODE_NONE;
+		case CullMode::Front: return VK_CULL_MODE_FRONT_BIT;
+		case CullMode::Back: return VK_CULL_MODE_BACK_BIT;
+		case CullMode::FrontAndBack: return VK_CULL_MODE_FRONT_AND_BACK;
+		default:
+			RENDERX_ERROR("Unknown CullMode");
+			return VK_CULL_MODE_BACK_BIT;
+		}
+	}
+
+	VkCompareOp ToVkCompareOp(CompareFunc func) {
+		switch (func) {
+		case CompareFunc::Never: return VK_COMPARE_OP_NEVER;
+		case CompareFunc::Less: return VK_COMPARE_OP_LESS;
+		case CompareFunc::Equal: return VK_COMPARE_OP_EQUAL;
+		case CompareFunc::LessEqual: return VK_COMPARE_OP_LESS_OR_EQUAL;
+		case CompareFunc::Greater: return VK_COMPARE_OP_GREATER;
+		case CompareFunc::NotEqual: return VK_COMPARE_OP_NOT_EQUAL;
+		case CompareFunc::GreaterEqual: return VK_COMPARE_OP_GREATER_OR_EQUAL;
+		case CompareFunc::Always: return VK_COMPARE_OP_ALWAYS;
+		default:
+			RENDERX_ERROR("Unknown CompareFunc");
+			return VK_COMPARE_OP_ALWAYS;
+		}
+	}
+
+	VkPolygonMode ToVkPolygonMode(FillMode mode) {
+		switch (mode) {
+		case RenderX::FillMode::Solid:
+			return VK_POLYGON_MODE_FILL;
+			break;
+		case RenderX::FillMode::Wireframe:
+			return VK_POLYGON_MODE_LINE;
+			break;
+		case RenderX::FillMode::Point:
+			return VK_POLYGON_MODE_POINT;
+			break;
+		default:
+			return VK_POLYGON_MODE_FILL;
+			break;
+		}
 	}
 
 } // namespace RenderXVK

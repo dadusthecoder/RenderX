@@ -37,7 +37,7 @@
 	}
 #else
 #define RENDERX_ASSERT(expr) (void)0
-#define RENDERX_ASSERT_MSG(expr, msg, ...) (void)0
+#define RENDERX_ASSERT_MSG(expr, msg, ...)
 #endif
 
 // PLATFORM DETECTION
@@ -110,24 +110,6 @@ namespace RenderX {
 	using UVec4 = glm::uvec4;
 	using Quat = glm::quat;
 
-	struct RENDERX_API CommandList : public Handle {
-		void begin();
-		void end();
-
-		void setPipeline(const PipelineHandle& pipeline);
-		void setVertexBuffer(const BufferHandle& buffer, uint64_t offset = 0);
-		void setIndexBuffer(const BufferHandle& buffer, uint64_t offset = 0);
-		void draw(uint32_t vertexCount, uint32_t instanceCount = 1,
-			uint32_t firstVertex = 0, uint32_t firstInstance = 0);
-		void drawIndexed(uint32_t indexCount, int32_t vertexOffset = 0,
-			uint32_t instanceCount = 1, uint32_t firstIndex = 0, uint32_t firstInstance = 0);
-	};
-
-	// for now, simple command list creation function
-	CommandList createCommandList();
-	void execute(CommandList& cmdList);
-
-
 	// Enums and structs for various RenderX configurations and description
 	enum class GraphicsAPI {
 		None,
@@ -164,13 +146,13 @@ namespace RenderX {
 		TextureCube,
 		Texture2DArray };
 
-	enum class AttachmentLoadOp {
+	enum class LoadOp {
 		Load,
 		Clear,
 		DontCare
 	};
 
-	enum class AttachmentStoreOp {
+	enum class StoreOp {
 		Store,
 		DontCare
 	};
@@ -204,6 +186,8 @@ namespace RenderX {
 		RG32F,
 		RGB32F,
 		RGBA32F,
+
+		BGRA8,
 
 		// Depth/stencil formats
 		Depth16,
@@ -317,7 +301,7 @@ namespace RenderX {
 	struct ClearColor {
 		Vec4 color;
 
-		ClearColor(float r = 0.0f, float g = 0.0f, float b = 0.0f, float a = 1.0f)
+		ClearColor(float r = 0.30f, float g = 0.50f, float b = 0.0f, float a = 1.0f)
 			: color(r, g, b, a) {
 		}
 		ClearColor(const Vec4& c) : color(c) {}
@@ -328,12 +312,11 @@ namespace RenderX {
 	struct VertexAttribute {
 		uint32_t location;
 		uint32_t binding;
-		uint32_t count;
 		DataFormat datatype;
 		uint32_t offset;
 
-		VertexAttribute(uint32_t loc, uint32_t binding, uint32_t count, DataFormat datatype, uint32_t off)
-			: location(loc), binding(binding), count(count), datatype(datatype), offset(off) {
+		VertexAttribute(uint32_t loc, uint32_t binding, DataFormat datatype, uint32_t off)
+			: location(loc), binding(binding), datatype(datatype), offset(off) {
 		}
 	};
 
@@ -350,7 +333,6 @@ namespace RenderX {
 	struct VertexLayout {
 		std::vector<VertexAttribute> attributes;
 		std::vector<VertexBinding> bindings;
-		uint32_t totalStride = 0;
 	};
 
 	// Resource descriptions for craeation
@@ -359,12 +341,8 @@ namespace RenderX {
 		BufferType type;
 		BufferUsage usage;
 		size_t size;
+		uint32_t bindingCount;
 		const void* initialData;
-
-		BufferDesc(BufferType t, size_t s, BufferUsage u = BufferUsage::Static,
-			const void* data = nullptr)
-			: type(t), usage(u), size(s), initialData(data) {
-		}
 	};
 
 	struct SamplerDesc {
@@ -496,7 +474,6 @@ namespace RenderX {
 
 	};
 
-
 	// Pipeline description
 	struct PipelineDesc {
 		PipelineType type;
@@ -512,23 +489,54 @@ namespace RenderX {
 		}
 	};
 
+	struct ClearValue {
+		ClearColor color;
+		float depth = 1.0f;
+		uint8_t stencil = 0;
+	};
+
+	enum class ResourceState : uint32_t {
+		Undefined = 0,
+		RenderTarget = 1 << 0,
+		DepthWrite = 1 << 1,
+		DepthRead = 1 << 2,
+		ShaderRead = 1 << 3,
+		Present = 1 << 4,
+		CopySrc = 1 << 5,
+		CopyDst = 1 << 6
+	};
+
+
 	// Render pass description
 	struct AttachmentDesc {
 		TextureFormat format;
-		bool clear;
-		ClearColor clearColor;
-		float clearDepth;
-		uint8_t clearStencil;
+		LoadOp loadOp = LoadOp::Clear;
+		StoreOp storeOp = StoreOp::Store;
 
-		AttachmentDesc(TextureFormat fmt)
-			: format(fmt), clear(true), clearColor(), clearDepth(1.0f),
-			  clearStencil(0) {
-		}
+		ResourceState initialState = ResourceState::Undefined;
+		ResourceState finalState = ResourceState::RenderTarget;
+
+		AttachmentDesc(TextureFormat format = TextureFormat::RGBA8) : format(format) {}
+	};
+
+	struct DepthStencilAttachmentDesc {
+		TextureFormat format = TextureFormat::Depth24Stencil8;
+
+		LoadOp depthLoadOp = LoadOp::Clear;
+		StoreOp depthStoreOp = StoreOp::Store;
+
+		LoadOp stencilLoadOp = LoadOp::DontCare;
+		StoreOp stencilStoreOp = StoreOp::DontCare;
+
+		ResourceState initialState = ResourceState::Undefined;
+		ResourceState finalState = ResourceState::DepthWrite;
+
+		DepthStencilAttachmentDesc(TextureFormat format) : format(format) {}
 	};
 
 	struct RenderPassDesc {
 		std::vector<AttachmentDesc> colorAttachments;
-		AttachmentDesc depthStencilAttachment;
+		DepthStencilAttachmentDesc depthStencilAttachment;
 		bool hasDepthStencil;
 
 		RenderPassDesc()
@@ -540,9 +548,13 @@ namespace RenderX {
 	// Framebuffer description
 	struct FramebufferDesc {
 		RenderPassHandle renderPass;
+
 		std::vector<TextureHandle> colorAttachments;
-		TextureHandle depthStencilAttachment;
-		int width, height;
+		TextureHandle depthStencilAttachment = INVALID_HANDLE;
+
+		uint32_t width = 0;
+		uint32_t height = 0;
+		uint32_t layers = 1;
 
 		FramebufferDesc(int w, int h)
 			: renderPass(INVALID_HANDLE), depthStencilAttachment(INVALID_HANDLE),
@@ -603,6 +615,26 @@ namespace RenderX {
 			drawCalls = triangles = vertices = bufferBinds = textureBinds =
 				shaderBinds = 0;
 		}
+	};
+
+	struct RENDERX_API CommandList : public Handle {
+		void open();
+		void close();
+		bool isOpen = false;
+
+		void setPipeline(const PipelineHandle& pipeline);
+		void setVertexBuffer(const BufferHandle& buffer, uint64_t offset = 0);
+		void setIndexBuffer(const BufferHandle& buffer, uint64_t offset = 0);
+		void draw(uint32_t vertexCount, uint32_t instanceCount = 1,
+			uint32_t firstVertex = 0, uint32_t firstInstance = 0);
+		void drawIndexed(uint32_t indexCount, int32_t vertexOffset = 0,
+			uint32_t instanceCount = 1, uint32_t firstIndex = 0, uint32_t firstInstance = 0);
+
+		void beginRenderPass(
+			RenderPassHandle pass,
+			std::vector<ClearValue> clears);
+
+		void endRenderPass();
 	};
 
 } // namespace  RenderX

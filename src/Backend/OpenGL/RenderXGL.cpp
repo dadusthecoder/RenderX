@@ -74,14 +74,14 @@ namespace RenderXGL {
 		RENDERX_INFO("OpenGL initialized successfully (GLEW + GL states configured).");
 	}
 
-	void GLBeginFrame() {
+	void GLBegin() {
 		// Clear the screen
 		PROFILE_FUNCTION();
 		glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	}
 
-	void GLEndFrame() {
+	void GLEnd() {
 		PROFILE_FUNCTION();
 
 		// Swap buffers (assuming double buffering)
@@ -108,7 +108,7 @@ namespace RenderXGL {
 
 	// Recording operations --------------------------------------------------
 
-	void GLCmdBegin(CommandList& cmd) {
+	void GLCmdOpen(CommandList& cmd) {
 		PROFILE_FUNCTION();
 		auto it = s_GLCommandLists.find(cmd.id);
 		if (it == s_GLCommandLists.end()) return;
@@ -117,7 +117,7 @@ namespace RenderXGL {
 		it->second.instanceCount = 1;
 	}
 
-	void GLCmdEnd(CommandList& /*cmd*/) {
+	void GLCmdClose(CommandList& /*cmd*/) {
 		PROFILE_FUNCTION();
 		// No-op for now; execution happens in GLExecuteCommandList
 	}
@@ -192,7 +192,7 @@ namespace RenderXGL {
 		if (!s_Window)
 			return;
 
-		GLBeginFrame();
+
 
 		auto it = s_GLCommandLists.find(cmdList.id);
 		if (it != s_GLCommandLists.end()) {
@@ -229,9 +229,34 @@ namespace RenderXGL {
 					st.firstInstance);
 			}
 		}
-
-		GLEndFrame();
 	}
+
+
+
+	// temp
+	RenderPassHandle GLCreateRenderPass(const RenderPassDesc&) {
+		RENDERX_ASSERT(false && "OpenGL RenderPass not implemented yet");
+		return {};
+	}
+
+	void GLDestroyRenderPass(RenderPassHandle&) {}
+
+	FramebufferHandle GLCreateFramebuffer(const FramebufferDesc&) {
+		RENDERX_ASSERT(false && "OpenGL Framebuffer not implemented yet");
+		return {};
+	}
+
+	void GLDestroyFramebuffer(FramebufferHandle&) {}
+
+	void GLCmdBeginRenderPass(
+		CommandList&,
+		RenderPassHandle,
+		const std::vector<ClearValue>&) {
+		// no-op for now
+	}
+
+	void GLCmdEndRenderPass(CommandList&) {}
+
 
 
 } // namespace RenderXGL

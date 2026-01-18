@@ -4,7 +4,7 @@
 
 namespace RenderX {
 
-	VkBufferUsageFlags TOVKBufferType(BufferDesc desc) {
+	VkBufferUsageFlags ToVkBufferType(BufferDesc desc) {
 		VkBufferUsageFlags usage = 0;
 		switch (desc.type) {
 		case BufferType::Vertex:
@@ -33,7 +33,7 @@ namespace RenderX {
 		return usage;
 	}
 
-	VkMemoryPropertyFlags TOVKBufferUsage(BufferUsage usage) {
+	VkMemoryPropertyFlags ToVkBufferUsage(BufferUsage usage) {
 		switch (usage) {
 		case BufferUsage::Static:
 			return VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
@@ -112,7 +112,7 @@ namespace RenderX {
 			VkCommandBufferAllocateInfo allocInfoCmd{};
 			allocInfoCmd.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
 			allocInfoCmd.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-			allocInfoCmd.commandPool = GetVulkanContext().graphicsCommandPool;
+			allocInfoCmd.commandPool = GetCurrentFrameContex().commandPool;
 			allocInfoCmd.commandBufferCount = 1;
 			result = vkAllocateCommandBuffers(ctx.device, &allocInfoCmd, &commandBuffer);
 			if (!CheckVk(result, "Failed to allocate command buffer for staging copy")) {
@@ -144,7 +144,7 @@ namespace RenderX {
 		}
 
 		// ===================== BUFFER =====================
-		const BufferHandle VKCreateBuffer(const BufferDesc& desc) {
+		BufferHandle VKCreateBuffer(const BufferDesc& desc) {
 			PROFILE_FUNCTION();
 			BufferHandle handle;
 
@@ -155,7 +155,7 @@ namespace RenderX {
 			VkBufferCreateInfo bufferInfo{};
 			bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 			bufferInfo.size = desc.size;
-			bufferInfo.usage = TOVKBufferType(desc);
+			bufferInfo.usage = ToVkBufferType(desc);
 			bufferInfo.sharingMode = /*temp*/ VK_SHARING_MODE_EXCLUSIVE;
 			VulkanContext& ctx = GetVulkanContext();
 			VkResult result = vkCreateBuffer(ctx.device, &bufferInfo, nullptr, &vulkanBuffer.buffer);
@@ -170,7 +170,7 @@ namespace RenderX {
 			VkMemoryAllocateInfo allocInfo{};
 			allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 			allocInfo.allocationSize = memeReauirments.size;
-			allocInfo.memoryTypeIndex = VKFindMemoryType(memeReauirments.memoryTypeBits, TOVKBufferUsage(desc.usage));
+			allocInfo.memoryTypeIndex = VKFindMemoryType(memeReauirments.memoryTypeBits, ToVkBufferUsage(desc.usage));
 
 			result = vkAllocateMemory(ctx.device, &allocInfo, nullptr, &vulkanBuffer.memory);
 			if (!CheckVk(result, "Failed to allocate Vulkan buffer memory")) {
@@ -193,6 +193,7 @@ namespace RenderX {
 			}
 
 			handle.id = s_NextBufferId++;
+			vulkanBuffer.bindingCount = desc.bindingCount;
 			s_Buffers[handle.id] = vulkanBuffer;
 
 			RENDERX_INFO("Vulkan: Created Buffer | ID: {} | Size: {} bytes", handle.id, desc.size);
@@ -214,20 +215,34 @@ namespace RenderX {
 		// command list related functions can go here
 		void VKCmdSetVertexBuffer(CommandList& cmdList, BufferHandle handle, uint64_t offset) {
 			PROFILE_FUNCTION();
-			RENDERX_ASSERT_MSG(cmdList.IsValid(), "Invalid Command list");
 
-			if (!s_CommandLists[cmdList.id].isRecording)
-				return;
-			vkCmdBindVertexBuffers(s_CommandLists[cmdList.id].commandBuffer, 0, 1,
-				&s_Buffers[handle.id].buffer, &offset);
+			RENDERX_ASSERT_MSG(cmdList.IsValid(), "Invalid CommandList");
+			RENDERX_ASSERT_MSG(cmdList.isOpen, "CommandList must be open");
+			RENDERX_ASSERT_MSG(handle.IsValid(), "Invalid BufferHandle");
+
+			auto& frame = GetCurrentFrameContex();
+
+			auto it = s_Buffers.find(handle.id);
+			RENDERX_ASSERT_MSG(it != s_Buffers.end(), "Buffer not found");
+
+			VkDeviceSize vkOffset = static_cast<VkDeviceSize>(offset);
+
+			vkCmdBindVertexBuffers(
+				frame.commandBuffers[cmdList.id],
+				0,						 // binding
+				it->second.bindingCount, // binding count
+				&it->second.buffer,
+				&vkOffset);
 		}
+
 
 		void VKCmdSetIndexBuffer(CommandList& cmdList, BufferHandle buffer, uint64_t offset) {
 			PROFILE_FUNCTION();
 			RENDERX_ASSERT_MSG(cmdList.IsValid(), "Invalid Command list");
-			if (!s_CommandLists[cmdList.id].isRecording)
+			if (!cmdList.isOpen)
 				return;
-			vkCmdBindIndexBuffer(s_CommandLists[cmdList.id].commandBuffer,
+			auto& frame = GetCurrentFrameContex();
+			vkCmdBindIndexBuffer(frame.commandBuffers[cmdList.id],
 				s_Buffers[buffer.id].buffer, offset, VK_INDEX_TYPE_UINT32);
 		}
 

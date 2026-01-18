@@ -21,6 +21,9 @@ namespace RenderXVK {
 	// They are kept inline so they can be used privately from backend sources without
 	// exposing device/swapchain creation details to library users.
 
+#define MAX_FRAMES_IN_FLIGHT 3
+	extern uint32_t g_CurrentFrame;
+
 #define VK_CHECK(x)                                                                                      \
 	do {                                                                                                 \
 		VkResult err = x;                                                                                \
@@ -29,13 +32,29 @@ namespace RenderXVK {
 		}                                                                                                \
 	} while (0)
 
-	inline bool CheckVk(VkResult result, const char* message) {
+	inline bool
+	CheckVk(VkResult result, const char* message) {
 		if (result != VK_SUCCESS) {
 			RENDERX_ERROR("[Vulkan] {} (VkResult = {})", message, static_cast<int>(result));
 			return false;
 		}
 		return true;
 	}
+
+	struct FrameContex {
+		//
+		VkCommandPool commandPool;
+		std::vector<VkCommandBuffer> commandBuffers;
+
+		// sync
+		VkSemaphore presentSemaphore;
+		VkSemaphore renderSemaphore;
+		VkFence fence;
+
+		// swpachainImageIndex
+		uint32_t swapchainImageIndex;
+	};
+
 	struct VulkanContext {
 		GLFWwindow* window = nullptr;
 		VkInstance instance = VK_NULL_HANDLE;
@@ -43,20 +62,20 @@ namespace RenderXVK {
 		VkDevice device = VK_NULL_HANDLE;
 		VkQueue graphicsQueue = VK_NULL_HANDLE;
 		uint32_t graphicsQueueFamilyIndex = 0;
-		VkCommandPool graphicsCommandPool;
 
 		VkSurfaceKHR surface = VK_NULL_HANDLE;
 
 		// swapchain related stuff
+
+		VkRenderPass swapchainRenderPass; // created from RenderPassDesc
+		std::vector<VkFramebuffer> swapchainFramebuffers;
+
 		VkSwapchainKHR swapchain = VK_NULL_HANDLE;
 		VkFormat swapchainImageFormat = VK_FORMAT_UNDEFINED;
 		VkExtent2D swapchainExtent{ 0, 0 };
-
 		std::vector<VkImage> swapchainImages;
 		std::vector<VkImageView> swapchainImageviews;
-		VkFramebuffer swapchainFrambuffers = VK_NULL_HANDLE;
-
-		VkRenderPass RenderPass = VK_NULL_HANDLE;
+		std::vector<VkFramebuffer> swapchainFrambuffers;
 	};
 
 	struct VulkanCommandList {
@@ -67,6 +86,7 @@ namespace RenderXVK {
 	struct VulkanBuffer {
 		VkDeviceMemory memory;
 		VkBuffer buffer;
+		uint32_t bindingCount;
 		size_t size;
 	};
 
@@ -75,17 +95,19 @@ namespace RenderXVK {
 		ShaderType type;
 		VkShaderModule shaderModule;
 	};
-	// storage for the global
-	extern std::unordered_map<uint32_t, VulkanCommandList> s_CommandLists;
+
+
 	extern std::unordered_map<uint32_t, VulkanBuffer> s_Buffers;
 	extern std::unordered_map<uint32_t, VulkanShader> s_Shaders;
+	extern std::unordered_map<uint32_t, VkRenderPass> s_RenderPasses;
 
 	VulkanContext& GetVulkanContext();
+	FrameContex& GetCurrentFrameContex();
 
-	bool CreateInstance(VkInstance* outInstance);
+	bool InitInstance(VkInstance* outInstance);
 	bool PickPhysicalDevice(VkInstance instance, VkSurfaceKHR surface,
 		VkPhysicalDevice* outPhysicalDevice, uint32_t* outGraphicsQueueFamily);
-	bool CreateLogicalDevice(VkPhysicalDevice physicalDevice, uint32_t graphicsQueueFamily,
+	bool InitLogicalDevice(VkPhysicalDevice physicalDevice, uint32_t graphicsQueueFamily,
 		VkDevice* outDevice, VkQueue* outGraphicsQueue);
 
 	struct SwapchainSupportDetails {
@@ -98,9 +120,24 @@ namespace RenderXVK {
 	VkSurfaceFormatKHR ChooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats);
 	VkPresentModeKHR ChoosePresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes);
 	VkExtent2D ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities, GLFWwindow* window);
-	bool CreateSwapchain(VulkanContext& ctx, GLFWwindow* window);
 
-	void CreateCommandPool();
+	bool InitSwapchain(VulkanContext& ctx, GLFWwindow* window);
+	void InitFrameContex();
+	
+	void CreateSwapchainFramebuffers(RenderPassHandle renderPass);
+	
+	// vulkan helpers
+	VkRenderPass GetVulkanRenderPass(RenderPassHandle handle);
+
+	VkFormat ToVkFormat(DataFormat);
+	VkFormat ToVkTextureFormat(TextureFormat);
+	VkShaderStageFlagBits ToVkShaderStage(ShaderType);
+	VkPrimitiveTopology ToVkPrimitiveTopology(PrimitiveType);
+	VkCullModeFlags ToVkCullMode(CullMode);
+	VkCompareOp ToVkCompareOp(CompareFunc);
+	VkPolygonMode ToVkPolygonMode(FillMode);
+
+	VkRenderPass GetVulkanRenderPass(RenderPassHandle);
 
 } // namespace  RenderXVK
 
