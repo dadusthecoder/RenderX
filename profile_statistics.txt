@@ -1,0 +1,28 @@
+===========================================
+PROFILING STATISTICS - RenderX
+Session Duration: 3207 ms
+===========================================
+
+Function                                Calls     Total (ms)     Avg (ms)       Min (ms)       Max (ms)       % Time    
+------------------------------------------------------------------------------------------------------------------------
+SetBackend                              1         2045.084       2045.084       2045.084       2045.084       50.4      %
+InitInstance                            1         1933.829       1933.829       1933.829       1933.829       47.7      %
+InitSwapchain                           1         27.147         27.147         27.147         27.147         0.7       %
+InitLogicalDevice                       1         10.074         10.074         10.074         10.074         0.2       %
+VKExecuteCommandList                    134       9.075          0.068          0.039          0.194          0.2       %
+VKCreateCommandList                     134       8.561          0.064          0.028          0.202          0.2       %
+VKCmdBeginRenderPass                    134       7.200          0.054          0.034          0.166          0.2       %
+PickPhysicalDevice                      1         3.082          3.082          3.082          3.082          0.1       %
+VKCmdDraw                               134       2.597          0.019          0.011          0.104          0.1       %
+VKCmdOpen                               134       2.392          0.018          0.008          0.250          0.1       %
+VKCmdSetPipeline                        134       1.776          0.013          0.007          0.060          0.0       %
+VKCmdSetVertexBuffer                    134       1.302          0.010          0.005          0.022          0.0       %
+VKCmdEndRenderPass                      134       0.634          0.005          0.003          0.013          0.0       %
+VKCreateBuffer                          1         0.614          0.614          0.614          0.614          0.0       %
+VKCmdClose                              134       0.607          0.005          0.002          0.066          0.0       %
+QuerySwapchainSupport                   1         0.041          0.041          0.041          0.041          0.0       %
+VKFindMemoryType                        1         0.003          0.003          0.003          0.003          0.0       %
+ChooseSwapExtent                        1         0.000          0.000          0.000          0.000          0.0       %
+ChooseSwapSurfaceFormat                 1         0.000          0.000          0.000          0.000          0.0       %
+ChoosePresentMode                       1         0.000          0.000          0.000          0.000          0.0       %
+===========================================

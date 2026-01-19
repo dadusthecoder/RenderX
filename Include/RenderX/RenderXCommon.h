@@ -173,36 +173,23 @@ namespace RenderX {
 	};
 
 	enum class TextureFormat {
-		// Color formats
-		R8,
-		RG8,
-		RGB8,
 		RGBA8,
-		R16F,
-		RG16F,
-		RGB16F,
-		RGBA16F,
-		R32F,
-		RG32F,
-		RGB32F,
-		RGBA32F,
-
+		RGBA8_SRGB,
 		BGRA8,
-
-		// Depth/stencil formats
-		Depth16,
-		Depth24,
-		Depth32F,
+		BGRA8_SRGB,
+		RGBA16F,
+		RGBA32F,
+		R8,
+		R16F,
+		R32F,
 		Depth24Stencil8,
-		Depth32FStencil8,
-
-		// Compressed formats
+		Depth32F,
 		BC1,
-		BC2,
+		BC1_SRGB,
 		BC3,
-		BC4,
-		BC5
+		BC3_SRGB
 	};
+
 
 	enum class TextureFilter {
 		Nearest,
@@ -330,7 +317,7 @@ namespace RenderX {
 		}
 	};
 
-	struct VertexLayout {
+	struct VertexInputState {
 		std::vector<VertexAttribute> attributes;
 		std::vector<VertexBinding> bindings;
 	};
@@ -478,7 +465,7 @@ namespace RenderX {
 	struct PipelineDesc {
 		PipelineType type;
 		std::vector<ShaderHandle> shaders;
-		VertexLayout vertexLayout;
+		VertexInputState vertexInputState;
 		PrimitiveType primitiveType;
 		RasterizerState rasterizer;
 		DepthStencilState depthStencil;

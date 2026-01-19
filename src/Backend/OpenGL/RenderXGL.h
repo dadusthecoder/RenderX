@@ -12,6 +12,7 @@ namespace RenderXGL {
 #undef RENDERER_FUNC
 
 void GLBindPipeline(const PipelineHandle pipeline);
+const PipelineDesc* GLGetPipelineDesc(const PipelineHandle pipeline);
 
 } // namespace RenderXGL
 

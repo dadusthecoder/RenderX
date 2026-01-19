@@ -31,7 +31,7 @@ namespace RenderXVK {
 		VkPresentInfoKHR presentInfo{};
 		presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
 		presentInfo.waitSemaphoreCount = 1;
-		presentInfo.pWaitSemaphores = &frame.renderSemaphore;
+		presentInfo.pWaitSemaphores = &ctx.swapchainImageSync[frame.swapchainImageIndex].renderFinishedSemaphore;
 		presentInfo.swapchainCount = 1;
 		presentInfo.pSwapchains = &ctx.swapchain;
 		presentInfo.pImageIndices = &frame.swapchainImageIndex;
@@ -126,7 +126,7 @@ namespace RenderXVK {
 		submitinfo.commandBufferCount = 1;
 		submitinfo.pCommandBuffers = &frame.commandBuffers[cmdList.id];
 		submitinfo.signalSemaphoreCount = 1;
-		submitinfo.pSignalSemaphores = &frame.renderSemaphore;
+		submitinfo.pSignalSemaphores = &ctx.swapchainImageSync[frame.swapchainImageIndex].renderFinishedSemaphore;
 		submitinfo.waitSemaphoreCount = 1;
 		submitinfo.pWaitSemaphores = &frame.presentSemaphore;
 		vkQueueSubmit(ctx.graphicsQueue, 1, &submitinfo, frame.fence);

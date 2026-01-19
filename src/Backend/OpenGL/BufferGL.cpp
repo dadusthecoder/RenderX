@@ -1,8 +1,4 @@
-#include <GL/glew.h>
-
-#include "RenderXGL.h"
-#include "RenderX/Log.h"
-#include "ProLog/ProLog.h"
+#include "CommonGL.h"
 
 namespace RenderX {
 
@@ -41,17 +37,14 @@ namespace RenderX {
 	namespace RenderXGL {
 
 		// Low-level helper used by the RHI entry point
-		const BufferHandle GLCreateBuffer(size_t size,
-			const void* data,
-			BufferType type,
-			BufferUsage use) {
+		BufferHandle GLCreateBuffer(const BufferDesc& desc) {
 			PROFILE_FUNCTION();
 			BufferHandle handle;
-			GLenum target = TOGLBufferTarget(type);
+			GLenum target = TOGLBufferTarget(desc.type);
 			glGenBuffers(1, &handle.id);
 			glBindBuffer(target, handle.id);
-			glBufferData(target, static_cast<GLsizeiptr>(size), data, TOGLBufferUse(use));
-			RENDERX_INFO("OpenGL: Created Buffer | ID: {} | Size: {} bytes", handle.id, size);
+			glBufferData(target, static_cast<GLsizeiptr>(desc.size), desc.initialData, TOGLBufferUse(desc.usage));
+			RENDERX_INFO("OpenGL: Created Buffer | ID: {} | Size: {} bytes", handle.id, desc.size);
 			return handle;
 		}
 
@@ -61,16 +54,23 @@ namespace RenderX {
 			glDeleteBuffers(1, &id);
 		}
 
-		const BufferHandle GLCreateVertexBuffer(size_t size,
-			const void* data,
-			BufferUsage use) {
+		void GLCmdSetVertexBuffer(CommandList& cmdList, BufferHandle buffer, uint64_t offset) {
 			PROFILE_FUNCTION();
-			return GLCreateBuffer(size, data, BufferType::Vertex, use);
+			RENDERX_ASSERT_MSG(cmdList.isOpen, "CommandList must be open");
+
+			glBindBuffer(GL_ARRAY_BUFFER, buffer.id);
+
+			// NOTE:
+			// Vertex attribute setup (glVertexAttribPointer)
+			// should be handled by your pipeline/VAO system,
+			// NOT here.
 		}
 
-		// RHI entry point required by RenderXAPI.def
-		BufferHandle GLCreateBuffer(const BufferDesc& desc) {
-			return GLCreateBuffer(desc.size, desc.initialData, desc.type, desc.usage);
+		void GLCmdSetIndexBuffer(CommandList& cmdList, BufferHandle buffer, uint64_t offset) {
+			PROFILE_FUNCTION();
+			RENDERX_ASSERT_MSG(cmdList.isOpen, "CommandList must be open");
+
+			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffer.id);
 		}
 
 	} // namespace RenderXGL

@@ -13,8 +13,6 @@ namespace RenderX {
 		static std::unordered_map<uint32_t, VkPipeline> s_Pipelines;
 		static std::unordered_map<uint32_t, VkPipelineLayout> s_PipelineLayouts;
 
-
-		static uint32_t s_NextRenderPassId = 1;
 		static uint32_t s_NextShaderId = 1;
 		static uint32_t s_NextPipelineId = 1;
 
@@ -73,17 +71,17 @@ namespace RenderX {
 
 		// ---------- Vertex Input ----------
 		std::vector<VkVertexInputBindingDescription> bindings;
-		for (auto& b : desc.vertexLayout.bindings) {
+		for (auto& b : desc.vertexInputState.bindings) {
 			bindings.push_back({ b.binding,
 				b.stride,
 				b.instanceData ? VK_VERTEX_INPUT_RATE_INSTANCE : VK_VERTEX_INPUT_RATE_VERTEX });
 		}
 
 		std::vector<VkVertexInputAttributeDescription> attrs;
-		for (auto& a : desc.vertexLayout.attributes) {
+		for (auto& a : desc.vertexInputState.attributes) {
 			attrs.push_back({ a.location,
 				a.binding,
-				ToVkFormat(a.datatype), // EXPECTS VkFormat
+				ToVkFormat(a.datatype), 
 				a.offset });
 		}
 
@@ -99,6 +97,7 @@ namespace RenderX {
 		inputAsm.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
 		inputAsm.topology = ToVkPrimitiveTopology(desc.primitiveType);
 
+		//temp
 		// ---------- Viewport ----------
 		VkViewport viewport{};
 		viewport.width = (float)ctx.swapchainExtent.width;
@@ -115,6 +114,7 @@ namespace RenderX {
 		vp.pViewports = &viewport;
 		vp.scissorCount = 1;
 		vp.pScissors = &scissor;
+		//
 
 		// ---------- Rasterizer ----------
 		VkPipelineRasterizationStateCreateInfo rast{};

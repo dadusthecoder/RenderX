@@ -1,4 +1,4 @@
-#include <GL/glew.h>
+#include "CommonGL.h"
 
 #include <string>
 #include <unordered_map>
@@ -12,6 +12,7 @@ namespace RenderX {
 
 namespace RenderXGL {
 
+	// Cache of pipeline descriptions, keyed by GL program ID.
 	static std::unordered_map<uint32_t, PipelineDesc> PipelineCache;
 
 	// Convert engine ShaderType to OpenGL shader enums
@@ -268,6 +269,15 @@ namespace RenderXGL {
 		}
 
 		glUseProgram(handle.id);
+	}
+
+	// Accessor used by GL command list execution to fetch the
+	// vertex input layout for a given pipeline.
+	const PipelineDesc* GLGetPipelineDesc(const PipelineHandle handle) {
+		auto it = PipelineCache.find(handle.id);
+		if (it == PipelineCache.end())
+			return nullptr;
+		return &it->second;
 	}
 
 } // namespace RenderXGL

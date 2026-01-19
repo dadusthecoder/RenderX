@@ -1,4 +1,3 @@
-
 #pragma once
 #include "RenderX/Log.h"
 #include "ProLog/ProLog.h"
@@ -9,6 +8,9 @@
 #include <GLFW/glfw3.h>
 
 #include <vector>
+#include <array>
+#include <optional>
+#include <unordered_map>
 #include <limits>
 #include <cstdint>
 #include <cstring>
@@ -21,9 +23,10 @@ namespace RenderXVK {
 	// They are kept inline so they can be used privately from backend sources without
 	// exposing device/swapchain creation details to library users.
 
-#define MAX_FRAMES_IN_FLIGHT 3
+	constexpr uint32_t MAX_FRAMES_IN_FLIGHT =  3 ;
 	extern uint32_t g_CurrentFrame;
 
+// Macro for checking Vulkan results with detailed error reporting
 #define VK_CHECK(x)                                                                                      \
 	do {                                                                                                 \
 		VkResult err = x;                                                                                \
@@ -32,8 +35,8 @@ namespace RenderXVK {
 		}                                                                                                \
 	} while (0)
 
-	inline bool
-	CheckVk(VkResult result, const char* message) {
+	// Inline function for checking Vulkan results with custom message
+	inline bool CheckVk(VkResult result, const char* message) {
 		if (result != VK_SUCCESS) {
 			RENDERX_ERROR("[Vulkan] {} (VkResult = {})", message, static_cast<int>(result));
 			return false;
@@ -41,18 +44,48 @@ namespace RenderXVK {
 		return true;
 	}
 
+	// ===================== STRUCTURES =====================
+
 	struct FrameContex {
-		//
-		VkCommandPool commandPool;
+		VkCommandPool commandPool = VK_NULL_HANDLE;
 		std::vector<VkCommandBuffer> commandBuffers;
 
-		// sync
-		VkSemaphore presentSemaphore;
-		VkSemaphore renderSemaphore;
-		VkFence fence;
+		// Synchronization primitives
+		VkSemaphore presentSemaphore = VK_NULL_HANDLE;
+		VkSemaphore renderSemaphore = VK_NULL_HANDLE;
+		VkFence fence = VK_NULL_HANDLE;
 
-		// swpachainImageIndex
-		uint32_t swapchainImageIndex;
+		// Current swapchain image index for this frame
+		uint32_t swapchainImageIndex = 0;
+	};
+
+	struct SwapchainImageSync {
+		VkSemaphore imageAvailableSemaphore = VK_NULL_HANDLE;
+		VkSemaphore renderFinishedSemaphore = VK_NULL_HANDLE;
+	};
+
+	struct VulkanCommandList {
+		VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
+		bool isRecording = false;
+	};
+
+	struct VulkanBuffer {
+		VkDeviceMemory memory = VK_NULL_HANDLE;
+		VkBuffer buffer = VK_NULL_HANDLE;
+		uint32_t bindingCount = 0;
+		size_t size = 0;
+	};
+
+	struct VulkanShader {
+		std::string entryPoint;
+		ShaderType type;
+		VkShaderModule shaderModule = VK_NULL_HANDLE;
+	};
+
+	struct SwapchainSupportDetails {
+		VkSurfaceCapabilitiesKHR capabilities{};
+		std::vector<VkSurfaceFormatKHR> formats;
+		std::vector<VkPresentModeKHR> presentModes;
 	};
 
 	struct VulkanContext {
@@ -65,81 +98,81 @@ namespace RenderXVK {
 
 		VkSurfaceKHR surface = VK_NULL_HANDLE;
 
-		// swapchain related stuff
-
-		VkRenderPass swapchainRenderPass; // created from RenderPassDesc
+		// Swapchain related resources
+		VkRenderPass swapchainRenderPass = VK_NULL_HANDLE; // Created from RenderPassDesc
 		std::vector<VkFramebuffer> swapchainFramebuffers;
+		std::vector<SwapchainImageSync> swapchainImageSync;
 
 		VkSwapchainKHR swapchain = VK_NULL_HANDLE;
 		VkFormat swapchainImageFormat = VK_FORMAT_UNDEFINED;
 		VkExtent2D swapchainExtent{ 0, 0 };
 		std::vector<VkImage> swapchainImages;
 		std::vector<VkImageView> swapchainImageviews;
-		std::vector<VkFramebuffer> swapchainFrambuffers;
 	};
 
-	struct VulkanCommandList {
-		VkCommandBuffer commandBuffer;
-		bool isRecording;
-	};
-
-	struct VulkanBuffer {
-		VkDeviceMemory memory;
-		VkBuffer buffer;
-		uint32_t bindingCount;
-		size_t size;
-	};
-
-	struct VulkanShader {
-		std::string entryPoint;
-		ShaderType type;
-		VkShaderModule shaderModule;
-	};
-
+	// ===================== GLOBAL RESOURCE MAPS =====================
 
 	extern std::unordered_map<uint32_t, VulkanBuffer> s_Buffers;
 	extern std::unordered_map<uint32_t, VulkanShader> s_Shaders;
 	extern std::unordered_map<uint32_t, VkRenderPass> s_RenderPasses;
 
+	// ===================== CONTEXT ACCESS =====================
+
 	VulkanContext& GetVulkanContext();
 	FrameContex& GetCurrentFrameContex();
 
+	// ===================== INITIALIZATION FUNCTIONS =====================
+
 	bool InitInstance(VkInstance* outInstance);
-	bool PickPhysicalDevice(VkInstance instance, VkSurfaceKHR surface,
-		VkPhysicalDevice* outPhysicalDevice, uint32_t* outGraphicsQueueFamily);
-	bool InitLogicalDevice(VkPhysicalDevice physicalDevice, uint32_t graphicsQueueFamily,
-		VkDevice* outDevice, VkQueue* outGraphicsQueue);
 
-	struct SwapchainSupportDetails {
-		VkSurfaceCapabilitiesKHR capabilities{};
-		std::vector<VkSurfaceFormatKHR> formats;
-		std::vector<VkPresentModeKHR> presentModes;
-	};
+	bool PickPhysicalDevice(
+		VkInstance instance,
+		VkSurfaceKHR surface,
+		VkPhysicalDevice* outPhysicalDevice,
+		uint32_t* outGraphicsQueueFamily);
 
-	SwapchainSupportDetails QuerySwapchainSupport(VkPhysicalDevice device, VkSurfaceKHR surface);
-	VkSurfaceFormatKHR ChooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats);
-	VkPresentModeKHR ChoosePresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes);
-	VkExtent2D ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities, GLFWwindow* window);
+	bool InitLogicalDevice(
+		VkPhysicalDevice physicalDevice,
+		uint32_t graphicsQueueFamily,
+		VkDevice* outDevice,
+		VkQueue* outGraphicsQueue);
+
+	// ===================== SWAPCHAIN FUNCTIONS =====================
+
+	SwapchainSupportDetails QuerySwapchainSupport(
+		VkPhysicalDevice device,
+		VkSurfaceKHR surface);
+
+	VkSurfaceFormatKHR ChooseSwapSurfaceFormat(
+		const std::vector<VkSurfaceFormatKHR>& availableFormats);
+
+	VkPresentModeKHR ChoosePresentMode(
+		const std::vector<VkPresentModeKHR>& availablePresentModes);
+
+	VkExtent2D ChooseSwapExtent(
+		const VkSurfaceCapabilitiesKHR& capabilities,
+		GLFWwindow* window);
 
 	bool InitSwapchain(VulkanContext& ctx, GLFWwindow* window);
-	void InitFrameContex();
-	
+
 	void CreateSwapchainFramebuffers(RenderPassHandle renderPass);
-	
-	// vulkan helpers
+
+	void InitFrameContex();
+
+	// ===================== VULKAN HELPERS =====================
+
 	VkRenderPass GetVulkanRenderPass(RenderPassHandle handle);
 
-	VkFormat ToVkFormat(DataFormat);
-	VkFormat ToVkTextureFormat(TextureFormat);
-	VkShaderStageFlagBits ToVkShaderStage(ShaderType);
-	VkPrimitiveTopology ToVkPrimitiveTopology(PrimitiveType);
-	VkCullModeFlags ToVkCullMode(CullMode);
-	VkCompareOp ToVkCompareOp(CompareFunc);
-	VkPolygonMode ToVkPolygonMode(FillMode);
+	// Format conversion helpers
+	VkFormat ToVkFormat(DataFormat format);
+	VkFormat ToVkTextureFormat(TextureFormat format);
 
-	VkRenderPass GetVulkanRenderPass(RenderPassHandle);
+	// Shader and pipeline helpers
+	VkShaderStageFlagBits ToVkShaderStage(ShaderType type);
+	VkPrimitiveTopology ToVkPrimitiveTopology(PrimitiveType type);
+	VkCullModeFlags ToVkCullMode(CullMode mode);
+	VkCompareOp ToVkCompareOp(CompareFunc func);
+	VkPolygonMode ToVkPolygonMode(FillMode mode);
 
-} // namespace  RenderXVK
-
-
+} // namespace RenderXVK
 } // namespace RenderX

@@ -238,13 +238,25 @@ namespace RenderX {
 
 		void VKCmdSetIndexBuffer(CommandList& cmdList, BufferHandle buffer, uint64_t offset) {
 			PROFILE_FUNCTION();
-			RENDERX_ASSERT_MSG(cmdList.IsValid(), "Invalid Command list");
-			if (!cmdList.isOpen)
-				return;
+			RENDERX_ASSERT_MSG(cmdList.IsValid(), "Invalid CommandList");
+			RENDERX_ASSERT_MSG(cmdList.isOpen, "CommandList must be open");
+
 			auto& frame = GetCurrentFrameContex();
-			vkCmdBindIndexBuffer(frame.commandBuffers[cmdList.id],
-				s_Buffers[buffer.id].buffer, offset, VK_INDEX_TYPE_UINT32);
+			auto it = s_Buffers.find(buffer.id);
+
+			RENDERX_ASSERT_MSG(it != s_Buffers.end(), "Invalid BufferHandle");
+			RENDERX_ASSERT_MSG(it->second.type == BufferType::Index, "Buffer is not an index buffer");
+
+			// Choose index type (you can extend this later)
+			VkIndexType indexType = VK_INDEX_TYPE_UINT32;
+
+			vkCmdBindIndexBuffer(
+				frame.commandBuffers[cmdList.id],
+				it->second.buffer,
+				offset,
+				indexType);
 		}
+
 
 	} // namespace RenderXVk
 
