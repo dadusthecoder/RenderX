@@ -23,7 +23,7 @@ namespace RenderXVK {
 	// They are kept inline so they can be used privately from backend sources without
 	// exposing device/swapchain creation details to library users.
 
-	constexpr uint32_t MAX_FRAMES_IN_FLIGHT =  3 ;
+	constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 3;
 	extern uint32_t g_CurrentFrame;
 
 // Macro for checking Vulkan results with detailed error reporting
@@ -164,15 +164,166 @@ namespace RenderXVK {
 	VkRenderPass GetVulkanRenderPass(RenderPassHandle handle);
 
 	// Format conversion helpers
-	VkFormat ToVkFormat(DataFormat format);
-	VkFormat ToVkTextureFormat(TextureFormat format);
+	inline VkFormat ToVkFormat(DataFormat format) {
+		switch (format) {
+		case DataFormat::R8: return VK_FORMAT_R8_UNORM;
+		case DataFormat::RG8: return VK_FORMAT_R8G8_UNORM;
+		case DataFormat::RGBA8: return VK_FORMAT_R8G8B8A8_UNORM;
+		case DataFormat::R16F: return VK_FORMAT_R16_SFLOAT;
+		case DataFormat::RG16F: return VK_FORMAT_R16G16_SFLOAT;
+		case DataFormat::RGBA16F: return VK_FORMAT_R16G16B16A16_SFLOAT;
+		case DataFormat::R32F: return VK_FORMAT_R32_SFLOAT;
+		case DataFormat::RG32F: return VK_FORMAT_R32G32_SFLOAT;
+		case DataFormat::RGBA32F: return VK_FORMAT_R32G32B32A32_SFLOAT;
+		case DataFormat::RGB32F:
+			return VK_FORMAT_R32G32B32_SFLOAT; // Vertex only
 
-	// Shader and pipeline helpers
-	VkShaderStageFlagBits ToVkShaderStage(ShaderType type);
-	VkPrimitiveTopology ToVkPrimitiveTopology(PrimitiveType type);
-	VkCullModeFlags ToVkCullMode(CullMode mode);
-	VkCompareOp ToVkCompareOp(CompareFunc func);
-	VkPolygonMode ToVkPolygonMode(FillMode mode);
+		// Unsupported formats
+		case DataFormat::RGB8:
+			RENDERX_ERROR("RGB8 not supported in Vulkan. Use RGBA8");
+			return VK_FORMAT_UNDEFINED;
+		case DataFormat::RGB16F:
+			RENDERX_ERROR("RGB16F not supported in Vulkan. Use RGBA16F");
+			return VK_FORMAT_UNDEFINED;
 
+		default:
+			RENDERX_ERROR("Unknown DataFormat: {}", static_cast<int>(format));
+			return VK_FORMAT_UNDEFINED;
+		}
+	}
+
+	inline VkFormat ToVkTextureFormat(TextureFormat format) {
+		switch (format) {
+		case TextureFormat::R8: return VK_FORMAT_R8_UNORM;
+		case TextureFormat::R16F: return VK_FORMAT_R16_SFLOAT;
+		case TextureFormat::R32F: return VK_FORMAT_R32_SFLOAT;
+
+		case TextureFormat::RGBA8: return VK_FORMAT_R8G8B8A8_UNORM;
+		case TextureFormat::RGBA8_SRGB: return VK_FORMAT_R8G8B8A8_SRGB;
+		case TextureFormat::RGBA16F: return VK_FORMAT_R16G16B16A16_SFLOAT;
+		case TextureFormat::RGBA32F: return VK_FORMAT_R32G32B32A32_SFLOAT;
+
+		case TextureFormat::BGRA8: return VK_FORMAT_B8G8R8A8_UNORM;
+		case TextureFormat::BGRA8_SRGB: return VK_FORMAT_B8G8R8A8_SRGB;
+
+		case TextureFormat::Depth32F: return VK_FORMAT_D32_SFLOAT;
+		case TextureFormat::Depth24Stencil8: return VK_FORMAT_D24_UNORM_S8_UINT;
+
+		case TextureFormat::BC1: return VK_FORMAT_BC1_RGBA_UNORM_BLOCK;
+		case TextureFormat::BC1_SRGB: return VK_FORMAT_BC1_RGBA_SRGB_BLOCK;
+		case TextureFormat::BC3: return VK_FORMAT_BC3_UNORM_BLOCK;
+		case TextureFormat::BC3_SRGB: return VK_FORMAT_BC3_SRGB_BLOCK;
+
+		default:
+			RENDERX_ERROR("Unknown TextureFormat: {}", static_cast<int>(format));
+			return VK_FORMAT_UNDEFINED;
+		}
+	}
+
+
+	inline VkShaderStageFlagBits ToVkShaderStage(ShaderType type) {
+		switch (type) {
+		case ShaderType::Vertex: return VK_SHADER_STAGE_VERTEX_BIT;
+		case ShaderType::Fragment: return VK_SHADER_STAGE_FRAGMENT_BIT;
+		case ShaderType::Compute: return VK_SHADER_STAGE_COMPUTE_BIT;
+		case ShaderType::Geometry: return VK_SHADER_STAGE_GEOMETRY_BIT;
+		case ShaderType::TessControl: return VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
+		case ShaderType::TessEvaluation: return VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
+
+		default:
+			RENDERX_ERROR("Unknown ShaderType: {}", static_cast<int>(type));
+			return VK_SHADER_STAGE_VERTEX_BIT;
+		}
+	}
+
+	inline VkPrimitiveTopology ToVkPrimitiveTopology(PrimitiveType type) {
+		switch (type) {
+		case PrimitiveType::Points: return VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
+		case PrimitiveType::Lines: return VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
+		case PrimitiveType::LineStrip: return VK_PRIMITIVE_TOPOLOGY_LINE_STRIP;
+		case PrimitiveType::Triangles: return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+		case PrimitiveType::TriangleStrip: return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+		case PrimitiveType::TriangleFan: return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN;
+
+		default:
+			RENDERX_ERROR("Unknown PrimitiveType: {}", static_cast<int>(type));
+			return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+		}
+	}
+
+	inline VkCullModeFlags ToVkCullMode(CullMode mode) {
+		switch (mode) {
+		case CullMode::None: return VK_CULL_MODE_NONE;
+		case CullMode::Front: return VK_CULL_MODE_FRONT_BIT;
+		case CullMode::Back: return VK_CULL_MODE_BACK_BIT;
+		case CullMode::FrontAndBack: return VK_CULL_MODE_FRONT_AND_BACK;
+
+		default:
+			RENDERX_ERROR("Unknown CullMode: {}", static_cast<int>(mode));
+			return VK_CULL_MODE_BACK_BIT;
+		}
+	}
+
+	inline VkCompareOp ToVkCompareOp(CompareFunc func) {
+		switch (func) {
+		case CompareFunc::Never: return VK_COMPARE_OP_NEVER;
+		case CompareFunc::Less: return VK_COMPARE_OP_LESS;
+		case CompareFunc::Equal: return VK_COMPARE_OP_EQUAL;
+		case CompareFunc::LessEqual: return VK_COMPARE_OP_LESS_OR_EQUAL;
+		case CompareFunc::Greater: return VK_COMPARE_OP_GREATER;
+		case CompareFunc::NotEqual: return VK_COMPARE_OP_NOT_EQUAL;
+		case CompareFunc::GreaterEqual: return VK_COMPARE_OP_GREATER_OR_EQUAL;
+		case CompareFunc::Always: return VK_COMPARE_OP_ALWAYS;
+
+		default:
+			RENDERX_ERROR("Unknown CompareFunc: {}", static_cast<int>(func));
+			return VK_COMPARE_OP_ALWAYS;
+		}
+	}
+
+	inline VkPolygonMode ToVkPolygonMode(FillMode mode) {
+		switch (mode) {
+		case FillMode::Solid: return VK_POLYGON_MODE_FILL;
+		case FillMode::Wireframe: return VK_POLYGON_MODE_LINE;
+		case FillMode::Point: return VK_POLYGON_MODE_POINT;
+
+		default:
+			RENDERX_ERROR("Unknown FillMode: {}", static_cast<int>(mode));
+			return VK_POLYGON_MODE_FILL;
+		}
+	}
+	//
+	inline VkBlendFactor ToVkBlendFactor(BlendFunc func) {
+		switch (func) {
+		case BlendFunc::Zero: return VK_BLEND_FACTOR_ZERO;
+		case BlendFunc::One: return VK_BLEND_FACTOR_ONE;
+		case BlendFunc::SrcColor: return VK_BLEND_FACTOR_SRC_COLOR;
+		case BlendFunc::OneMinusSrcColor: return VK_BLEND_FACTOR_ONE_MINUS_SRC_COLOR;
+		case BlendFunc::DstColor: return VK_BLEND_FACTOR_DST_COLOR;
+		case BlendFunc::OneMinusDstColor: return VK_BLEND_FACTOR_ONE_MINUS_DST_COLOR;
+		case BlendFunc::SrcAlpha: return VK_BLEND_FACTOR_SRC_ALPHA;
+		case BlendFunc::OneMinusSrcAlpha: return VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+		case BlendFunc::DstAlpha: return VK_BLEND_FACTOR_DST_ALPHA;
+		case BlendFunc::OneMinusDstAlpha: return VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA;
+		case BlendFunc::ConstantColor: return VK_BLEND_FACTOR_CONSTANT_COLOR;
+		case BlendFunc::OneMinusConstantColor: return VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_COLOR;
+		default:
+			RENDERX_ERROR("Unknown BlendFunc");
+			return VK_BLEND_FACTOR_ONE;
+		}
+	}
+
+	inline VkBlendOp ToVkBlendOp(BlendOp op) {
+		switch (op) {
+		case BlendOp::Add: return VK_BLEND_OP_ADD;
+		case BlendOp::Subtract: return VK_BLEND_OP_SUBTRACT;
+		case BlendOp::ReverseSubtract: return VK_BLEND_OP_REVERSE_SUBTRACT;
+		case BlendOp::Min: return VK_BLEND_OP_MIN;
+		case BlendOp::Max: return VK_BLEND_OP_MAX;
+		default:
+			RENDERX_ERROR("Unknown BlendOp");
+			return VK_BLEND_OP_ADD;
+		}
+	}
 } // namespace RenderXVK
 } // namespace RenderX

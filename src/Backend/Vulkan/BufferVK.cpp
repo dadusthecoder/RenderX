@@ -245,7 +245,7 @@ namespace RenderX {
 			auto it = s_Buffers.find(buffer.id);
 
 			RENDERX_ASSERT_MSG(it != s_Buffers.end(), "Invalid BufferHandle");
-			RENDERX_ASSERT_MSG(it->second.type == BufferType::Index, "Buffer is not an index buffer");
+			// RENDERX_ASSERT_MSG(it->second.type == BufferType::Index, "Buffer is not an index buffer");
 
 			// Choose index type (you can extend this later)
 			VkIndexType indexType = VK_INDEX_TYPE_UINT32;

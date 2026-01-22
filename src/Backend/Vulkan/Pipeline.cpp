@@ -81,7 +81,7 @@ namespace RenderX {
 		for (auto& a : desc.vertexInputState.attributes) {
 			attrs.push_back({ a.location,
 				a.binding,
-				ToVkFormat(a.datatype), 
+				ToVkFormat(a.datatype),
 				a.offset });
 		}
 
@@ -97,8 +97,8 @@ namespace RenderX {
 		inputAsm.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
 		inputAsm.topology = ToVkPrimitiveTopology(desc.primitiveType);
 
-		//temp
-		// ---------- Viewport ----------
+		// temp
+		//  ---------- Viewport ----------
 		VkViewport viewport{};
 		viewport.width = (float)ctx.swapchainExtent.width;
 		viewport.height = (float)ctx.swapchainExtent.height;
@@ -114,7 +114,6 @@ namespace RenderX {
 		vp.pViewports = &viewport;
 		vp.scissorCount = 1;
 		vp.pScissors = &scissor;
-		//
 
 		// ---------- Rasterizer ----------
 		VkPipelineRasterizationStateCreateInfo rast{};
@@ -138,7 +137,7 @@ namespace RenderX {
 		depth.depthWriteEnable = desc.depthStencil.depthWriteEnable;
 		depth.depthCompareOp = ToVkCompareOp(desc.depthStencil.depthFunc);
 
-		// ---------- Color Blend ----------
+		auto& b = desc.blend;
 		VkPipelineColorBlendAttachmentState blend{};
 		blend.colorWriteMask =
 			VK_COLOR_COMPONENT_R_BIT |
@@ -146,17 +145,33 @@ namespace RenderX {
 			VK_COLOR_COMPONENT_B_BIT |
 			VK_COLOR_COMPONENT_A_BIT;
 
+		blend.blendEnable = b.enable ? VK_TRUE : VK_FALSE;
+
+		// Color blending
+		blend.srcColorBlendFactor = ToVkBlendFactor(b.srcColor);
+		blend.dstColorBlendFactor = ToVkBlendFactor(b.dstColor);
+		blend.colorBlendOp = ToVkBlendOp(b.colorOp);
+
+		// Alpha blending
+		blend.srcAlphaBlendFactor = ToVkBlendFactor(b.srcAlpha);
+		blend.dstAlphaBlendFactor = ToVkBlendFactor(b.dstAlpha);
+		blend.alphaBlendOp = ToVkBlendOp(b.alphaOp);
+
 		VkPipelineColorBlendStateCreateInfo cb{};
 		cb.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+		cb.logicOpEnable = VK_FALSE;
 		cb.attachmentCount = 1;
 		cb.pAttachments = &blend;
+		cb.blendConstants[0] = b.blendFactor.r;
+		cb.blendConstants[1] = b.blendFactor.g;
+		cb.blendConstants[2] = b.blendFactor.b;
+		cb.blendConstants[3] = b.blendFactor.a;
 
 		// ---------- Pipeline Layout ----------
 		VkPipelineLayout layout;
 		VkPipelineLayoutCreateInfo lci{};
 		lci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 		vkCreatePipelineLayout(ctx.device, &lci, nullptr, &layout);
-
 
 		// ---------- Create Pipeline ----------
 		VkGraphicsPipelineCreateInfo pci{};
@@ -192,8 +207,7 @@ namespace RenderX {
 		PROFILE_FUNCTION();
 
 		RENDERX_ASSERT_MSG(cmdList.IsValid(), "Invalid CommadList");
-		if (!cmdList.isOpen)
-			return;
+		RENDERX_ASSERT_MSG(cmdList.isOpen, "CommandList must be open")
 
 		auto it = s_Pipelines.find(pipeline.id);
 		if (it == s_Pipelines.end()) {

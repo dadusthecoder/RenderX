@@ -21,7 +21,7 @@
 #if defined(PROLOG_BUILD_DLL)
 #define PROLOG_API __declspec(dllexport)
 #else
-#define PROLOG_API __declspec(dllimport)
+#define PROLOG_API
 #endif
 #elif defined(__GNUC__) || defined(__clang__)
 #define PROLOG_API __attribute__((visibility("default")))
@@ -46,6 +46,7 @@
 #include <thread>
 
 namespace ProLog {
+
 
 	// ============================================================================
 	// Forward Declarations
@@ -180,18 +181,18 @@ namespace ProLog {
 		ProLog::ProfilerSession::Get().SetConfig(config);
 	}
 
-}; // namespace Prolog
+} // namespace Profiler
 
 // ============================================================================
 // Convenience Macros
 // ============================================================================
-#define PROFILE_SCOPE(name) ::ProLog::Timer timer##__LINE__(name)
-#define PROFILE_SCOPE_CAT(name, category) ::ProLog::Timer timer##__LINE__(name, category)
+#define PROFILE_SCOPE(name) ProLog::Timer timer##__LINE__(name)
+#define PROFILE_SCOPE_CAT(name, category) ProLog::Timer timer##__LINE__(name, category)
 #define PROFILE_FUNCTION() PROFILE_SCOPE(__FUNCTION__)
 #define PROFILE_FUNCTION_CAT(category) PROFILE_SCOPE_CAT(__FUNCTION__, category)
 
-#define PROFILE_BEGIN(name) ::ProLog::PerformanceMarker::BeginEvent(name)
-#define PROFILE_END(name) ::ProLog::PerformanceMarker::EndEvent(name)
+#define PROFILE_BEGIN(name) ProLog::PerformanceMarker::BeginEvent(name)
+#define PROFILE_END(name) ProLog::PerformanceMarker::EndEvent(name)
 
 #define LOG_TRACE(...) ::ProLog::Logger::Get().GetLogger()->trace(__VA_ARGS__)
 #define LOG_DEBUG(...) ::ProLog::Logger::Get().GetLogger()->debug(__VA_ARGS__)
@@ -204,5 +205,5 @@ namespace ProLog {
 	if (condition) LOG_##level(__VA_ARGS__)
 
 #define PROFILE_START_SESSION(name, filepath) ProLog::ProfilerSession::Get().BeginSession(name, filepath)
-#define PROFILE_END_SESSION() ::ProLog::ProfilerSession::Get().EndSession()
-#define PROFILE_PRINT_STATS() ::ProLog::ProfilerSession::Get().PrintStatistics()
+#define PROFILE_END_SESSION() ProLog::ProfilerSession::Get().EndSession()
+#define PROFILE_PRINT_STATS() ProLog::ProfilerSession::Get().PrintStatistics()

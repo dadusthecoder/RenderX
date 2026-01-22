@@ -36,7 +36,7 @@ namespace RenderXVK {
 	};
 
 	// -------------------- helpers to query layers/extensions --------------------
-	
+
 	std::vector<const char*> GetEnabledValidationLayers() {
 		if constexpr (!enableValidationLayers) {
 			return {};
@@ -60,10 +60,11 @@ namespace RenderXVK {
 				[requested](const VkLayerProperties& p) {
 					return strcmp(requested, p.layerName) == 0;
 				});
-			
+
 			if (it != props.end()) {
 				enabledLayers.push_back(requested);
-			} else {
+			}
+			else {
 				RENDERX_WARN("Validation layer not available: {}", requested);
 			}
 		}
@@ -90,10 +91,11 @@ namespace RenderXVK {
 				[requested](const VkExtensionProperties& p) {
 					return strcmp(requested, p.extensionName) == 0;
 				});
-			
+
 			if (it != props.end()) {
 				enabledExtensions.push_back(requested);
-			} else {
+			}
+			else {
 				RENDERX_ERROR("Required device extension not available: {}", requested);
 			}
 		}
@@ -105,7 +107,7 @@ namespace RenderXVK {
 
 	bool InitInstance(VkInstance* outInstance) {
 		PROFILE_FUNCTION();
-		
+
 		if (!outInstance) {
 			RENDERX_ERROR("Null output instance pointer");
 			return false;
@@ -243,14 +245,14 @@ namespace RenderXVK {
 			if (props.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
 				discreteGPU = device;
 			}
-			
+
 			if (fallbackGPU == VK_NULL_HANDLE) {
 				fallbackGPU = device;
 			}
 		}
 
 		const VkPhysicalDevice selectedDevice = discreteGPU != VK_NULL_HANDLE ? discreteGPU : fallbackGPU;
-		
+
 		if (selectedDevice == VK_NULL_HANDLE) {
 			RENDERX_ERROR("No suitable physical device found");
 			return false;
@@ -317,7 +319,7 @@ namespace RenderXVK {
 
 	SwapchainSupportDetails QuerySwapchainSupport(VkPhysicalDevice device, VkSurfaceKHR surface) {
 		PROFILE_FUNCTION();
-		
+
 		SwapchainSupportDetails details{};
 		vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &details.capabilities);
 
@@ -340,10 +342,10 @@ namespace RenderXVK {
 
 	VkSurfaceFormatKHR ChooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& formats) {
 		PROFILE_FUNCTION();
-		
+
 		// Prefer SRGB if available for better color accuracy
 		for (const auto& format : formats) {
-			if (format.format == VK_FORMAT_B8G8R8A8_SRGB && 
+			if (format.format == VK_FORMAT_B8G8R8A8_SRGB &&
 				format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
 				return format;
 			}
@@ -361,7 +363,7 @@ namespace RenderXVK {
 
 	VkPresentModeKHR ChoosePresentMode(const std::vector<VkPresentModeKHR>& modes) {
 		PROFILE_FUNCTION();
-		
+
 		// Prefer mailbox for low latency triple buffering
 		for (const auto mode : modes) {
 			if (mode == VK_PRESENT_MODE_MAILBOX_KHR) {
@@ -375,7 +377,7 @@ namespace RenderXVK {
 
 	VkExtent2D ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& caps, GLFWwindow* window) {
 		PROFILE_FUNCTION();
-		
+
 		if (caps.currentExtent.width != UINT32_MAX) {
 			return caps.currentExtent;
 		}
@@ -388,7 +390,7 @@ namespace RenderXVK {
 			static_cast<uint32_t>(height)
 		};
 
-		actualExtent.width = std::clamp(actualExtent.width, 
+		actualExtent.width = std::clamp(actualExtent.width,
 			caps.minImageExtent.width, caps.maxImageExtent.width);
 		actualExtent.height = std::clamp(actualExtent.height,
 			caps.minImageExtent.height, caps.maxImageExtent.height);
@@ -476,7 +478,7 @@ namespace RenderXVK {
 
 	void CreateSwapchainFramebuffers(RenderPassHandle renderPass) {
 		VulkanContext& ctx = GetVulkanContext();
-		
+
 		auto it = s_RenderPasses.find(renderPass.id);
 		if (it == s_RenderPasses.end()) {
 			RENDERX_ERROR("Invalid render pass handle");
@@ -498,7 +500,9 @@ namespace RenderXVK {
 			framebufferInfo.height = ctx.swapchainExtent.height;
 			framebufferInfo.layers = 1;
 
-			VK_CHECK(vkCreateFramebuffer(ctx.device, &framebufferInfo, nullptr, 
+
+
+			VK_CHECK(vkCreateFramebuffer(ctx.device, &framebufferInfo, nullptr,
 				&ctx.swapchainFramebuffers[i]));
 		}
 	}
@@ -517,19 +521,17 @@ namespace RenderXVK {
 		poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
 		poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
 		poolInfo.queueFamilyIndex = ctx.graphicsQueueFamilyIndex;
-    
+
 		ctx.swapchainImageSync.resize(ctx.swapchainImageviews.size());
-		
-		for (auto& iSync : ctx.swapchainImageSync ){
 
-			VK_CHECK(vkCreateSemaphore(ctx.device , &semaphoreInfo , nullptr , &iSync.imageAvailableSemaphore));
-			VK_CHECK(vkCreateSemaphore(ctx.device , &semaphoreInfo , nullptr , &iSync.renderFinishedSemaphore));
-
+		for (auto& iSync : ctx.swapchainImageSync) {
+			VK_CHECK(vkCreateSemaphore(ctx.device, &semaphoreInfo, nullptr, &iSync.imageAvailableSemaphore));
+			VK_CHECK(vkCreateSemaphore(ctx.device, &semaphoreInfo, nullptr, &iSync.renderFinishedSemaphore));
 		}
 		for (auto& frame : g_Frames) {
 			VK_CHECK(vkCreateFence(ctx.device, &fenceInfo, nullptr, &frame.fence));
-			VK_CHECK(vkCreateSemaphore(ctx.device , &semaphoreInfo , nullptr , &frame.presentSemaphore));
-			VK_CHECK(vkCreateSemaphore(ctx.device , &semaphoreInfo , nullptr , &frame.renderSemaphore));
+			VK_CHECK(vkCreateSemaphore(ctx.device, &semaphoreInfo, nullptr, &frame.presentSemaphore));
+			VK_CHECK(vkCreateSemaphore(ctx.device, &semaphoreInfo, nullptr, &frame.renderSemaphore));
 			VK_CHECK(vkCreateCommandPool(ctx.device, &poolInfo, nullptr, &frame.commandPool));
 		}
 
@@ -543,135 +545,8 @@ namespace RenderXVK {
 		return (it != s_RenderPasses.end()) ? it->second : VK_NULL_HANDLE;
 	}
 
-	VkFormat ToVkFormat(DataFormat format) {
-		switch (format) {
-		case DataFormat::R8:         return VK_FORMAT_R8_UNORM;
-		case DataFormat::RG8:        return VK_FORMAT_R8G8_UNORM;
-		case DataFormat::RGBA8:      return VK_FORMAT_R8G8B8A8_UNORM;
-		case DataFormat::R16F:       return VK_FORMAT_R16_SFLOAT;
-		case DataFormat::RG16F:      return VK_FORMAT_R16G16_SFLOAT;
-		case DataFormat::RGBA16F:    return VK_FORMAT_R16G16B16A16_SFLOAT;
-		case DataFormat::R32F:       return VK_FORMAT_R32_SFLOAT;
-		case DataFormat::RG32F:      return VK_FORMAT_R32G32_SFLOAT;
-		case DataFormat::RGBA32F:    return VK_FORMAT_R32G32B32A32_SFLOAT;
-		case DataFormat::RGB32F:     return VK_FORMAT_R32G32B32_SFLOAT; // Vertex only
-
-		// Unsupported formats
-		case DataFormat::RGB8:
-			RENDERX_ERROR("RGB8 not supported in Vulkan. Use RGBA8");
-			return VK_FORMAT_UNDEFINED;
-		case DataFormat::RGB16F:
-			RENDERX_ERROR("RGB16F not supported in Vulkan. Use RGBA16F");
-			return VK_FORMAT_UNDEFINED;
-
-		default:
-			RENDERX_ERROR("Unknown DataFormat: {}", static_cast<int>(format));
-			return VK_FORMAT_UNDEFINED;
-		}
-	}
-
-VkFormat ToVkTextureFormat(TextureFormat format)
-{
-    switch (format)
-    {
-        case TextureFormat::R8:               return VK_FORMAT_R8_UNORM;
-        case TextureFormat::R16F:             return VK_FORMAT_R16_SFLOAT;
-        case TextureFormat::R32F:             return VK_FORMAT_R32_SFLOAT;
-
-        case TextureFormat::RGBA8:            return VK_FORMAT_R8G8B8A8_UNORM;
-        case TextureFormat::RGBA8_SRGB:       return VK_FORMAT_R8G8B8A8_SRGB;
-        case TextureFormat::RGBA16F:          return VK_FORMAT_R16G16B16A16_SFLOAT;
-        case TextureFormat::RGBA32F:          return VK_FORMAT_R32G32B32A32_SFLOAT;
-
-        case TextureFormat::BGRA8:            return VK_FORMAT_B8G8R8A8_UNORM;
-        case TextureFormat::BGRA8_SRGB:       return VK_FORMAT_B8G8R8A8_SRGB;
-
-        case TextureFormat::Depth32F:         return VK_FORMAT_D32_SFLOAT;
-        case TextureFormat::Depth24Stencil8:  return VK_FORMAT_D24_UNORM_S8_UINT;
-
-        case TextureFormat::BC1:              return VK_FORMAT_BC1_RGBA_UNORM_BLOCK;
-        case TextureFormat::BC1_SRGB:         return VK_FORMAT_BC1_RGBA_SRGB_BLOCK;
-        case TextureFormat::BC3:              return VK_FORMAT_BC3_UNORM_BLOCK;
-        case TextureFormat::BC3_SRGB:         return VK_FORMAT_BC3_SRGB_BLOCK;
-
-        default:
-            RENDERX_ERROR("Unknown TextureFormat: {}", static_cast<int>(format));
-            return VK_FORMAT_UNDEFINED;
-    }
-}
 
 
-	VkShaderStageFlagBits ToVkShaderStage(ShaderType type) {
-		switch (type) {
-		case ShaderType::Vertex:         return VK_SHADER_STAGE_VERTEX_BIT;
-		case ShaderType::Fragment:       return VK_SHADER_STAGE_FRAGMENT_BIT;
-		case ShaderType::Compute:        return VK_SHADER_STAGE_COMPUTE_BIT;
-		case ShaderType::Geometry:       return VK_SHADER_STAGE_GEOMETRY_BIT;
-		case ShaderType::TessControl:    return VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
-		case ShaderType::TessEvaluation: return VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
-
-		default:
-			RENDERX_ERROR("Unknown ShaderType: {}", static_cast<int>(type));
-			return VK_SHADER_STAGE_VERTEX_BIT;
-		}
-	}
-
-	VkPrimitiveTopology ToVkPrimitiveTopology(PrimitiveType type) {
-		switch (type) {
-		case PrimitiveType::Points:        return VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
-		case PrimitiveType::Lines:         return VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
-		case PrimitiveType::LineStrip:     return VK_PRIMITIVE_TOPOLOGY_LINE_STRIP;
-		case PrimitiveType::Triangles:     return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-		case PrimitiveType::TriangleStrip: return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
-		case PrimitiveType::TriangleFan:   return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN;
-
-		default:
-			RENDERX_ERROR("Unknown PrimitiveType: {}", static_cast<int>(type));
-			return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-		}
-	}
-
-	VkCullModeFlags ToVkCullMode(CullMode mode) {
-		switch (mode) {
-		case CullMode::None:         return VK_CULL_MODE_NONE;
-		case CullMode::Front:        return VK_CULL_MODE_FRONT_BIT;
-		case CullMode::Back:         return VK_CULL_MODE_BACK_BIT;
-		case CullMode::FrontAndBack: return VK_CULL_MODE_FRONT_AND_BACK;
-
-		default:
-			RENDERX_ERROR("Unknown CullMode: {}", static_cast<int>(mode));
-			return VK_CULL_MODE_BACK_BIT;
-		}
-	}
-
-	VkCompareOp ToVkCompareOp(CompareFunc func) {
-		switch (func) {
-		case CompareFunc::Never:        return VK_COMPARE_OP_NEVER;
-		case CompareFunc::Less:         return VK_COMPARE_OP_LESS;
-		case CompareFunc::Equal:        return VK_COMPARE_OP_EQUAL;
-		case CompareFunc::LessEqual:    return VK_COMPARE_OP_LESS_OR_EQUAL;
-		case CompareFunc::Greater:      return VK_COMPARE_OP_GREATER;
-		case CompareFunc::NotEqual:     return VK_COMPARE_OP_NOT_EQUAL;
-		case CompareFunc::GreaterEqual: return VK_COMPARE_OP_GREATER_OR_EQUAL;
-		case CompareFunc::Always:       return VK_COMPARE_OP_ALWAYS;
-
-		default:
-			RENDERX_ERROR("Unknown CompareFunc: {}", static_cast<int>(func));
-			return VK_COMPARE_OP_ALWAYS;
-		}
-	}
-
-	VkPolygonMode ToVkPolygonMode(FillMode mode) {
-		switch (mode) {
-		case FillMode::Solid:     return VK_POLYGON_MODE_FILL;
-		case FillMode::Wireframe: return VK_POLYGON_MODE_LINE;
-		case FillMode::Point:     return VK_POLYGON_MODE_POINT;
-
-		default:
-			RENDERX_ERROR("Unknown FillMode: {}", static_cast<int>(mode));
-			return VK_POLYGON_MODE_FILL;
-		}
-	}
 
 } // namespace RenderXVK
 } // namespace RenderX

@@ -57,23 +57,25 @@ int main() {
 	colorAttach.format = RenderX::TextureFormat::BGRA8_SRGB;
 	colorAttach.finalState = RenderX::ResourceState::Present;
 	renderPassDesc.colorAttachments.push_back(colorAttach);
-    
+	// renderPassDesc.hasDepthStencil = true;
+
 	auto renderPass = RenderX::CreateRenderPass(renderPassDesc);
 
 	RenderX::PipelineDesc pipelineDesc{};
 	pipelineDesc.shaders = { vertexShader, fragmentShader };
 	pipelineDesc.vertexInputState = vertexInputState;
 	pipelineDesc.renderPass = renderPass;
-	// For now, disable back-face culling so both Vulkan and OpenGL show the quad
-	// regardless of winding differences.
 	pipelineDesc.rasterizer.cullMode = RenderX::CullMode::None;
 	pipelineDesc.rasterizer.frontCounterClockwise = true;
+	pipelineDesc.blend.enable = true;
+
+	pipelineDesc.depthStencil = RenderX::DepthStencilState();
 
 	auto pipeline = RenderX::CreateGraphicsPipeline(pipelineDesc);
 
 	std::vector<RenderX::ClearValue> clearValues;
 	RenderX::ClearValue clear{};
-	clear.color = RenderX::ClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	clear.color = RenderX::ClearColor(0.10f, 0.0f, 0.30f, 1.0f);
 	clearValues.push_back(clear);
 
 	while (!RenderX::ShouldClose()) {

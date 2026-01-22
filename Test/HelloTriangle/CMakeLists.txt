@@ -26,10 +26,3 @@ target_link_directories(HelloTriangle PRIVATE
 )
 
 target_link_libraries(HelloTriangle PRIVATE RenderX)
-
-# ──────────────────────────────────────────────
-#  Output directory for test app
-# ──────────────────────────────────────────────
-set_target_properties(HelloTriangle PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${CMAKE_BUILD_TYPE}"
-)

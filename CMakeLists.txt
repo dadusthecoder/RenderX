@@ -41,8 +41,9 @@ endforeach()
 # ────────────────────────────────────────────────────────────────
 add_subdirectory(External/glm)
 add_subdirectory(External/spdlog)
-add_subdirectory(External_local/glew-2.1.0/build/cmake)
 add_subdirectory(External/glfw)
+add_subdirectory(External_local/glew-2.1.0/build/cmake)
+add_subdirectory(External_local/ProLog)
 add_subdirectory(Test/HelloTriangle)
 
 # ────────────────────────────────────────────────────────────────

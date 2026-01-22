@@ -8,6 +8,8 @@
 #include <string>
 #include <vector>
 
+#include "Flags.h"
+
 
 #if defined(_MSC_VER)
 #define RENDERX_DEBUGBREAK() __debugbreak()
@@ -141,10 +143,12 @@ namespace RenderX {
 	};
 
 
-	enum class TextureType { Texture2D,
+	enum class TextureType {
+		Texture2D,
 		Texture3D,
 		TextureCube,
-		Texture2DArray };
+		Texture2DArray
+	};
 
 	enum class LoadOp {
 		Load,
@@ -426,21 +430,28 @@ namespace RenderX {
 
 	struct BlendState {
 		bool enable;
+
 		BlendFunc srcColor;
 		BlendFunc dstColor;
 		BlendFunc srcAlpha;
 		BlendFunc dstAlpha;
-		BlendOp alphaOp;
+
 		BlendOp colorOp;
+		BlendOp alphaOp;
+
 		Vec4 blendFactor;
 
 		BlendState()
-			: enable(false), srcColor(BlendFunc::SrcAlpha),
-			  dstColor(BlendFunc::OneMinusSrcAlpha), colorOp(BlendOp::Add),
-			  srcAlpha(BlendFunc::One), dstAlpha(BlendFunc::Zero),
-			  alphaOp(BlendOp::Add), blendFactor(1.0f) {
-		}
+			: enable(false),
+			  srcColor(BlendFunc::SrcAlpha),
+			  dstColor(BlendFunc::OneMinusSrcAlpha),
+			  srcAlpha(BlendFunc::One),
+			  dstAlpha(BlendFunc::Zero),
+			  colorOp(BlendOp::Add),
+			  alphaOp(BlendOp::Add),
+			  blendFactor(1.0f) {}
 	};
+
 
 	// Pipeline Type
 	enum class PipelineType {
@@ -448,9 +459,19 @@ namespace RenderX {
 		Compute
 	};
 
-	enum class PipelinStage {
-		Vertex,
-		Fragment
+	enum class PipelineStage : uint32_t {
+		None = 0,
+		Vertex = 1 << 0,
+		Fragment = 1 << 1,
+		Geometry = 1 << 2,
+		TessControl = 1 << 3,
+		TessEvaluation = 1 << 4,
+		Compute = 1 << 5,
+	};
+
+	template <>
+	struct EnableBitMaskOperators<PipelineStage> {
+		static constexpr bool enable = true;
 	};
 
 	enum class ResourceType {
@@ -458,7 +479,6 @@ namespace RenderX {
 		DynamicBUffer,
 		Texture_SRV,
 		Texture_UAV,
-
 	};
 
 	// Pipeline description
@@ -554,35 +574,6 @@ namespace RenderX {
 		}
 	};
 
-
-	// Resource binding
-	struct ResourceBinding {
-		// Binding index in the shader (set-specific if the backend supports sets).
-		uint32_t binding;
-		// Descriptor set index (Vulkan-style); unused on backends without sets.
-		uint32_t set;
-		enum Type {
-			UniformBuffer,
-			StorageBuffer,
-			Texture,
-			Sampler,
-			CombinedTextureSampler
-		} type;
-
-		union {
-			BufferHandle buffer;
-			TextureHandle texture;
-			SamplerHandle sampler;
-		};
-
-		uint32_t offset;
-		uint32_t range;
-
-		ResourceBinding()
-			: binding(0), set(0), type(UniformBuffer), buffer(INVALID_HANDLE),
-			  offset(0), range(0) {
-		}
-	};
 
 	// Statistics and debug info for a single frame.
 	struct RenderStats {

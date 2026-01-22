@@ -103,7 +103,7 @@ namespace RenderXVK {
 		if (!CheckVk(result, "Failed to allocate command buffer")) {
 			return CommandList{};
 		}
-		cmdList.id = frame.commandBuffers.size();
+		cmdList.id = static_cast<uint32_t>(frame.commandBuffers.size());
 		frame.commandBuffers.push_back(cmdBuffer);
 		return cmdList;
 	}
