@@ -5,59 +5,80 @@ namespace RenderX {
 namespace RenderXVK {
 
 	// ===================== INIT =====================
-	void VKInit() {
+	void VKInit(const Window& window) {
+		RENDERX_INFO("==== Vulkan Init Started ====");
+
 		VulkanContext& ctx = GetVulkanContext();
+		ctx.window = window.nativeHandle;
 
-		// GLFW WINDOW Temp setup
-		if (!glfwInit()) {
-			RENDERX_ERROR("Failed to initialize GLFW");
+
+		if (!InitInstance(window.extensionCount, window.instanceExtensions)) {
+			RENDERX_ERROR("VKInit failed: InitInstance");
 			return;
 		}
 
-		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API); // Vulkan only
-		glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
-
-		ctx.window = glfwCreateWindow(1280, 720, "RenderX", nullptr, nullptr);
-		if (!ctx.window) {
-			RENDERX_ERROR("Failed to create GLFW window");
+		CreateSurface(window);
+		// -------------------- Surface --------------------
+		if (!window.nativeHandle) {
+			RENDERX_ERROR("VKInit failed: nativeHandle is null");
 			return;
 		}
-
-		// VULKAN SETUP
-		if (!InitInstance(&ctx.instance)) return;
-
-		if (glfwCreateWindowSurface(
-				ctx.instance,
-				ctx.window,
-				nullptr,
-				&ctx.surface) != VK_SUCCESS)
-			return;
 
 		if (!PickPhysicalDevice(
 				ctx.instance,
 				ctx.surface,
 				&ctx.physicalDevice,
-				&ctx.graphicsQueueFamilyIndex))
+				&ctx.graphicsQueueFamilyIndex)) {
+			RENDERX_ERROR("VKInit failed: PickPhysicalDevice");
 			return;
+		}
+		RENDERX_INFO(
+			"Physical device selected (graphics queue family = {})",
+			ctx.graphicsQueueFamilyIndex);
 
 		if (!InitLogicalDevice(
 				ctx.physicalDevice,
 				ctx.graphicsQueueFamilyIndex,
 				&ctx.device,
-				&ctx.graphicsQueue))
+				&ctx.graphicsQueue)) {
+			RENDERX_ERROR("VKInit failed: InitLogicalDevice");
 			return;
+		}
 
-		if (!InitSwapchain(ctx, ctx.window))
+		if (!CreateSwapchain(ctx, window)) {
+			RENDERX_ERROR("VKInit failed: CreateSwapchain");
 			return;
+		}
 
 		InitFrameContex();
 
+		RENDERX_ASSERT_MSG(ctx.instance != VK_NULL_HANDLE, "Vulkan instance is invalid");
+		RENDERX_ASSERT_MSG(ctx.surface != VK_NULL_HANDLE, "Vulkan surface is invalid");
+
+		if (!ctx.window) {
+			RENDERX_WARN(
+				"ctx.window is null. "
+				"Backend still relies on GLFW window elsewhere.");
+		}
+
+		RENDERX_ASSERT_MSG(ctx.physicalDevice != VK_NULL_HANDLE, "Physical device is invalid");
+		RENDERX_ASSERT_MSG(ctx.device != VK_NULL_HANDLE, "Logical device is invalid");
+
+		RENDERX_INFO("==== Vulkan Init Completed Successfully ====");
 		return;
 	}
 
+	// ===================== SHOULD CLOSE =====================
 	bool VKShouldClose() {
 		VulkanContext& ctx = GetVulkanContext();
-		return glfwWindowShouldClose(ctx.window);
+
+		if (!ctx.window) {
+			RENDERX_ERROR(
+				"VKShouldClose called but ctx.window is null");
+			return true; // safest fallback
+		}
+
+		true;
 	}
 
 } // namespace RenderXVK

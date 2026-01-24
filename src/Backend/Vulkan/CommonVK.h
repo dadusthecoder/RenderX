@@ -89,7 +89,7 @@ namespace RenderXVK {
 	};
 
 	struct VulkanContext {
-		GLFWwindow* window = nullptr;
+		void* window = nullptr;
 		VkInstance instance = VK_NULL_HANDLE;
 		VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
 		VkDevice device = VK_NULL_HANDLE;
@@ -112,9 +112,9 @@ namespace RenderXVK {
 
 	// ===================== GLOBAL RESOURCE MAPS =====================
 
-	extern std::unordered_map<uint32_t, VulkanBuffer> s_Buffers;
-	extern std::unordered_map<uint32_t, VulkanShader> s_Shaders;
-	extern std::unordered_map<uint32_t, VkRenderPass> s_RenderPasses;
+	extern std::unordered_map<uint32_t, VulkanBuffer> g_Buffers;
+	extern std::unordered_map<uint32_t, VulkanShader> g_Shaders;
+	extern std::unordered_map<uint32_t, VkRenderPass> g_RenderPasses;
 
 	// ===================== CONTEXT ACCESS =====================
 
@@ -123,7 +123,7 @@ namespace RenderXVK {
 
 	// ===================== INITIALIZATION FUNCTIONS =====================
 
-	bool InitInstance(VkInstance* outInstance);
+	bool InitInstance(uint32_t extCount, const char** extentions);
 
 	bool PickPhysicalDevice(
 		VkInstance instance,
@@ -153,11 +153,12 @@ namespace RenderXVK {
 		const VkSurfaceCapabilitiesKHR& capabilities,
 		GLFWwindow* window);
 
-	bool InitSwapchain(VulkanContext& ctx, GLFWwindow* window);
+	bool CreateSwapchain(VulkanContext& ctx, Window window);
 
 	void CreateSwapchainFramebuffers(RenderPassHandle renderPass);
 
 	void InitFrameContex();
+	void CreateSurface(Window);
 
 	// ===================== VULKAN HELPERS =====================
 

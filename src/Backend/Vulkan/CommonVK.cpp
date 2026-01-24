@@ -1,4 +1,7 @@
 #include "CommonVK.h"
+#include "RenderXVK.h"
+#include "Windows.h"
+#include "vulkan/vulkan_win32.h"
 #include <algorithm>
 
 #ifndef NDEBUG
@@ -37,20 +40,55 @@ namespace RenderXVK {
 
 	// -------------------- helpers to query layers/extensions --------------------
 
+	const char* VkResultToString(VkResult result) {
+		switch (result) {
+		case VK_SUCCESS: return "VK_SUCCESS";
+		case VK_NOT_READY: return "VK_NOT_READY";
+		case VK_TIMEOUT: return "VK_TIMEOUT";
+		case VK_EVENT_SET: return "VK_EVENT_SET";
+		case VK_EVENT_RESET: return "VK_EVENT_RESET";
+		case VK_INCOMPLETE: return "VK_INCOMPLETE";
+		case VK_ERROR_OUT_OF_HOST_MEMORY: return "VK_ERROR_OUT_OF_HOST_MEMORY";
+		case VK_ERROR_OUT_OF_DEVICE_MEMORY: return "VK_ERROR_OUT_OF_DEVICE_MEMORY";
+		case VK_ERROR_INITIALIZATION_FAILED: return "VK_ERROR_INITIALIZATION_FAILED";
+		case VK_ERROR_DEVICE_LOST: return "VK_ERROR_DEVICE_LOST";
+		case VK_ERROR_MEMORY_MAP_FAILED: return "VK_ERROR_MEMORY_MAP_FAILED";
+		case VK_ERROR_LAYER_NOT_PRESENT: return "VK_ERROR_LAYER_NOT_PRESENT";
+		case VK_ERROR_EXTENSION_NOT_PRESENT: return "VK_ERROR_EXTENSION_NOT_PRESENT";
+		case VK_ERROR_FEATURE_NOT_PRESENT: return "VK_ERROR_FEATURE_NOT_PRESENT";
+		case VK_ERROR_INCOMPATIBLE_DRIVER: return "VK_ERROR_INCOMPATIBLE_DRIVER";
+		case VK_ERROR_TOO_MANY_OBJECTS: return "VK_ERROR_TOO_MANY_OBJECTS";
+		case VK_ERROR_FORMAT_NOT_SUPPORTED: return "VK_ERROR_FORMAT_NOT_SUPPORTED";
+		default: return "VK_UNKNOWN_ERROR";
+		}
+	}
+
 	std::vector<const char*> GetEnabledValidationLayers() {
 		if constexpr (!enableValidationLayers) {
+			RENDERX_INFO("Validation layers disabled (Release build)");
 			return {};
 		}
 
+		RENDERX_INFO("Querying available validation layers...");
 		uint32_t count = 0;
-		vkEnumerateInstanceLayerProperties(&count, nullptr);
+		VkResult result = vkEnumerateInstanceLayerProperties(&count, nullptr);
+		if (result != VK_SUCCESS) {
+			RENDERX_ERROR("Failed to enumerate instance layer properties: {}", VkResultToString(result));
+			return {};
+		}
+
 		if (count == 0) {
 			RENDERX_WARN("No validation layers available");
 			return {};
 		}
 
+		RENDERX_INFO("Found {} available validation layers", count);
 		std::vector<VkLayerProperties> props(count);
-		vkEnumerateInstanceLayerProperties(&count, props.data());
+		result = vkEnumerateInstanceLayerProperties(&count, props.data());
+		if (result != VK_SUCCESS) {
+			RENDERX_ERROR("Failed to get instance layer properties: {}", VkResultToString(result));
+			return {};
+		}
 
 		std::vector<const char*> enabledLayers;
 		enabledLayers.reserve(g_RequestedValidationLayers.size());
@@ -63,6 +101,7 @@ namespace RenderXVK {
 
 			if (it != props.end()) {
 				enabledLayers.push_back(requested);
+				RENDERX_INFO("Enabled validation layer: {}", requested);
 			}
 			else {
 				RENDERX_WARN("Validation layer not available: {}", requested);
@@ -73,15 +112,31 @@ namespace RenderXVK {
 	}
 
 	std::vector<const char*> GetEnabledExtensionsVk(VkPhysicalDevice device) {
+		if (device == VK_NULL_HANDLE) {
+			RENDERX_ERROR("Invalid physical device (VK_NULL_HANDLE)");
+			return {};
+		}
+
+		RENDERX_INFO("Querying device extensions...");
 		uint32_t count = 0;
-		vkEnumerateDeviceExtensionProperties(device, nullptr, &count, nullptr);
+		VkResult result = vkEnumerateDeviceExtensionProperties(device, nullptr, &count, nullptr);
+		if (result != VK_SUCCESS) {
+			RENDERX_ERROR("Failed to enumerate device extension properties: {}", VkResultToString(result));
+			return {};
+		}
+
 		if (count == 0) {
 			RENDERX_ERROR("No device extensions available");
 			return {};
 		}
 
+		RENDERX_INFO("Found {} available device extensions", count);
 		std::vector<VkExtensionProperties> props(count);
-		vkEnumerateDeviceExtensionProperties(device, nullptr, &count, props.data());
+		result = vkEnumerateDeviceExtensionProperties(device, nullptr, &count, props.data());
+		if (result != VK_SUCCESS) {
+			RENDERX_ERROR("Failed to get device extension properties: {}", VkResultToString(result));
+			return {};
+		}
 
 		std::vector<const char*> enabledExtensions;
 		enabledExtensions.reserve(g_RequestedDeviceExtensions.size());
@@ -94,6 +149,7 @@ namespace RenderXVK {
 
 			if (it != props.end()) {
 				enabledExtensions.push_back(requested);
+				RENDERX_INFO("Enabled device extension: {}", requested);
 			}
 			else {
 				RENDERX_ERROR("Required device extension not available: {}", requested);
@@ -105,11 +161,12 @@ namespace RenderXVK {
 
 	// ===================== INSTANCE =====================
 
-	bool InitInstance(VkInstance* outInstance) {
+	bool InitInstance(uint32_t extCount, const char** extentions) {
 		PROFILE_FUNCTION();
+		RENDERX_INFO("Initializing Vulkan instance...");
 
-		if (!outInstance) {
-			RENDERX_ERROR("Null output instance pointer");
+		if (extCount > 0 && !extentions) {
+			RENDERX_ERROR("Extension count is {}, but extensions pointer is null", extCount);
 			return false;
 		}
 
@@ -123,24 +180,39 @@ namespace RenderXVK {
 		appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
 		appInfo.apiVersion = VK_API_VERSION_1_1;
 
-		uint32_t glfwExtensionCount = 0;
-		const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
-		if (!glfwExtensions) {
-			RENDERX_ERROR("Failed to get required GLFW extensions");
-			return false;
+		std::vector<const char*> instanceExtensions(extentions, extentions + extCount);
+
+		// REQUIRED when validation layers are enabled
+		if constexpr (enableValidationLayers) {
+			instanceExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+		}
+
+		RENDERX_INFO("Requesting {} instance extensions:", instanceExtensions.size());
+		for (auto ext : instanceExtensions) {
+			if (ext) {
+				RENDERX_INFO("  - {}", ext);
+			}
+			else {
+				RENDERX_WARN("  - NULL extension pointer detected");
+			}
 		}
 
 		VkInstanceCreateInfo createInfo{};
 		createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 		createInfo.pApplicationInfo = &appInfo;
-		createInfo.enabledExtensionCount = glfwExtensionCount;
-		createInfo.ppEnabledExtensionNames = glfwExtensions;
+		createInfo.enabledExtensionCount = static_cast<uint32_t>(instanceExtensions.size());
+		createInfo.ppEnabledExtensionNames = instanceExtensions.data();
 		createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
 		createInfo.ppEnabledLayerNames = validationLayers.empty() ? nullptr : validationLayers.data();
 
-		const VkResult result = vkCreateInstance(&createInfo, nullptr, outInstance);
+		const VkResult result = vkCreateInstance(&createInfo, nullptr, &GetVulkanContext().instance);
 		if (result != VK_SUCCESS) {
-			RENDERX_ERROR("Failed to create Vulkan instance: {}", static_cast<int>(result));
+			RENDERX_ERROR("Failed to create Vulkan instance: {}", VkResultToString(result));
+			return false;
+		}
+
+		if (GetVulkanContext().instance == VK_NULL_HANDLE) {
+			RENDERX_ERROR("Vulkan instance creation succeeded but returned VK_NULL_HANDLE");
 			return false;
 		}
 
@@ -160,23 +232,47 @@ namespace RenderXVK {
 	};
 
 	QueueFamilyIndices FindQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surface) {
+		RENDERX_INFO("Finding queue families...");
 		QueueFamilyIndices indices;
+
+		if (device == VK_NULL_HANDLE) {
+			RENDERX_ERROR("Invalid physical device (VK_NULL_HANDLE)");
+			return indices;
+		}
+
+		if (surface == VK_NULL_HANDLE) {
+			RENDERX_ERROR("Invalid surface (VK_NULL_HANDLE)");
+			return indices;
+		}
 
 		uint32_t queueFamilyCount = 0;
 		vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
 
+		if (queueFamilyCount == 0) {
+			RENDERX_ERROR("No queue families found");
+			return indices;
+		}
+
+		RENDERX_INFO("Found {} queue families", queueFamilyCount);
 		std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
 		vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.data());
 
 		for (uint32_t i = 0; i < queueFamilyCount; ++i) {
 			if (queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
 				indices.graphicsFamily = i;
+				RENDERX_INFO("Graphics queue family found at index {}", i);
 			}
 
 			VkBool32 presentSupport = VK_FALSE;
-			vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &presentSupport);
+			VkResult result = vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &presentSupport);
+			if (result != VK_SUCCESS) {
+				RENDERX_WARN("Failed to query surface support for queue family {}: {}", i, VkResultToString(result));
+				continue;
+			}
+
 			if (presentSupport) {
 				indices.presentFamily = i;
+				RENDERX_INFO("Present queue family found at index {}", i);
 			}
 
 			if (indices.isComplete()) {
@@ -184,49 +280,94 @@ namespace RenderXVK {
 			}
 		}
 
+		if (!indices.isComplete()) {
+			RENDERX_WARN("Could not find complete queue families (graphics: {}, present: {})",
+				indices.graphicsFamily.has_value() ? "found" : "missing",
+				indices.presentFamily.has_value() ? "found" : "missing");
+		}
+
 		return indices;
 	}
 
 	bool IsDeviceSuitable(VkPhysicalDevice device, VkSurfaceKHR surface) {
+		if (device == VK_NULL_HANDLE) {
+			RENDERX_ERROR("Cannot check suitability: invalid device");
+			return false;
+		}
+
+		if (surface == VK_NULL_HANDLE) {
+			RENDERX_ERROR("Cannot check suitability: invalid surface");
+			return false;
+		}
+
 		const auto indices = FindQueueFamilies(device, surface);
 		if (!indices.isComplete()) {
+			RENDERX_INFO("Device rejected: incomplete queue families");
 			return false;
 		}
 
 		// Check for required extensions
 		const auto extensions = GetEnabledExtensionsVk(device);
 		if (extensions.size() != g_RequestedDeviceExtensions.size()) {
+			RENDERX_INFO("Device rejected: missing required extensions ({}/{})",
+				extensions.size(), g_RequestedDeviceExtensions.size());
 			return false;
 		}
 
 		// Verify swapchain support
 		const auto swapchainSupport = QuerySwapchainSupport(device, surface);
-		if (swapchainSupport.formats.empty() || swapchainSupport.presentModes.empty()) {
+		if (swapchainSupport.formats.empty()) {
+			RENDERX_INFO("Device rejected: no surface formats available");
+			return false;
+		}
+		if (swapchainSupport.presentModes.empty()) {
+			RENDERX_INFO("Device rejected: no present modes available");
 			return false;
 		}
 
+		RENDERX_INFO("Device is suitable");
 		return true;
 	}
 
 	bool PickPhysicalDevice(VkInstance instance, VkSurfaceKHR surface,
 		VkPhysicalDevice* outPhysicalDevice, uint32_t* outGraphicsQueueFamily) {
 		PROFILE_FUNCTION();
+		RENDERX_INFO("Selecting physical device...");
 
 		if (!outPhysicalDevice || !outGraphicsQueueFamily) {
 			RENDERX_ERROR("Null output pointers");
 			return false;
 		}
 
+		if (instance == VK_NULL_HANDLE) {
+			RENDERX_ERROR("Invalid Vulkan instance");
+			return false;
+		}
+
+		if (surface == VK_NULL_HANDLE) {
+			RENDERX_ERROR("Invalid surface");
+			return false;
+		}
+
 		uint32_t deviceCount = 0;
-		vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
+		VkResult result = vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
+		if (result != VK_SUCCESS) {
+			RENDERX_ERROR("Failed to enumerate physical devices: {}", VkResultToString(result));
+			return false;
+		}
 
 		if (deviceCount == 0) {
 			RENDERX_ERROR("No Vulkan-capable devices found");
 			return false;
 		}
 
+		RENDERX_INFO("Found {} Vulkan-capable device(s)", deviceCount);
 		std::vector<VkPhysicalDevice> devices(deviceCount);
-		vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
+		result = vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
+		if (result != VK_SUCCESS) {
+			RENDERX_ERROR("Failed to get physical devices: {}", VkResultToString(result));
+			return false;
+		}
 
 		// Prefer discrete GPU
 		VkPhysicalDevice discreteGPU = VK_NULL_HANDLE;
@@ -239,7 +380,6 @@ namespace RenderXVK {
 
 			VkPhysicalDeviceProperties props;
 			vkGetPhysicalDeviceProperties(device, &props);
-
 			RENDERX_INFO("Found suitable device: {}", props.deviceName);
 
 			if (props.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
@@ -260,9 +400,25 @@ namespace RenderXVK {
 
 		VkPhysicalDeviceProperties props;
 		vkGetPhysicalDeviceProperties(selectedDevice, &props);
-		RENDERX_INFO("Selected device: {}", props.deviceName);
+		RENDERX_INFO("Selected device: {} ", props.deviceName);
+
+		VkPhysicalDeviceMemoryProperties memProps;
+		vkGetPhysicalDeviceMemoryProperties(selectedDevice, &memProps);
+
+		uint64_t totalMemory = 0;
+		for (uint32_t i = 0; i < memProps.memoryHeapCount; i++) {
+			if (memProps.memoryHeaps[i].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) {
+				totalMemory += memProps.memoryHeaps[i].size;
+			}
+		}
+		RENDERX_INFO("Device local memory: {} MB", totalMemory / (1024 * 1024));
 
 		const auto indices = FindQueueFamilies(selectedDevice, surface);
+		if (!indices.graphicsFamily.has_value()) {
+			RENDERX_ERROR("Selected device has no graphics queue family");
+			return false;
+		}
+
 		*outPhysicalDevice = selectedDevice;
 		*outGraphicsQueueFamily = indices.graphicsFamily.value();
 
@@ -274,18 +430,27 @@ namespace RenderXVK {
 	bool InitLogicalDevice(VkPhysicalDevice physicalDevice, uint32_t graphicsQueueFamily,
 		VkDevice* outDevice, VkQueue* outGraphicsQueue) {
 		PROFILE_FUNCTION();
+		RENDERX_INFO("Creating logical device...");
 
 		if (!outDevice || !outGraphicsQueue) {
 			RENDERX_ERROR("Null output pointers");
 			return false;
 		}
 
+		if (physicalDevice == VK_NULL_HANDLE) {
+			RENDERX_ERROR("Invalid physical device");
+			return false;
+		}
+
 		constexpr float queuePriority = 1.0f;
+
 		VkDeviceQueueCreateInfo queueCreateInfo{};
 		queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
 		queueCreateInfo.queueFamilyIndex = graphicsQueueFamily;
 		queueCreateInfo.queueCount = 1;
 		queueCreateInfo.pQueuePriorities = &queuePriority;
+
+		RENDERX_INFO("Using queue family index: {}", graphicsQueueFamily);
 
 		const auto deviceExtensions = GetEnabledExtensionsVk(physicalDevice);
 		if (deviceExtensions.empty()) {
@@ -306,35 +471,131 @@ namespace RenderXVK {
 
 		const VkResult result = vkCreateDevice(physicalDevice, &createInfo, nullptr, outDevice);
 		if (result != VK_SUCCESS) {
-			RENDERX_ERROR("Failed to create logical device: {}", static_cast<int>(result));
+			RENDERX_ERROR("Failed to create logical device: {}", VkResultToString(result));
+			return false;
+		}
+
+		if (*outDevice == VK_NULL_HANDLE) {
+			RENDERX_ERROR("Logical device creation succeeded but returned VK_NULL_HANDLE");
 			return false;
 		}
 
 		vkGetDeviceQueue(*outDevice, graphicsQueueFamily, 0, outGraphicsQueue);
+
+		if (*outGraphicsQueue == VK_NULL_HANDLE) {
+			RENDERX_ERROR("Failed to retrieve graphics queue");
+			vkDestroyDevice(*outDevice, nullptr);
+			*outDevice = VK_NULL_HANDLE;
+			return false;
+		}
+
 		RENDERX_INFO("Logical device created successfully");
 		return true;
+	}
+
+	void CreateSurface(Window window) {
+		RENDERX_INFO("Creating window surface...");
+
+		if (!window.nativeHandle) {
+			RENDERX_ERROR("Null window pointer");
+			return;
+		}
+
+#if 1
+		VkWin32SurfaceCreateInfoKHR ci{};
+		ci.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
+		ci.hwnd = static_cast<HWND>(window.nativeHandle);
+		ci.hinstance = static_cast<HINSTANCE>(window.displayHandle);
+		auto& ctx = GetVulkanContext();
+		if (!ci.hwnd) {
+			RENDERX_ERROR("Invalid HWND");
+			return;
+		}
+
+		if (!ci.hinstance) {
+			RENDERX_ERROR("Failed to get module handle");
+			return;
+		}
+
+		VkResult result = vkCreateWin32SurfaceKHR(ctx.instance, &ci, nullptr, &ctx.surface);
+
+		if (result != VK_SUCCESS) {
+			RENDERX_ERROR("Failed to create Win32 surface: {}", VkResultToString(result));
+			return;
+		}
+
+		if (ctx.surface == VK_NULL_HANDLE) {
+			RENDERX_ERROR("Surface creation succeeded but returned VK_NULL_HANDLE");
+			return;
+		}
+
+		RENDERX_INFO("Win32 surface created successfully");
+#else
+		auto& ctx = GetVulkanContext();
+		auto result = glfwCreateWindowSurface(ctx.instance, static_cast<GLFWwindow*>(window), nullptr, &ctx.surface);
+		if (result != VK_SUCCESS) {
+			RENDERX_ERROR("Failed to create Win32 surface: {}", VkResultToString(result));
+			return;
+		}
+		RENDERX_ERROR("Platform not supported for surface creation");
+#endif
 	}
 
 	// ===================== SWAPCHAIN =====================
 
 	SwapchainSupportDetails QuerySwapchainSupport(VkPhysicalDevice device, VkSurfaceKHR surface) {
 		PROFILE_FUNCTION();
-
 		SwapchainSupportDetails details{};
-		vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &details.capabilities);
+
+		std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+		if (device == VK_NULL_HANDLE) {
+			RENDERX_ERROR("Invalid physical device");
+			return details;
+		}
+
+		if (surface == VK_NULL_HANDLE) {
+			RENDERX_ERROR("Invalid surface");
+			return details;
+		}
+
+		VkResult result = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &details.capabilities);
+		if (result != VK_SUCCESS) {
+			RENDERX_ERROR("Failed to get surface capabilities: {}", VkResultToString(result));
+			return details;
+		}
 
 		uint32_t formatCount = 0;
-		vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, nullptr);
+		result = vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, nullptr);
+		if (result != VK_SUCCESS) {
+			RENDERX_ERROR("Failed to query surface formats: {}", VkResultToString(result));
+			return details;
+		}
+
 		if (formatCount != 0) {
 			details.formats.resize(formatCount);
-			vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, details.formats.data());
+			result = vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, details.formats.data());
+			if (result != VK_SUCCESS) {
+				RENDERX_ERROR("Failed to get surface formats: {}", VkResultToString(result));
+				details.formats.clear();
+			}
 		}
 
 		uint32_t presentModeCount = 0;
-		vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, nullptr);
+		result = vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, nullptr);
+		if (result != VK_SUCCESS) {
+			RENDERX_ERROR("Failed to query present modes: {}", VkResultToString(result));
+			return details;
+		}
+
 		if (presentModeCount != 0) {
 			details.presentModes.resize(presentModeCount);
-			vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, details.presentModes.data());
+			result = vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount,
+				details.presentModes.data());
+			if (result != VK_SUCCESS) {
+				RENDERX_ERROR("Failed to get present modes: {}", VkResultToString(result));
+				details.presentModes.clear();
+			}
 		}
 
 		return details;
@@ -343,10 +604,16 @@ namespace RenderXVK {
 	VkSurfaceFormatKHR ChooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& formats) {
 		PROFILE_FUNCTION();
 
+		if (formats.empty()) {
+			RENDERX_ERROR("No surface formats available");
+			return {};
+		}
+
 		// Prefer SRGB if available for better color accuracy
 		for (const auto& format : formats) {
 			if (format.format == VK_FORMAT_B8G8R8A8_SRGB &&
 				format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+				RENDERX_INFO("Selected surface format: B8G8R8A8_SRGB");
 				return format;
 			}
 		}
@@ -354,40 +621,51 @@ namespace RenderXVK {
 		// Fallback to UNORM
 		for (const auto& format : formats) {
 			if (format.format == VK_FORMAT_B8G8R8A8_UNORM) {
+				RENDERX_INFO("Selected surface format: B8G8R8A8_UNORM");
 				return format;
 			}
 		}
 
+		RENDERX_WARN("Using first available format as fallback");
 		return formats[0];
 	}
 
 	VkPresentModeKHR ChoosePresentMode(const std::vector<VkPresentModeKHR>& modes) {
 		PROFILE_FUNCTION();
 
+		if (modes.empty()) {
+			RENDERX_ERROR("No present modes available, defaulting to FIFO");
+			return VK_PRESENT_MODE_FIFO_KHR;
+		}
+
 		// Prefer mailbox for low latency triple buffering
 		for (const auto mode : modes) {
 			if (mode == VK_PRESENT_MODE_MAILBOX_KHR) {
+				RENDERX_INFO("Selected present mode: MAILBOX");
 				return mode;
 			}
 		}
-		return VK_PRESENT_MODE_FIFO_KHR;
 
-		// FIFO is guaranteed to be available
+		RENDERX_INFO("Selected present mode: FIFO (guaranteed)");
+		return VK_PRESENT_MODE_FIFO_KHR; // FIFO is guaranteed to be available
 	}
 
-	VkExtent2D ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& caps, GLFWwindow* window) {
+	VkExtent2D ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& caps, Window window) {
 		PROFILE_FUNCTION();
 
 		if (caps.currentExtent.width != UINT32_MAX) {
+			RENDERX_INFO("Using current extent: {}x{}", caps.currentExtent.width, caps.currentExtent.height);
 			return caps.currentExtent;
 		}
 
-		int width, height;
-		glfwGetFramebufferSize(window, &width, &height);
+		if (window.width == 0 || window.height == 0) {
+			RENDERX_WARN("Invalid window dimensions: {}x{}, using minimum extent", window.width, window.height);
+			return caps.minImageExtent;
+		}
 
 		VkExtent2D actualExtent = {
-			static_cast<uint32_t>(width),
-			static_cast<uint32_t>(height)
+			window.width,
+			window.height
 		};
 
 		actualExtent.width = std::clamp(actualExtent.width,
@@ -395,20 +673,40 @@ namespace RenderXVK {
 		actualExtent.height = std::clamp(actualExtent.height,
 			caps.minImageExtent.height, caps.maxImageExtent.height);
 
+		RENDERX_INFO("Chosen swap extent: {}x{} (clamped from {}x{})",
+			actualExtent.width, actualExtent.height, window.width, window.height);
+
 		return actualExtent;
 	}
 
-	bool InitSwapchain(VulkanContext& ctx, GLFWwindow* window) {
+	bool CreateSwapchain(VulkanContext& ctx, Window window) {
 		PROFILE_FUNCTION();
+		RENDERX_INFO("Creating swapchain...");
 
-		if (!window) {
+		if (!window.nativeHandle) {
 			RENDERX_ERROR("Null window pointer");
+			return false;
+		}
+
+		if (ctx.device == VK_NULL_HANDLE) {
+			RENDERX_ERROR("Invalid device");
+			return false;
+		}
+
+		if (ctx.surface == VK_NULL_HANDLE) {
+			RENDERX_ERROR("Invalid surface");
+			return false;
+		}
+
+		if (ctx.physicalDevice == VK_NULL_HANDLE) {
+			RENDERX_ERROR("Invalid physical device");
 			return false;
 		}
 
 		const auto support = QuerySwapchainSupport(ctx.physicalDevice, ctx.surface);
 		if (support.formats.empty() || support.presentModes.empty()) {
-			RENDERX_ERROR("Insufficient swapchain support");
+			RENDERX_ERROR("Insufficient swapchain support (formats: {}, modes: {})",
+				support.formats.size(), support.presentModes.size());
 			return false;
 		}
 
@@ -420,7 +718,11 @@ namespace RenderXVK {
 		uint32_t imageCount = support.capabilities.minImageCount + 1;
 		if (support.capabilities.maxImageCount > 0 && imageCount > support.capabilities.maxImageCount) {
 			imageCount = support.capabilities.maxImageCount;
+			RENDERX_INFO("Clamped image count to max: {}", imageCount);
 		}
+
+		RENDERX_INFO("Requesting {} swapchain images (min: {}, max: {})",
+			imageCount, support.capabilities.minImageCount, support.capabilities.maxImageCount);
 
 		VkSwapchainCreateInfoKHR createInfo{};
 		createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
@@ -440,8 +742,13 @@ namespace RenderXVK {
 
 		const VkResult result = vkCreateSwapchainKHR(ctx.device, &createInfo, nullptr, &ctx.swapchain);
 		if (result != VK_SUCCESS) {
-			RENDERX_ERROR("Failed to create swapchain: {}", static_cast<int>(result));
-			return false;
+			RENDERX_ERROR("Failed to create swapchain: {}", VkResultToString(result));
+			RENDERX_ASSERT(false);
+		}
+
+		if (ctx.swapchain == VK_NULL_HANDLE) {
+			RENDERX_ERROR("Swapchain creation succeeded but returned VK_NULL_HANDLE");
+			RENDERX_ASSERT(false);
 		}
 
 		ctx.swapchainImageFormat = surfaceFormat.format;
@@ -449,16 +756,36 @@ namespace RenderXVK {
 
 		// Retrieve swapchain images
 		uint32_t swapchainImageCount = 0;
-		vkGetSwapchainImagesKHR(ctx.device, ctx.swapchain, &swapchainImageCount, nullptr);
+		VkResult imgResult = vkGetSwapchainImagesKHR(ctx.device, ctx.swapchain, &swapchainImageCount, nullptr);
+		if (imgResult != VK_SUCCESS) {
+			RENDERX_ERROR("Failed to query swapchain image count: {}", static_cast<int>(imgResult));
+			return false;
+		}
+
+		if (swapchainImageCount == 0) {
+			RENDERX_ERROR("Swapchain has no images");
+			return false;
+		}
+
 		ctx.swapchainImages.resize(swapchainImageCount);
-		vkGetSwapchainImagesKHR(ctx.device, ctx.swapchain, &swapchainImageCount, ctx.swapchainImages.data());
+		imgResult = vkGetSwapchainImagesKHR(ctx.device, ctx.swapchain, &swapchainImageCount,
+			ctx.swapchainImages.data());
+		if (imgResult != VK_SUCCESS) {
+			RENDERX_ERROR("Failed to retrieve swapchain images: {}", static_cast<int>(imgResult));
+			return false;
+		}
 
 		// Create image views
 		ctx.swapchainImageviews.reserve(ctx.swapchainImages.size());
-		for (const auto& image : ctx.swapchainImages) {
+		for (size_t i = 0; i < ctx.swapchainImages.size(); ++i) {
+			if (ctx.swapchainImages[i] == VK_NULL_HANDLE) {
+				RENDERX_ERROR("Swapchain image {} is VK_NULL_HANDLE", i);
+				return false;
+			}
+
 			VkImageViewCreateInfo viewInfo{};
 			viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-			viewInfo.image = image;
+			viewInfo.image = ctx.swapchainImages[i];
 			viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
 			viewInfo.format = ctx.swapchainImageFormat;
 			viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -468,7 +795,17 @@ namespace RenderXVK {
 			viewInfo.subresourceRange.layerCount = 1;
 
 			VkImageView imageView;
-			VK_CHECK(vkCreateImageView(ctx.device, &viewInfo, nullptr, &imageView));
+			VkResult viewResult = vkCreateImageView(ctx.device, &viewInfo, nullptr, &imageView);
+			if (viewResult != VK_SUCCESS) {
+				RENDERX_ERROR("Failed to create image view {}: {}", i, static_cast<int>(viewResult));
+				return false;
+			}
+
+			if (imageView == VK_NULL_HANDLE) {
+				RENDERX_ERROR("Image view {} creation succeeded but returned VK_NULL_HANDLE", i);
+				return false;
+			}
+
 			ctx.swapchainImageviews.push_back(imageView);
 		}
 
@@ -477,18 +814,44 @@ namespace RenderXVK {
 	}
 
 	void CreateSwapchainFramebuffers(RenderPassHandle renderPass) {
+		RENDERX_INFO("Creating swapchain framebuffers...");
 		VulkanContext& ctx = GetVulkanContext();
 
-		auto it = s_RenderPasses.find(renderPass.id);
-		if (it == s_RenderPasses.end()) {
-			RENDERX_ERROR("Invalid render pass handle");
+		if (ctx.device == VK_NULL_HANDLE) {
+			RENDERX_ERROR("Invalid device");
 			return;
 		}
+
+		auto it = g_RenderPasses.find(renderPass.id);
+		if (it == g_RenderPasses.end()) {
+			RENDERX_ERROR("Invalid render pass handle: {}", renderPass.id);
+			return;
+		}
+
 		const VkRenderPass vkPass = it->second;
+		if (vkPass == VK_NULL_HANDLE) {
+			RENDERX_ERROR("Render pass is VK_NULL_HANDLE");
+			return;
+		}
+
+		if (ctx.swapchainImageviews.empty()) {
+			RENDERX_ERROR("No swapchain image views available");
+			return;
+		}
+
+		if (ctx.swapchainExtent.width == 0 || ctx.swapchainExtent.height == 0) {
+			RENDERX_ERROR("Invalid swapchain extent: {}x{}", ctx.swapchainExtent.width, ctx.swapchainExtent.height);
+			return;
+		}
 
 		ctx.swapchainFramebuffers.resize(ctx.swapchainImageviews.size());
 
 		for (size_t i = 0; i < ctx.swapchainImageviews.size(); i++) {
+			if (ctx.swapchainImageviews[i] == VK_NULL_HANDLE) {
+				RENDERX_ERROR("Image view {} is VK_NULL_HANDLE", i);
+				return;
+			}
+
 			const VkImageView attachments[] = { ctx.swapchainImageviews[i] };
 
 			VkFramebufferCreateInfo framebufferInfo{};
@@ -500,15 +863,35 @@ namespace RenderXVK {
 			framebufferInfo.height = ctx.swapchainExtent.height;
 			framebufferInfo.layers = 1;
 
+			VkResult result = vkCreateFramebuffer(ctx.device, &framebufferInfo, nullptr, &ctx.swapchainFramebuffers[i]);
+			if (result != VK_SUCCESS) {
+				RENDERX_ERROR("Failed to create framebuffer {}: {}", i, VkResultToString(result));
+				return;
+			}
 
-
-			VK_CHECK(vkCreateFramebuffer(ctx.device, &framebufferInfo, nullptr,
-				&ctx.swapchainFramebuffers[i]));
+			if (ctx.swapchainFramebuffers[i] == VK_NULL_HANDLE) {
+				RENDERX_ERROR("Framebuffer {} creation succeeded but returned VK_NULL_HANDLE", i);
+				return;
+			}
 		}
+
+		RENDERX_INFO("Created {} framebuffers ({}x{})", ctx.swapchainFramebuffers.size(),
+			ctx.swapchainExtent.width, ctx.swapchainExtent.height);
 	}
 
 	void InitFrameContex() {
+		RENDERX_INFO("Initializing frame contexts...");
 		auto& ctx = GetVulkanContext();
+
+		if (ctx.device == VK_NULL_HANDLE) {
+			RENDERX_ERROR("Invalid device");
+			return;
+		}
+
+		if (ctx.swapchainImageviews.empty()) {
+			RENDERX_ERROR("No swapchain image views available");
+			return;
+		}
 
 		VkFenceCreateInfo fenceInfo{};
 		fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
@@ -522,31 +905,84 @@ namespace RenderXVK {
 		poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
 		poolInfo.queueFamilyIndex = ctx.graphicsQueueFamilyIndex;
 
+		RENDERX_INFO("Creating synchronization objects for {} swapchain images", ctx.swapchainImageviews.size());
 		ctx.swapchainImageSync.resize(ctx.swapchainImageviews.size());
 
-		for (auto& iSync : ctx.swapchainImageSync) {
-			VK_CHECK(vkCreateSemaphore(ctx.device, &semaphoreInfo, nullptr, &iSync.imageAvailableSemaphore));
-			VK_CHECK(vkCreateSemaphore(ctx.device, &semaphoreInfo, nullptr, &iSync.renderFinishedSemaphore));
-		}
-		for (auto& frame : g_Frames) {
-			VK_CHECK(vkCreateFence(ctx.device, &fenceInfo, nullptr, &frame.fence));
-			VK_CHECK(vkCreateSemaphore(ctx.device, &semaphoreInfo, nullptr, &frame.presentSemaphore));
-			VK_CHECK(vkCreateSemaphore(ctx.device, &semaphoreInfo, nullptr, &frame.renderSemaphore));
-			VK_CHECK(vkCreateCommandPool(ctx.device, &poolInfo, nullptr, &frame.commandPool));
+		for (size_t i = 0; i < ctx.swapchainImageSync.size(); ++i) {
+			auto& iSync = ctx.swapchainImageSync[i];
+
+			VkResult result = vkCreateSemaphore(ctx.device, &semaphoreInfo, nullptr, &iSync.imageAvailableSemaphore);
+			if (result != VK_SUCCESS) {
+				RENDERX_ERROR("Failed to create imageAvailableSemaphore for image {}: {}", i, VkResultToString(result));
+				return;
+			}
+
+			result = vkCreateSemaphore(ctx.device, &semaphoreInfo, nullptr, &iSync.renderFinishedSemaphore);
+			if (result != VK_SUCCESS) {
+				RENDERX_ERROR("Failed to create renderFinishedSemaphore for image {}: {}", i, VkResultToString(result));
+				return;
+			}
+
+			if (iSync.imageAvailableSemaphore == VK_NULL_HANDLE || iSync.renderFinishedSemaphore == VK_NULL_HANDLE) {
+				RENDERX_ERROR("Semaphore creation for image {} returned VK_NULL_HANDLE", i);
+				return;
+			}
 		}
 
-		RENDERX_INFO("Frame contexts initialized: {} frames", MAX_FRAMES_IN_FLIGHT);
+		RENDERX_INFO("Creating frame resources for {} frames in flight", MAX_FRAMES_IN_FLIGHT);
+		for (size_t i = 0; i < g_Frames.size(); ++i) {
+			auto& frame = g_Frames[i];
+
+			VkResult result = vkCreateFence(ctx.device, &fenceInfo, nullptr, &frame.fence);
+			if (result != VK_SUCCESS) {
+				RENDERX_ERROR("Failed to create fence for frame {}: {}", i, VkResultToString(result));
+				return;
+			}
+
+			result = vkCreateSemaphore(ctx.device, &semaphoreInfo, nullptr, &frame.presentSemaphore);
+			if (result != VK_SUCCESS) {
+				RENDERX_ERROR("Failed to create presentSemaphore for frame {}: {}", i, VkResultToString(result));
+				return;
+			}
+
+			result = vkCreateSemaphore(ctx.device, &semaphoreInfo, nullptr, &frame.renderSemaphore);
+			if (result != VK_SUCCESS) {
+				RENDERX_ERROR("Failed to create renderSemaphore for frame {}: {}", i, VkResultToString(result));
+				return;
+			}
+
+			result = vkCreateCommandPool(ctx.device, &poolInfo, nullptr, &frame.commandPool);
+			if (result != VK_SUCCESS) {
+				RENDERX_ERROR("Failed to create command pool for frame {}: {}", i, VkResultToString(result));
+				return;
+			}
+
+			if (frame.fence == VK_NULL_HANDLE || frame.presentSemaphore == VK_NULL_HANDLE ||
+				frame.renderSemaphore == VK_NULL_HANDLE || frame.commandPool == VK_NULL_HANDLE) {
+				RENDERX_ERROR("Frame {} resource creation returned VK_NULL_HANDLE", i);
+				return;
+			}
+		}
+
+		RENDERX_INFO("Frame contexts initialized successfully: {} frames", MAX_FRAMES_IN_FLIGHT);
 	}
 
 	// ===================== VULKAN HELPERS =====================
 
 	VkRenderPass GetVulkanRenderPass(RenderPassHandle handle) {
-		const auto it = s_RenderPasses.find(handle.id);
-		return (it != s_RenderPasses.end()) ? it->second : VK_NULL_HANDLE;
+		if (handle.id == 0) {
+			RENDERX_WARN("Invalid render pass handle: id is 0");
+			return VK_NULL_HANDLE;
+		}
+
+		const auto it = g_RenderPasses.find(handle.id);
+		if (it == g_RenderPasses.end()) {
+			RENDERX_WARN("Render pass not found for handle: {}", handle.id);
+			return VK_NULL_HANDLE;
+		}
+
+		return it->second;
 	}
-
-
-
 
 } // namespace RenderXVK
 } // namespace RenderX

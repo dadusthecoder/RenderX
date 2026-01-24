@@ -12,10 +12,20 @@ namespace RenderX {
 	RenderDispatchTable g_DispatchTable;
 	GraphicsAPI API = GraphicsAPI::None;
 
-	void SetBackend(GraphicsAPI api) {
-		RENDERX_INFO("Loading Renderer API...");
+	void Init(const Window& window) {
+			
+		ProLog::ProfilerConfig config;
+		config.enableProfiling = true;
+		config.enableLogging = true;
+		config.bufferSize = 500;
+		config.autoFlush = true;
+		ProLog::SetConfig(config);
+		PROFILE_START_SESSION("RenderX", "RenderX.json");
+		RENDERX_LOG_INIT();
+
+		RENDERX_INFO("Loading Graphics API...");
 		PROFILE_FUNCTION();
-		switch (api) {
+		switch (window.api) {
 		case GraphicsAPI::OpenGL: {
 			RENDERX_INFO("Initializing OpenGL backend...");
 #define RENDERER_FUNC(_ret, _name, ...) g_DispatchTable._name = RenderXGL::GL##_name;
@@ -23,9 +33,9 @@ namespace RenderX {
 #undef RENDERER_FUNC
 
 			if (g_DispatchTable.Init)
-				g_DispatchTable.Init();
+				g_DispatchTable.Init(window);
 
-			API = api;
+			API = window.api;
 			RENDERX_INFO("OpenGL backend loaded successfully.");
 			break;
 		}
@@ -38,9 +48,9 @@ namespace RenderX {
 #undef RENDERER_FUNC
 
 			if (g_DispatchTable.Init)
-				g_DispatchTable.Init();
+				g_DispatchTable.Init(window);
 
-			API = api;
+			API = window.api;
 			RENDERX_INFO("Vulkan backend loaded successfully.");
 			break;
 		}
@@ -53,17 +63,7 @@ namespace RenderX {
 			RENDERX_ERROR("Unknown Renderer API requested!");
 			break;
 		}
-	}
 
-	void Init() {
-		ProLog::ProfilerConfig config;
-		config.enableProfiling = true;
-		config.enableLogging = true;
-		config.bufferSize = 500;
-		config.autoFlush = true;
-		ProLog::SetConfig(config);
-		PROFILE_START_SESSION("RenderX", "RenderX.json");
-		RENDERX_LOG_INIT();
 		return;
 	}
 
@@ -105,7 +105,7 @@ namespace RenderX {
 		vertexOffset, instanceCount, firstIndex, firstInstance); }
 
 	void CommandList::beginRenderPass(RenderPassHandle pass,
-		std::vector<ClearValue> clears) { g_DispatchTable.CmdBeginRenderPass(*this, pass, clears); }
+		const ClearValue* clears , uint32_t clearCount) { g_DispatchTable.CmdBeginRenderPass(*this, pass, clears ,clearCount); }
 	void CommandList::endRenderPass() { g_DispatchTable.CmdEndRenderPass(*this); }
 
 

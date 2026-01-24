@@ -26,3 +26,4 @@ target_link_directories(HelloTriangle PRIVATE
 )
 
 target_link_libraries(HelloTriangle PRIVATE RenderX)
+

@@ -1,18 +1,45 @@
 #include "RenderX/RenderX.h"
 #include "Files.h"
+#include "RenderX/Log.h"
+#include "Windows.h"
+#include <GLFW/glfw3.h>
+
+#define GLFW_EXPOSE_NATIVE_WIN32
+#include <GLFW/glfw3native.h>
 
 int main() {
-	RenderX::Init();
-#if 1
-	RenderX::SetBackend(RenderX::GraphicsAPI::Vulkan);
+	if (!glfwInit()) {
+		// RENDERX_ERROR("Failed to initialize GLFW");
+		return 0;
+	}
+	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+	glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
+	auto* window = glfwCreateWindow(1280, 720, "RenderX", nullptr, nullptr);
+	int fbWidth = 0;
+	int fbHeight = 0;
 
+	while (fbWidth == 0 || fbHeight == 0) {
+		glfwGetFramebufferSize(window, &fbWidth, &fbHeight);
+		glfwPollEvents();
+	}
+
+	RenderX::Window Window;
+	Window.api = RenderX::GraphicsAPI::Vulkan;
+	Window.platform = RenderX::Platform::Windows;
+	Window.instanceExtensions = glfwGetRequiredInstanceExtensions(&Window.extensionCount);
+	Window.height = 720;
+	Window.width = 1280;
+	Window.nativeHandle = glfwGetWin32Window(window);
+	Window.displayHandle = GetModuleHandle(nullptr);
+	RenderX::Init(Window);
+
+#if 1
 	auto vertexShader = RenderX::CreateShader({ RenderX::ShaderType::Vertex,
 		Files::ReadBinaryFile("D:/dev/cpp/RenderX/Test/HelloTriangle/Shaders/bsc.vert.spv ") });
 
 	auto fragmentShader = RenderX::CreateShader({ RenderX::ShaderType::Fragment,
 		Files::ReadBinaryFile("D:/dev/cpp/RenderX/Test/HelloTriangle/Shaders/bsc.frag.spv") });
 #else
-	RenderX::SetBackend(RenderX::GraphicsAPI::OpenGL);
 
 	auto vertexShader = RenderX::CreateShader({ RenderX::ShaderType::Vertex,
 		Files::ReadTextFile("D:/dev/cpp/RenderX/Test/HelloTriangle/Shaders/bsc.vert") });
@@ -78,9 +105,8 @@ int main() {
 	clear.color = RenderX::ClearColor(0.10f, 0.0f, 0.30f, 1.0f);
 	clearValues.push_back(clear);
 
-	while (!RenderX::ShouldClose()) {
+	while (!glfwWindowShouldClose(window)) {
 		RenderX::Begin();
-
 		auto cmd = RenderX::CreateCommandList();
 		cmd.open();
 		cmd.beginRenderPass(renderPass, clearValues);
@@ -91,8 +117,8 @@ int main() {
 		cmd.endRenderPass();
 		cmd.close();
 		RenderX::ExecuteCommandList(cmd);
-
 		RenderX::End();
+		glfwPollEvents();
 	}
 
 	RenderX::ShutDown();

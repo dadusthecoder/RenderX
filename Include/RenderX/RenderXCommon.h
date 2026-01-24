@@ -7,9 +7,7 @@
 #include <memory>
 #include <string>
 #include <vector>
-
 #include "Flags.h"
-
 
 #if defined(_MSC_VER)
 #define RENDERX_DEBUGBREAK() __debugbreak()
@@ -95,6 +93,8 @@ namespace RenderX {
 	using PipelineHandle = Handle;
 	using FramebufferHandle = Handle;
 	using RenderPassHandle = Handle;
+	using SurfaceHandle = Handle;
+	using SwapchainHandle = Handle;
 
 	constexpr uint32_t INVALID_HANDLE = 0;
 
@@ -112,11 +112,31 @@ namespace RenderX {
 	using UVec4 = glm::uvec4;
 	using Quat = glm::quat;
 
+
+
 	// Enums and structs for various RenderX configurations and description
 	enum class GraphicsAPI {
 		None,
 		OpenGL,
 		Vulkan
+	};
+
+	enum class Platform : uint8_t {
+		Windows,
+		Linux,
+		MacOS
+	};
+
+	struct Window {
+		Platform platform;
+		GraphicsAPI api;
+
+		void* displayHandle;
+		void* nativeHandle;
+		uint32_t width, height;
+
+		const char** instanceExtensions;
+		uint32_t extensionCount;
 	};
 
 	enum class ShaderType {
@@ -476,7 +496,7 @@ namespace RenderX {
 
 	enum class ResourceType {
 		ConstantBuffer,
-		DynamicBUffer,
+		DynamicBuffer,
 		Texture_SRV,
 		Texture_UAV,
 	};
@@ -610,7 +630,7 @@ namespace RenderX {
 
 		void beginRenderPass(
 			RenderPassHandle pass,
-			std::vector<ClearValue> clears);
+			const ClearValue* , uint32_t);
 
 		void endRenderPass();
 	};

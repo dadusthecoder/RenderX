@@ -17,17 +17,7 @@ namespace RenderX {
 	// API INITIALIZATION
 	//------------------------------------------------------------------------------
 
-	/**
-	 * @brief Loads and initializes the selected rendering backend.
-	 *
-	 * Populates the global dispatch table with backend function pointers and
-	 * prepares the graphics subsystem for usage.
-	 *
-	 * @param api The backend to initialize (e.g., RenderXAPI::OpenGL).
-	 *
-	 * @note Must be called before any rendering operations.
-	 */
-	RENDERX_API void SetBackend(GraphicsAPI api);
+
 
 	//------------------------------------------------------------------------------
 	// SHADER CREATION
@@ -81,14 +71,18 @@ namespace RenderX {
 	RENDERX_API void ExecuteCommandList(CommandList& cmdList);
 
 	//------------------------------------------------------------------------------
-	RENDERX_API void Init();
+	RENDERX_API void Init(const Window& info);
 	RENDERX_API void ShutDown();
 
 	// frame Lifecycle
 	RENDERX_API void Begin();
 	RENDERX_API void End();
 
+	RENDERX_API SurfaceHandle CreateSurface(void* nativeWindow);
+	RENDERX_API SwapchainHandle CreateSwapchain(SurfaceHandle surface);
 
+	RENDERX_API void DestroySwapchain(SwapchainHandle);
+	RENDERX_API void DestroySurface(SurfaceHandle);
 	// temp
 	RENDERX_API bool ShouldClose();
 

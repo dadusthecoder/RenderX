@@ -6,7 +6,7 @@
 namespace RenderX {
 namespace RenderXVK {
 
-	std::unordered_map<uint32_t, VkRenderPass> s_RenderPasses;
+	std::unordered_map<uint32_t, VkRenderPass> g_RenderPasses;
 	static uint32_t s_NextRenderPassId = 1;
 
 	VkAttachmentLoadOp ToVkAttachmentLoadOp(LoadOp op) {
@@ -124,7 +124,7 @@ namespace RenderXVK {
 		VK_CHECK(vkCreateRenderPass(ctx.device, &ci, nullptr, &rp));
 
 		RenderPassHandle handle = s_NextRenderPassId++;
-		s_RenderPasses[handle.id] = rp;
+		g_RenderPasses[handle.id] = rp;
 
 		// temp
 		CreateSwapchainFramebuffers(handle);
@@ -134,18 +134,19 @@ namespace RenderXVK {
 
 	void VKDestroyRenderPass(RenderPassHandle& handle) {
 		auto& ctx = GetVulkanContext();
-		auto it = s_RenderPasses.find(handle.id);
-		if (it == s_RenderPasses.end())
+		auto it = g_RenderPasses.find(handle.id);
+		if (it == g_RenderPasses.end())
 			return;
 
 		vkDestroyRenderPass(ctx.device, it->second, nullptr);
-		s_RenderPasses.erase(it);
+		g_RenderPasses.erase(it);
 	}
 
 	void VKCmdBeginRenderPass(
 		CommandList& cmd,
 		RenderPassHandle pass,
-		const std::vector<ClearValue>& clears) {
+		const ClearValue* clears,
+		uint32_t clearCount) {
 		PROFILE_FUNCTION();
 
 		RENDERX_ASSERT_MSG(cmd.IsValid(), "Invalid CommandList");
@@ -153,12 +154,13 @@ namespace RenderXVK {
 		auto& frame = GetCurrentFrameContex();
 		auto& ctx = GetVulkanContext();
 
-		VkRenderPass rp = s_RenderPasses[pass.id];
+		VkRenderPass rp = g_RenderPasses[pass.id];
 		VkFramebuffer framebuffer = ctx.swapchainFramebuffers[frame.swapchainImageIndex];
 
 		std::vector<VkClearValue> vkClears;
-		for (auto& c : clears) {
+		for(uint32_t  i = 0 ; i < clearCount  ; ++i) {
 			VkClearValue v{};
+			auto c = clears[i];
 			v.color = { c.color.color.r, c.color.color.g,
 				c.color.color.b, c.color.color.a };
 			vkClears.push_back(v);

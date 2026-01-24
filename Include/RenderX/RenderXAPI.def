@@ -1,23 +1,23 @@
-//RenderX Lifetime
-RENDERER_FUNC(void , Init)
+// RenderX Lifetime
+RENDERER_FUNC(void, Init, const Window&)
 RENDERER_FUNC(bool, ShouldClose)
 
-//frame Lifetime
-RENDERER_FUNC(void , Begin)
-RENDERER_FUNC(void , End)
+// frame Lifetime
+RENDERER_FUNC(void, Begin)
+RENDERER_FUNC(void, End)
 
 // pipeline Graphics
-RENDERER_FUNC(PipelineHandle, CreateGraphicsPipeline,PipelineDesc& desc)
+RENDERER_FUNC(PipelineHandle, CreateGraphicsPipeline, PipelineDesc& desc)
 RENDERER_FUNC(ShaderHandle, CreateShader, const ShaderDesc& desc)
 
 // resource Creation
 // buffer
-RENDERER_FUNC(BufferHandle, CreateBuffer , const BufferDesc& desc)
-    
+RENDERER_FUNC(BufferHandle, CreateBuffer, const BufferDesc& desc)
+
 // Command List Creation and Management
-RENDERER_FUNC(CommandList ,  CreateCommandList)
-RENDERER_FUNC(void , DestroyCommandList,  CommandList& cmdList)
-RENDERER_FUNC(void , ExecuteCommandList,  CommandList& cmdList)
+RENDERER_FUNC(CommandList, CreateCommandList)
+RENDERER_FUNC(void, DestroyCommandList, CommandList& cmdList)
+RENDERER_FUNC(void, ExecuteCommandList, CommandList& cmdList)
 
 RENDERER_FUNC(RenderPassHandle, CreateRenderPass, const RenderPassDesc&)
 RENDERER_FUNC(void, DestroyRenderPass, RenderPassHandle&)
@@ -34,15 +34,20 @@ RENDERER_FUNC(void, CmdSetVertexBuffer, CommandList& cmd, const BufferHandle buf
 RENDERER_FUNC(void, CmdSetIndexBuffer, CommandList& cmd, const BufferHandle buffer, uint64_t offset)
 
 RENDERER_FUNC(void, CmdDraw, CommandList& cmd,
-              uint32_t vertexCount, uint32_t instanceCount,
-              uint32_t firstVertex, uint32_t firstInstance)
+	uint32_t vertexCount, uint32_t instanceCount,
+	uint32_t firstVertex, uint32_t firstInstance)
 
 RENDERER_FUNC(void, CmdDrawIndexed, CommandList& cmd,
-              uint32_t indexCount, int32_t vertexOffset,
-              uint32_t instanceCount, uint32_t firstIndex, uint32_t firstInstance)
+	uint32_t indexCount, int32_t vertexOffset,
+	uint32_t instanceCount, uint32_t firstIndex, uint32_t firstInstance)
 
-RENDERER_FUNC(void, CmdBeginRenderPass,
-              CommandList&, RenderPassHandle,
-              const std::vector<ClearValue>&)
+RENDERER_FUNC(void, CmdBeginRenderPass, CommandList& cmd, RenderPassHandle pass,
+	const ClearValue* clears, uint32_t clearCount)
 
 RENDERER_FUNC(void, CmdEndRenderPass, CommandList&)
+
+// RENDERER_FUNC(SurfaceHandle, CreateSurface, void*)
+// RENDERER_FUNC(void, DestroySurface, SurfaceHandle&)
+
+// RENDERER_FUNC(SwapchainHandle, CreateSwapchain, SurfaceHandle)
+// RENDERER_FUNC(void, DestroySwapchain, SwapchainHandle&)

@@ -6,6 +6,8 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /utf-8")
+
 
 
 # ────────────────────────────────────────────────────────────────
@@ -71,7 +73,7 @@ target_include_directories(${PROJECT_NAME}
     PUBLIC  "${CMAKE_SOURCE_DIR}/Include"
     PUBLIC  "${CMAKE_SOURCE_DIR}/External/glm"
     PUBLIC "${CMAKE_SOURCE_DIR}/External/spdlog/include"
-    PRIVATE "${CMAKE_SOURCE_DIR}/External/glfw/include"
+    PUBLIC "${CMAKE_SOURCE_DIR}/External/glfw/include"
     PRIVATE "${CMAKE_SOURCE_DIR}/External_local/glew-2.1.0/include"
     PUBLIC "${CMAKE_SOURCE_DIR}/External_local/ProLog/include"
 )
@@ -83,8 +85,8 @@ target_link_libraries(${PROJECT_NAME}
     PRIVATE glm
     PRIVATE spdlog
     PRIVATE glfw
-    PUBLIC  ProLog
-    PRIVATE Vulkan::Vulkan
+    PRIVATE  ProLog
+    PUBLIC Vulkan::Vulkan
     PRIVATE glew_s
 
 )

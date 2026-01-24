@@ -51,7 +51,7 @@ namespace RenderX {
 
 		// Static members
 		static uint32_t s_NextBufferId = 1;
-		std::unordered_map<uint32_t, VulkanBuffer> s_Buffers;
+		std::unordered_map<uint32_t, VulkanBuffer> g_Buffers;
 
 		// Helper functions
 		uint32_t VKFindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) {
@@ -194,7 +194,7 @@ namespace RenderX {
 
 			handle.id = s_NextBufferId++;
 			vulkanBuffer.bindingCount = desc.bindingCount;
-			s_Buffers[handle.id] = vulkanBuffer;
+			g_Buffers[handle.id] = vulkanBuffer;
 
 			RENDERX_INFO("Vulkan: Created Buffer | ID: {} | Size: {} bytes", handle.id, desc.size);
 			return handle;
@@ -203,13 +203,13 @@ namespace RenderX {
 		void VKDestroyBuffer(const BufferHandle& handle) {
 			PROFILE_FUNCTION();
 			RenderXVK::VulkanContext& ctx = RenderXVK::GetVulkanContext();
-			auto it = RenderXVK::s_Buffers.find(handle.id);
-			if (it == RenderXVK::s_Buffers.end())
+			auto it = RenderXVK::g_Buffers.find(handle.id);
+			if (it == RenderXVK::g_Buffers.end())
 				return;
 
 			vkDestroyBuffer(ctx.device, it->second.buffer, nullptr);
 			vkFreeMemory(ctx.device, it->second.memory, nullptr);
-			RenderXVK::s_Buffers.erase(it);
+			RenderXVK::g_Buffers.erase(it);
 		}
 
 		// command list related functions can go here
@@ -222,8 +222,8 @@ namespace RenderX {
 
 			auto& frame = GetCurrentFrameContex();
 
-			auto it = s_Buffers.find(handle.id);
-			RENDERX_ASSERT_MSG(it != s_Buffers.end(), "Buffer not found");
+			auto it = g_Buffers.find(handle.id);
+			RENDERX_ASSERT_MSG(it != g_Buffers.end(), "Buffer not found");
 
 			VkDeviceSize vkOffset = static_cast<VkDeviceSize>(offset);
 
@@ -242,9 +242,9 @@ namespace RenderX {
 			RENDERX_ASSERT_MSG(cmdList.isOpen, "CommandList must be open");
 
 			auto& frame = GetCurrentFrameContex();
-			auto it = s_Buffers.find(buffer.id);
+			auto it = g_Buffers.find(buffer.id);
 
-			RENDERX_ASSERT_MSG(it != s_Buffers.end(), "Invalid BufferHandle");
+			RENDERX_ASSERT_MSG(it != g_Buffers.end(), "Invalid BufferHandle");
 			// RENDERX_ASSERT_MSG(it->second.type == BufferType::Index, "Buffer is not an index buffer");
 
 			// Choose index type (you can extend this later)

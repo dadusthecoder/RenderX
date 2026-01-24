@@ -29,12 +29,12 @@ namespace RenderXGL {
 		glfwMakeContextCurrent(s_Window);
 	}
 
-	void GLInit() {
+	void GLInit(const Window& window) {
 		PROFILE_FUNCTION();
-		CreateContext_OpenGL(800, 800, false);
-
-		if (!s_Window)
-			return;
+		if(!window.nativeHandle)
+		  CreateContext_OpenGL(800, 800, false);
+		else 
+		  s_Window = reinterpret_cast<GLFWwindow*>(window.nativeHandle);  
 
 		// GLEW must be initialized after an OpenGL context is current
 		if (glewInit() != GLEW_OK) {

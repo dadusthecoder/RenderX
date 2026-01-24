@@ -12,7 +12,7 @@ namespace RenderXGL {
 	void GLCmdBeginRenderPass(
 		CommandList&,
 		RenderPassHandle,
-		const std::vector<ClearValue>&) {
+		const ClearValue* clears , uint32_t clearCount) {
 		// no-op for now
 	}
 
