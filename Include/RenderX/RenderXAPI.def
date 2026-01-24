@@ -1,6 +1,5 @@
 // RenderX Lifetime
 RENDERER_FUNC(void, Init, const Window&)
-RENDERER_FUNC(bool, ShouldClose)
 
 // frame Lifetime
 RENDERER_FUNC(void, Begin)
@@ -21,6 +20,8 @@ RENDERER_FUNC(void, ExecuteCommandList, CommandList& cmdList)
 
 RENDERER_FUNC(RenderPassHandle, CreateRenderPass, const RenderPassDesc&)
 RENDERER_FUNC(void, DestroyRenderPass, RenderPassHandle&)
+RENDERER_FUNC(RenderPassHandle, GetDefaultRenderPass)
+	
 
 RENDERER_FUNC(FramebufferHandle, CreateFramebuffer, const FramebufferDesc&)
 RENDERER_FUNC(void, DestroyFramebuffer, FramebufferHandle&)

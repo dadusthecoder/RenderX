@@ -65,6 +65,7 @@ namespace RenderX {
 
 	RENDERX_API RenderPassHandle CreateRenderPass(const RenderPassDesc& desc);
 	RENDERX_API void DestroyRenderPass(RenderPassHandle& handle);
+    RENDERX_API RenderPassHandle GetDefaultRenderPass();
 
 	RENDERX_API CommandList CreateCommandList();
 	RENDERX_API void DestroyCommandList(CommandList& cmdList);
@@ -83,7 +84,5 @@ namespace RenderX {
 
 	RENDERX_API void DestroySwapchain(SwapchainHandle);
 	RENDERX_API void DestroySurface(SurfaceHandle);
-	// temp
-	RENDERX_API bool ShouldClose();
-
+	
 } // namespace RenderX

@@ -9,54 +9,6 @@ namespace RenderXVK {
 	std::unordered_map<uint32_t, VkRenderPass> g_RenderPasses;
 	static uint32_t s_NextRenderPassId = 1;
 
-	VkAttachmentLoadOp ToVkAttachmentLoadOp(LoadOp op) {
-		switch (op) {
-		case LoadOp::Load:
-			return VK_ATTACHMENT_LOAD_OP_LOAD;
-
-		case LoadOp::Clear:
-			return VK_ATTACHMENT_LOAD_OP_CLEAR;
-
-		case LoadOp::DontCare:
-			return VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-
-		default:
-			RENDERX_ERROR("Unknown LoadOp");
-			return VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-		}
-	}
-
-	VkAttachmentStoreOp ToVkAttachmentStoreOp(StoreOp op) {
-		switch (op) {
-		case StoreOp::Store:
-			return VK_ATTACHMENT_STORE_OP_STORE;
-
-		case StoreOp::DontCare:
-			return VK_ATTACHMENT_STORE_OP_DONT_CARE;
-
-		default:
-			RENDERX_ERROR("Unknown LoadOp");
-			return VK_ATTACHMENT_STORE_OP_DONT_CARE;
-		}
-	}
-
-	VkImageLayout ToVkLayout(ResourceState state) {
-		switch (state) {
-		case ResourceState::Undefined:
-			return VK_IMAGE_LAYOUT_UNDEFINED;
-		case ResourceState::RenderTarget:
-			return VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-		case ResourceState::DepthWrite:
-			return VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-		case ResourceState::ShaderRead:
-			return VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-		case ResourceState::Present:
-			return VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-		default:
-			return VK_IMAGE_LAYOUT_UNDEFINED;
-		}
-	}
-
 	RenderPassHandle VKCreateRenderPass(const RenderPassDesc& desc) {
 		auto& ctx = GetVulkanContext();
 
@@ -126,12 +78,9 @@ namespace RenderXVK {
 		RenderPassHandle handle = s_NextRenderPassId++;
 		g_RenderPasses[handle.id] = rp;
 
-		// temp
-		CreateSwapchainFramebuffers(handle);
-
 		return handle;
 	}
-
+ 
 	void VKDestroyRenderPass(RenderPassHandle& handle) {
 		auto& ctx = GetVulkanContext();
 		auto it = g_RenderPasses.find(handle.id);
@@ -158,7 +107,7 @@ namespace RenderXVK {
 		VkFramebuffer framebuffer = ctx.swapchainFramebuffers[frame.swapchainImageIndex];
 
 		std::vector<VkClearValue> vkClears;
-		for(uint32_t  i = 0 ; i < clearCount  ; ++i) {
+		for (uint32_t i = 0; i < clearCount; ++i) {
 			VkClearValue v{};
 			auto c = clears[i];
 			v.color = { c.color.color.r, c.color.color.g,
@@ -188,6 +137,10 @@ namespace RenderXVK {
 
 		auto& frame = GetCurrentFrameContex();
 		vkCmdEndRenderPass(frame.commandBuffers[cmdList.id]);
+	}
+
+	RenderPassHandle VKGetDefaultRenderPass() {
+		return GetVulkanContext().swapchainRenderPassHandle;
 	}
 
 } // namespace  RenderXVK
