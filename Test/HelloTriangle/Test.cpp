@@ -109,7 +109,7 @@ int main() {
 		RenderX::Begin();
 		auto cmd = RenderX::CreateCommandList();
 		cmd.open();
-		cmd.beginRenderPass(renderPass, clearValues);
+		cmd.beginRenderPass(renderPass, clearValues.data(), clearValues.size());
 		cmd.setPipeline(pipeline);
 		cmd.setVertexBuffer(vertexBuffer);
 		cmd.setIndexBuffer(indexBuffer);
