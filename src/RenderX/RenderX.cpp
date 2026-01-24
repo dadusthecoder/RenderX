@@ -13,7 +13,6 @@ namespace RenderX {
 	GraphicsAPI API = GraphicsAPI::None;
 
 	void Init(const Window& window) {
-			
 		ProLog::ProfilerConfig config;
 		config.enableProfiling = true;
 		config.enableLogging = true;
@@ -82,12 +81,12 @@ namespace RenderX {
 
 	RenderPassHandle CreateRenderPass(const RenderPassDesc& desc) { return g_DispatchTable.CreateRenderPass(desc); }
 	void DestroyRenderPass(RenderPassHandle& pass) { g_DispatchTable.DestroyRenderPass(pass); }
+	RenderPassHandle GetDefaultRenderPass() { return g_DispatchTable.GetDefaultRenderPass(); }
 
 	FramebufferHandle CreateFramebuffer(const FramebufferDesc& desc) { return g_DispatchTable.CreateFramebuffer(desc); }
 	void DestroyFramebuffer(FramebufferHandle& framebuffer) { g_DispatchTable.DestroyFramebuffer(framebuffer); }
 
 	BufferHandle CreateBuffer(const BufferDesc& desc) { return g_DispatchTable.CreateBuffer(desc); }
-	bool ShouldClose() { return g_DispatchTable.ShouldClose(); }
 
 	CommandList CreateCommandList() { return g_DispatchTable.CreateCommandList(); }
 	void DestroyCommandList(CommandList& cmdList) { g_DispatchTable.DestroyCommandList(cmdList); }
@@ -105,7 +104,7 @@ namespace RenderX {
 		vertexOffset, instanceCount, firstIndex, firstInstance); }
 
 	void CommandList::beginRenderPass(RenderPassHandle pass,
-		const ClearValue* clears , uint32_t clearCount) { g_DispatchTable.CmdBeginRenderPass(*this, pass, clears ,clearCount); }
+		const ClearValue* clears, uint32_t clearCount) { g_DispatchTable.CmdBeginRenderPass(*this, pass, clears, clearCount); }
 	void CommandList::endRenderPass() { g_DispatchTable.CmdEndRenderPass(*this); }
 
 

@@ -7,12 +7,18 @@ namespace RenderXGL {
 		return {};
 	}
 
+
 	void GLDestroyRenderPass(RenderPassHandle&) {}
+
+	RenderPassHandle GLGetDefaultRenderPass() {
+		RENDERX_WARN("GLGetDefaultRenderPass Not Implemented yet");
+		return RenderPassHandle{};
+	}
 
 	void GLCmdBeginRenderPass(
 		CommandList&,
 		RenderPassHandle,
-		const ClearValue* clears , uint32_t clearCount) {
+		const ClearValue* clears, uint32_t clearCount) {
 		// no-op for now
 	}
 

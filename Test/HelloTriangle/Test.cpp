@@ -79,19 +79,10 @@ int main() {
 
 	vertexInputState.bindings.emplace_back(0, sizeof(float) * 3, false);
 
-	RenderX::RenderPassDesc renderPassDesc{};
-	RenderX::AttachmentDesc colorAttach;
-	colorAttach.format = RenderX::TextureFormat::BGRA8_SRGB;
-	colorAttach.finalState = RenderX::ResourceState::Present;
-	renderPassDesc.colorAttachments.push_back(colorAttach);
-	// renderPassDesc.hasDepthStencil = true;
-
-	auto renderPass = RenderX::CreateRenderPass(renderPassDesc);
-
 	RenderX::PipelineDesc pipelineDesc{};
 	pipelineDesc.shaders = { vertexShader, fragmentShader };
 	pipelineDesc.vertexInputState = vertexInputState;
-	pipelineDesc.renderPass = renderPass;
+	pipelineDesc.renderPass = RenderX::GetDefaultRenderPass();
 	pipelineDesc.rasterizer.cullMode = RenderX::CullMode::None;
 	pipelineDesc.rasterizer.frontCounterClockwise = true;
 	pipelineDesc.blend.enable = true;
@@ -109,7 +100,8 @@ int main() {
 		RenderX::Begin();
 		auto cmd = RenderX::CreateCommandList();
 		cmd.open();
-		cmd.beginRenderPass(renderPass, clearValues);
+		cmd.beginRenderPass(RenderX::GetDefaultRenderPass(), clearValues.data(),
+			(uint32_t)clearValues.size());
 		cmd.setPipeline(pipeline);
 		cmd.setVertexBuffer(vertexBuffer);
 		cmd.setIndexBuffer(indexBuffer);

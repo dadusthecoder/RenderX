@@ -99,6 +99,7 @@ namespace RenderXVK {
 		VkSurfaceKHR surface = VK_NULL_HANDLE;
 
 		// Swapchain related resources
+		RenderPassHandle swapchainRenderPassHandle;
 		VkRenderPass swapchainRenderPass = VK_NULL_HANDLE; // Created from RenderPassDesc
 		std::vector<VkFramebuffer> swapchainFramebuffers;
 		std::vector<SwapchainImageSync> swapchainImageSync;
@@ -324,6 +325,54 @@ namespace RenderXVK {
 		default:
 			RENDERX_ERROR("Unknown BlendOp");
 			return VK_BLEND_OP_ADD;
+		}
+	}
+
+	inline VkAttachmentLoadOp ToVkAttachmentLoadOp(LoadOp op) {
+		switch (op) {
+		case LoadOp::Load:
+			return VK_ATTACHMENT_LOAD_OP_LOAD;
+
+		case LoadOp::Clear:
+			return VK_ATTACHMENT_LOAD_OP_CLEAR;
+
+		case LoadOp::DontCare:
+			return VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+
+		default:
+			RENDERX_ERROR("Unknown LoadOp");
+			return VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		}
+	}
+
+	inline VkAttachmentStoreOp ToVkAttachmentStoreOp(StoreOp op) {
+		switch (op) {
+		case StoreOp::Store:
+			return VK_ATTACHMENT_STORE_OP_STORE;
+
+		case StoreOp::DontCare:
+			return VK_ATTACHMENT_STORE_OP_DONT_CARE;
+
+		default:
+			RENDERX_ERROR("Unknown LoadOp");
+			return VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		}
+	}
+
+	inline VkImageLayout ToVkLayout(ResourceState state) {
+		switch (state) {
+		case ResourceState::Undefined:
+			return VK_IMAGE_LAYOUT_UNDEFINED;
+		case ResourceState::RenderTarget:
+			return VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		case ResourceState::DepthWrite:
+			return VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+		case ResourceState::ShaderRead:
+			return VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		case ResourceState::Present:
+			return VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+		default:
+			return VK_IMAGE_LAYOUT_UNDEFINED;
 		}
 	}
 } // namespace RenderXVK

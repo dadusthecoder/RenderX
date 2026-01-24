@@ -810,6 +810,20 @@ namespace RenderXVK {
 		}
 
 		RENDERX_INFO("Swapchain created: {}x{}, {} images", extent.width, extent.height, swapchainImageCount);
+
+		RenderX::RenderPassDesc renderPassDesc{};
+		RenderX::AttachmentDesc colorAttach;
+		colorAttach.format = RenderX::TextureFormat::BGRA8_SRGB;
+		colorAttach.finalState = RenderX::ResourceState::Present;
+		renderPassDesc.colorAttachments.push_back(colorAttach);
+		//temp
+		// renderPassDesc.hasDepthStencil = true;
+
+		auto renderPass = VKCreateRenderPass(renderPassDesc);
+		CreateSwapchainFramebuffers(renderPass);
+		ctx.swapchainRenderPassHandle = renderPass;
+		ctx.swapchainRenderPass = GetVulkanRenderPass(renderPass);
+
 		return true;
 	}
 

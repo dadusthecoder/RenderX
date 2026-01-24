@@ -67,19 +67,7 @@ namespace RenderXVK {
 		RENDERX_INFO("==== Vulkan Init Completed Successfully ====");
 		return;
 	}
-
-	// ===================== SHOULD CLOSE =====================
-	bool VKShouldClose() {
-		VulkanContext& ctx = GetVulkanContext();
-
-		if (!ctx.window) {
-			RENDERX_ERROR(
-				"VKShouldClose called but ctx.window is null");
-			return true; // safest fallback
-		}
-
-		true;
-	}
+	
 
 } // namespace RenderXVK
 } // namespace RenderX
