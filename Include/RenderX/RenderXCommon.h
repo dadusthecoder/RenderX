@@ -95,6 +95,10 @@ namespace RenderX {
 	using RenderPassHandle = Handle;
 	using SurfaceHandle = Handle;
 	using SwapchainHandle = Handle;
+	using SRGLayoutHandle = Handle;
+	using BufferViewHandle = Handle;
+	using TextureViewHandle = Handle;
+
 
 	constexpr uint32_t INVALID_HANDLE = 0;
 
@@ -139,15 +143,8 @@ namespace RenderX {
 		uint32_t extensionCount;
 	};
 
-	enum class ShaderType {
-		Vertex,
-		Fragment,
-		Geometry,
-		TessControl,
-		TessEvaluation,
-		Compute
-	};
 
+	//
 	enum class BufferType : uint8_t {
 		Vertex,
 		Index,
@@ -279,6 +276,80 @@ namespace RenderX {
 		Wireframe,
 		Point };
 
+
+
+	// Pipeline Type
+	enum class PipelineType {
+		Graphics,
+		Compute
+	};
+
+	enum class ShaderStage : uint8_t {
+		None = 0,
+		Vertex = 1 << 0,
+		Fragment = 1 << 1,
+		Geometry = 1 << 2,
+		TessControl = 1 << 3,
+		TessEvaluation = 1 << 4,
+		Compute = 1 << 5,
+		All = Vertex | Fragment | Compute
+	};
+
+	template <>
+	struct EnableBitMaskOperators<ShaderStage> {
+		static constexpr bool enable = true;
+	};
+
+	// ==================== Resource State Tracking ====================
+	enum class ResourceState : uint16_t {
+		Undefined = 0,
+		Common = 1 << 0,
+		RenderTarget = 1 << 1,
+		DepthWrite = 1 << 2,
+		DepthRead = 1 << 3,
+		ShaderRead = 1 << 4,
+		ShaderWrite = 1 << 5,
+		Present = 1 << 6,
+		CopySrc = 1 << 7,
+		CopyDst = 1 << 8,
+		IndirectArgument = 1 << 9
+	};
+
+	template <>
+	struct EnableBitMaskOperators<ResourceState> {
+		static constexpr bool enable = true;
+	};
+
+	enum class SRGLifetime : uint8_t {
+		Persistent,
+		PerFrame,
+		PerDraw
+	};
+
+
+	enum class ResourceType : uint8_t {
+
+		// Uniform buffer / Constant buffer
+		ConstantBuffer,
+		// SSBO / Structured buffer (read-only)
+		StorageBuffer,
+		// RW Structured buffer
+		RWStorageBuffer,
+		// Shader resource view (read-only texture)
+		Texture_SRV,
+		// Unordered access view (read-write texture)
+		Texture_UAV,
+
+		Sampler,
+
+		// Combined (OpenGL style)
+		CombinedTextureSampler,
+
+		// for future me
+		AccelerationStructure // For raytracing
+
+	};
+
 	// Core structures
 	struct Viewport {
 		int x, y;
@@ -398,16 +469,16 @@ namespace RenderX {
 	};
 
 	struct ShaderDesc {
-		ShaderType type;
+		ShaderStage type;
 		std::string source;			   // GLSL source or HLSL
 		std::vector<uint8_t> bytecode; // SPIR-V or compiled bytecode
 		std::string entryPoint;		   // Entry function name (for HLSL/SPIR-V)
 
-		ShaderDesc(ShaderType t, const std::string& src)
+		ShaderDesc(ShaderStage t, const std::string& src)
 			: type(t), source(src), entryPoint("main") {
 		}
 
-		ShaderDesc(ShaderType t, const std::vector<uint8_t>& code,
+		ShaderDesc(ShaderStage t, const std::vector<uint8_t>& code,
 			const std::string entry = "main")
 			: type(t), bytecode(code), entryPoint(entry) {
 		}
@@ -473,33 +544,150 @@ namespace RenderX {
 	};
 
 
-	// Pipeline Type
-	enum class PipelineType {
-		Graphics,
-		Compute
+
+	// ==================== Sahder Resource Groups (NEW) ====================
+	// here SRG stands for Shader Resource Group
+	/// Describes a single binding slot in a SRGLayout
+	struct SRGLayoutItem {
+		// Binding index (e.g., layout(binding = 0))
+		uint32_t binding;
+		// What kind of resource
+		ResourceType type;
+		// Which shader stages can access this
+		ShaderStage stages;
+		// Array size (1 for non-arrays, >1 for arrays)
+		uint32_t count;
+
+		SRGLayoutItem()
+			: binding(0), type(ResourceType::ConstantBuffer),
+			  stages(ShaderStage::All), count(1) {}
+
+		SRGLayoutItem(uint32_t bind, ResourceType t, ShaderStage s = ShaderStage::All, uint32_t cnt = 1)
+			: binding(bind), type(t), stages(s), count(cnt) {}
+
+		// Convenience factory methods
+		static SRGLayoutItem ConstantBuffer(uint32_t binding, ShaderStage stages = ShaderStage::All) {
+			return SRGLayoutItem(binding, ResourceType::ConstantBuffer, stages, 1);
+		}
+
+		static SRGLayoutItem StorageBuffer(uint32_t binding, ShaderStage stages = ShaderStage::All, bool writable = false) {
+			return SRGLayoutItem(binding,
+				writable ? ResourceType::RWStorageBuffer : ResourceType::StorageBuffer,
+				stages, 1);
+		}
+
+		static SRGLayoutItem Texture_SRV(uint32_t binding, ShaderStage stages = ShaderStage::All, uint32_t count = 1) {
+			return SRGLayoutItem(binding, ResourceType::Texture_SRV, stages, count);
+		}
+
+		static SRGLayoutItem Texture_UAV(uint32_t binding, ShaderStage stages = ShaderStage::All, uint32_t count = 1) {
+			return SRGLayoutItem(binding, ResourceType::Texture_UAV, stages, count);
+		}
+
+		static SRGLayoutItem Sampler(uint32_t binding, ShaderStage stages = ShaderStage::All) {
+			return SRGLayoutItem(binding, ResourceType::Sampler, stages, 1);
+		}
+
+		static SRGLayoutItem CombinedTextureSampler(uint32_t binding, ShaderStage stages = ShaderStage::All) {
+			return SRGLayoutItem(binding, ResourceType::CombinedTextureSampler, stages, 1);
+		}
 	};
 
-	enum class PipelineStage : uint32_t {
-		None = 0,
-		Vertex = 1 << 0,
-		Fragment = 1 << 1,
-		Geometry = 1 << 2,
-		TessControl = 1 << 3,
-		TessEvaluation = 1 << 4,
-		Compute = 1 << 5,
+	/// Describes the layout/structure of a descriptor set
+	struct SRGLayoutDesc {
+		std::vector<SRGLayoutItem> Resources;
+		const char* debugName = nullptr;
+
+		SRGLayoutDesc() = default;
+
+		SRGLayoutDesc(uint32_t setIndex, const std::vector<SRGLayoutItem>& items)
+			: Resources(items) {}
 	};
 
-	template <>
-	struct EnableBitMaskOperators<PipelineStage> {
-		static constexpr bool enable = true;
+	/// Describes a single resource binding in a descriptor set instance
+	struct SRGItem {
+		uint32_t binding;
+		ResourceType type;
+
+		// Union for different resource types
+		union {
+			BufferViewHandle buffer;
+			TextureViewHandle texture;
+			SamplerHandle sampler;
+			uint64_t rawHandle;
+		};
+
+
+		uint32_t arrayIndex = 0; // For Resource to arrays of descriptors
+
+		SRGItem()
+			: binding(0), type(ResourceType::ConstantBuffer), rawHandle(0) {}
+
+		// Convenience factory methods
+		static SRGItem ConstantBuffer(uint32_t binding, BufferViewHandle buf, uint32_t offset = 0, uint32_t range = 0) {
+			SRGItem item;
+			item.binding = binding;
+			item.type = ResourceType::ConstantBuffer;
+			item.buffer = buf;
+			return item;
+		}
+
+		static SRGItem StorageBuffer(uint32_t binding, BufferViewHandle buf, bool writable = false) {
+			SRGItem item;
+			item.binding = binding;
+			item.type = writable ? ResourceType::RWStorageBuffer : ResourceType::StorageBuffer;
+			item.buffer = buf;
+			return item;
+		}
+
+		static SRGItem Texture_SRV(uint32_t binding, TextureViewHandle tex, uint32_t arrayIndex = 0) {
+			SRGItem item;
+			item.binding = binding;
+			item.type = ResourceType::Texture_SRV;
+			item.texture = tex;
+			item.arrayIndex = arrayIndex;
+			return item;
+		}
+
+		static SRGItem Texture_UAV(uint32_t binding, TextureViewHandle tex, uint32_t mipLevel = 0) {
+			SRGItem item;
+			item.binding = binding;
+			item.type = ResourceType::Texture_UAV;
+			item.texture = tex;
+			return item;
+		}
+
+		static SRGItem Sampler(uint32_t binding, SamplerHandle samp) {
+			SRGItem item;
+			item.binding = binding;
+			item.type = ResourceType::Sampler;
+			item.sampler = samp;
+			return item;
+		}
+
+		static SRGItem CombinedTextureSampler(uint32_t binding, TextureHandle tex, SamplerHandle samp) {
+			SRGItem item;
+			item.binding = binding;
+			item.type = ResourceType::CombinedTextureSampler;
+			item.texture = tex;
+			item.sampler = samp; // Store both - backend will handle appropriately
+			return item;
+		}
 	};
 
-	enum class ResourceType {
-		ConstantBuffer,
-		DynamicBuffer,
-		Texture_SRV,
-		Texture_UAV,
+	/// Describes a descriptor set instance
+	struct SRGDesc {
+		SRGLayoutHandle layout;			// Must match layout used in pipeline
+		std::vector<SRGItem> Resources; // Actual resources to bind
+		SRGLifetime flags = SRGLifetime::Persistent;
+		const char* debugName = nullptr;
+
+		SRGDesc() = default;
+
+		SRGDesc(SRGLayoutHandle layoutHandle, const std::vector<SRGItem>& items)
+			: layout(layoutHandle), Resources(items) {}
 	};
+
 
 	// Pipeline description
 	struct PipelineDesc {
@@ -511,6 +699,8 @@ namespace RenderX {
 		DepthStencilState depthStencil;
 		BlendState blend;
 		RenderPassHandle renderPass;
+		SRGLayoutHandle SRGLayout;
+
 		PipelineDesc()
 			: primitiveType(PrimitiveType::Triangles), renderPass(INVALID_HANDLE) {
 		}
@@ -520,17 +710,6 @@ namespace RenderX {
 		ClearColor color;
 		float depth = 1.0f;
 		uint8_t stencil = 0;
-	};
-
-	enum class ResourceState : uint32_t {
-		Undefined = 0,
-		RenderTarget = 1 << 0,
-		DepthWrite = 1 << 1,
-		DepthRead = 1 << 2,
-		ShaderRead = 1 << 3,
-		Present = 1 << 4,
-		CopySrc = 1 << 5,
-		CopyDst = 1 << 6
 	};
 
 
@@ -630,7 +809,7 @@ namespace RenderX {
 
 		void beginRenderPass(
 			RenderPassHandle pass,
-			const ClearValue* , uint32_t);
+			const ClearValue*, uint32_t);
 
 		void endRenderPass();
 	};

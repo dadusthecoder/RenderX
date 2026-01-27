@@ -8,6 +8,8 @@
 #include <GLFW/glfw3native.h>
 
 int main() {
+	using namespace RenderX;
+	
 	if (!glfwInit()) {
 		// RENDERX_ERROR("Failed to initialize GLFW");
 		return 0;
@@ -23,28 +25,28 @@ int main() {
 		glfwPollEvents();
 	}
 
-	RenderX::Window Window;
-	Window.api = RenderX::GraphicsAPI::Vulkan;
-	Window.platform = RenderX::Platform::Windows;
+    Window Window;
+	Window.api = GraphicsAPI::Vulkan;
+	Window.platform = Platform::Windows;
 	Window.instanceExtensions = glfwGetRequiredInstanceExtensions(&Window.extensionCount);
 	Window.height = 720;
 	Window.width = 1280;
 	Window.nativeHandle = glfwGetWin32Window(window);
 	Window.displayHandle = GetModuleHandle(nullptr);
-	RenderX::Init(Window);
+	Init(Window);
 
 #if 1
-	auto vertexShader = RenderX::CreateShader({ RenderX::ShaderType::Vertex,
+	auto vertexShader = CreateShader({ ShaderType::Vertex,
 		Files::ReadBinaryFile("D:/dev/cpp/RenderX/Test/HelloTriangle/Shaders/bsc.vert.spv ") });
 
-	auto fragmentShader = RenderX::CreateShader({ RenderX::ShaderType::Fragment,
+	auto fragmentShader = CreateShader({ ShaderType::Fragment,
 		Files::ReadBinaryFile("D:/dev/cpp/RenderX/Test/HelloTriangle/Shaders/bsc.frag.spv") });
 #else
 
-	auto vertexShader = RenderX::CreateShader({ RenderX::ShaderType::Vertex,
+	auto vertexShader = CreateShader({ ShaderType::Vertex,
 		Files::ReadTextFile("D:/dev/cpp/RenderX/Test/HelloTriangle/Shaders/bsc.vert") });
 
-	auto fragmentShader = RenderX::CreateShader({ RenderX::ShaderType::Fragment,
+	auto fragmentShader = CreateShader({ ShaderType::Fragment,
 		Files::ReadTextFile("D:/dev/cpp/RenderX/Test/HelloTriangle/Shaders/bsc.frag") });
 #endif
 	const float vertices[] = {
@@ -59,64 +61,75 @@ int main() {
 	};
 
 
-	auto indexBuffer = RenderX::CreateBuffer({ RenderX::BufferType::Index,
-		RenderX::BufferUsage::Dynamic,
+	auto indexBuffer = CreateBuffer({ BufferType::Index,
+		BufferUsage::Dynamic,
 		sizeof(indices),
 		1,
 		indices });
-	auto vertexBuffer = RenderX::CreateBuffer({ RenderX::BufferType::Vertex,
-		RenderX::BufferUsage::Dynamic,
+	auto vertexBuffer = CreateBuffer({ BufferType::Vertex,
+		BufferUsage::Dynamic,
 		sizeof(vertices),
 		1,
 		vertices });
 
-	RenderX::VertexInputState vertexInputState;
-	vertexInputState.attributes.emplace_back(
+	VertexInputState vertexInputState;
+	vertexInputState.attributes.push_back({
 		0, // location
 		0, // binding
-		RenderX::DataFormat::RGB32F,
-		0);
+		DataFormat::RGB32F,
+		0});
 
-	vertexInputState.bindings.emplace_back(0, sizeof(float) * 3, false);
+	vertexInputState.bindings.push_back({0, sizeof(float) * 3, false});
 
-	RenderX::PipelineDesc pipelineDesc{};
+    SRGLayoutDesc srgLayout{};
+	srgLayout.debugName = "Pipeline Layout";
+	srgLayout.set = 0 ;
+	srgLayout.visibility = PipelineStage::Vertex |  PipelineStage::Fragment ;
+	srgLayout.Resources = {
+		SRGLayoutItem::ConstantBuffer( 0 , PipelineStage::Vertex),
+		SRGLayoutItem::Texture_UAV( 1 , PipelineStage::Fragment)
+	};
+
+	SRGDesc srgDesc{};
+	srgDesc.debugName = "Sahder Resource Grpoup : 1";
+    
+	
+	PipelineDesc pipelineDesc{};
 	pipelineDesc.shaders = { vertexShader, fragmentShader };
 	pipelineDesc.vertexInputState = vertexInputState;
-	pipelineDesc.renderPass = RenderX::GetDefaultRenderPass();
-	pipelineDesc.rasterizer.cullMode = RenderX::CullMode::None;
-	pipelineDesc.rasterizer.frontCounterClockwise = true;
-	pipelineDesc.blend.enable = true;
+	pipelineDesc.renderPass = GetDefaultRenderPass();
+	pipelineDesc.rasterizer.cullMode = CullMode::None;
+	pipelineDesc.rasterizer.frontCounterClockwise = false;
+	pipelineDesc.blend.enable = false;
 
-	pipelineDesc.depthStencil = RenderX::DepthStencilState();
+	pipelineDesc.depthStencil = DepthStencilState();
 
-	auto pipeline = RenderX::CreateGraphicsPipeline(pipelineDesc);
+	auto pipeline = CreateGraphicsPipeline(pipelineDesc);
 
-	std::vector<RenderX::ClearValue> clearValues;
-	RenderX::ClearValue clear{};
-	clear.color = RenderX::ClearColor(0.10f, 0.0f, 0.30f, 1.0f);
+	std::vector<ClearValue> clearValues;
+	ClearValue clear{};
+	clear.color = ClearColor(0.10f, 0.0f, 0.30f, 1.0f);
 	clearValues.push_back(clear);
 
 	while (!glfwWindowShouldClose(window)) {
-		RenderX::Begin();
-		auto cmd = RenderX::CreateCommandList();
+		Begin();
+		auto cmd = CreateCommandList();
 		cmd.open();
-<<<<<<< HEAD
-		cmd.beginRenderPass(renderPass, clearValues.data(), clearValues.size());
-=======
-		cmd.beginRenderPass(RenderX::GetDefaultRenderPass(), clearValues.data(),
+
+		cmd.beginRenderPass(GetDefaultRenderPass(), clearValues.data(),
 			(uint32_t)clearValues.size());
->>>>>>> 9972efc528dafc56ed23303a4428e8e781ff3b97
+
 		cmd.setPipeline(pipeline);
 		cmd.setVertexBuffer(vertexBuffer);
 		cmd.setIndexBuffer(indexBuffer);
 		cmd.drawIndexed(6);
 		cmd.endRenderPass();
 		cmd.close();
-		RenderX::ExecuteCommandList(cmd);
-		RenderX::End();
+		ExecuteCommandList(cmd);
+		End();
 		glfwPollEvents();
 	}
 
-	RenderX::ShutDown();
+	ShutDown();
 	return 0;
 }

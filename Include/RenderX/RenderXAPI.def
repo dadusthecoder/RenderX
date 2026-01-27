@@ -18,13 +18,16 @@ RENDERER_FUNC(CommandList, CreateCommandList)
 RENDERER_FUNC(void, DestroyCommandList, CommandList& cmdList)
 RENDERER_FUNC(void, ExecuteCommandList, CommandList& cmdList)
 
+//
+RENDERER_FUNC(SRGLayoutHandle , CreateSRGLayout , const SRGLayoutDesc& desc)
+
 RENDERER_FUNC(RenderPassHandle, CreateRenderPass, const RenderPassDesc&)
 RENDERER_FUNC(void, DestroyRenderPass, RenderPassHandle&)
 RENDERER_FUNC(RenderPassHandle, GetDefaultRenderPass)
 	
-
 RENDERER_FUNC(FramebufferHandle, CreateFramebuffer, const FramebufferDesc&)
 RENDERER_FUNC(void, DestroyFramebuffer, FramebufferHandle&)
+
 
 // Command List Recording Operations
 RENDERER_FUNC(void, CmdOpen, CommandList& cmd)

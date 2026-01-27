@@ -1,8 +1,8 @@
 #include "CommonVK.h"
 #include "RenderXVK.h"
 #include "Windows.h"
-#include "vulkan/vulkan_win32.h"
 #include <algorithm>
+#include <vulkan/vulkan_win32.h>
 
 #ifndef NDEBUG
 constexpr bool enableValidationLayers = true;
@@ -40,36 +40,12 @@ namespace RenderXVK {
 
 	// -------------------- helpers to query layers/extensions --------------------
 
-	const char* VkResultToString(VkResult result) {
-		switch (result) {
-		case VK_SUCCESS: return "VK_SUCCESS";
-		case VK_NOT_READY: return "VK_NOT_READY";
-		case VK_TIMEOUT: return "VK_TIMEOUT";
-		case VK_EVENT_SET: return "VK_EVENT_SET";
-		case VK_EVENT_RESET: return "VK_EVENT_RESET";
-		case VK_INCOMPLETE: return "VK_INCOMPLETE";
-		case VK_ERROR_OUT_OF_HOST_MEMORY: return "VK_ERROR_OUT_OF_HOST_MEMORY";
-		case VK_ERROR_OUT_OF_DEVICE_MEMORY: return "VK_ERROR_OUT_OF_DEVICE_MEMORY";
-		case VK_ERROR_INITIALIZATION_FAILED: return "VK_ERROR_INITIALIZATION_FAILED";
-		case VK_ERROR_DEVICE_LOST: return "VK_ERROR_DEVICE_LOST";
-		case VK_ERROR_MEMORY_MAP_FAILED: return "VK_ERROR_MEMORY_MAP_FAILED";
-		case VK_ERROR_LAYER_NOT_PRESENT: return "VK_ERROR_LAYER_NOT_PRESENT";
-		case VK_ERROR_EXTENSION_NOT_PRESENT: return "VK_ERROR_EXTENSION_NOT_PRESENT";
-		case VK_ERROR_FEATURE_NOT_PRESENT: return "VK_ERROR_FEATURE_NOT_PRESENT";
-		case VK_ERROR_INCOMPATIBLE_DRIVER: return "VK_ERROR_INCOMPATIBLE_DRIVER";
-		case VK_ERROR_TOO_MANY_OBJECTS: return "VK_ERROR_TOO_MANY_OBJECTS";
-		case VK_ERROR_FORMAT_NOT_SUPPORTED: return "VK_ERROR_FORMAT_NOT_SUPPORTED";
-		default: return "VK_UNKNOWN_ERROR";
-		}
-	}
-
-	std::vector<const char*> GetEnabledValidationLayers() {
+	inline std::vector<const char*> GetEnabledValidationLayers() {
 		if constexpr (!enableValidationLayers) {
 			RENDERX_INFO("Validation layers disabled (Release build)");
 			return {};
 		}
 
-		RENDERX_INFO("Querying available validation layers...");
 		uint32_t count = 0;
 		VkResult result = vkEnumerateInstanceLayerProperties(&count, nullptr);
 		if (result != VK_SUCCESS) {
@@ -101,7 +77,7 @@ namespace RenderXVK {
 
 			if (it != props.end()) {
 				enabledLayers.push_back(requested);
-				RENDERX_INFO("Enabled validation layer: {}", requested);
+				RENDERX_INFO("Requested validation layer: {}", requested);
 			}
 			else {
 				RENDERX_WARN("Validation layer not available: {}", requested);
@@ -111,7 +87,7 @@ namespace RenderXVK {
 		return enabledLayers;
 	}
 
-	std::vector<const char*> GetEnabledExtensionsVk(VkPhysicalDevice device) {
+	inline std::vector<const char*> GetEnabledExtensionsVk(VkPhysicalDevice device) {
 		if (device == VK_NULL_HANDLE) {
 			RENDERX_ERROR("Invalid physical device (VK_NULL_HANDLE)");
 			return {};
@@ -163,7 +139,6 @@ namespace RenderXVK {
 
 	bool InitInstance(uint32_t extCount, const char** extentions) {
 		PROFILE_FUNCTION();
-		RENDERX_INFO("Initializing Vulkan instance...");
 
 		if (extCount > 0 && !extentions) {
 			RENDERX_ERROR("Extension count is {}, but extensions pointer is null", extCount);
@@ -231,8 +206,7 @@ namespace RenderXVK {
 		}
 	};
 
-	QueueFamilyIndices FindQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surface) {
-		RENDERX_INFO("Finding queue families...");
+	inline QueueFamilyIndices FindQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surface) {
 		QueueFamilyIndices indices;
 
 		if (device == VK_NULL_HANDLE) {
@@ -289,7 +263,7 @@ namespace RenderXVK {
 		return indices;
 	}
 
-	bool IsDeviceSuitable(VkPhysicalDevice device, VkSurfaceKHR surface) {
+	inline bool IsDeviceSuitable(VkPhysicalDevice device, VkSurfaceKHR surface) {
 		if (device == VK_NULL_HANDLE) {
 			RENDERX_ERROR("Cannot check suitability: invalid device");
 			return false;
@@ -357,11 +331,11 @@ namespace RenderXVK {
 		}
 
 		if (deviceCount == 0) {
-			RENDERX_ERROR("No Vulkan-capable devices found");
+			RENDERX_ERROR("No capable devices found");
 			return false;
 		}
 
-		RENDERX_INFO("Found {} Vulkan-capable device(s)", deviceCount);
+		RENDERX_INFO("Found {} capable device(s)", deviceCount);
 		std::vector<VkPhysicalDevice> devices(deviceCount);
 		result = vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
 		if (result != VK_SUCCESS) {
@@ -413,7 +387,9 @@ namespace RenderXVK {
 		}
 		RENDERX_INFO("Device local memory: {} MB", totalMemory / (1024 * 1024));
 
+
 		const auto indices = FindQueueFamilies(selectedDevice, surface);
+
 		if (!indices.graphicsFamily.has_value()) {
 			RENDERX_ERROR("Selected device has no graphics queue family");
 			return false;
@@ -494,8 +470,6 @@ namespace RenderXVK {
 	}
 
 	void CreateSurface(Window window) {
-		RENDERX_INFO("Creating window surface...");
-
 		if (!window.nativeHandle) {
 			RENDERX_ERROR("Null window pointer");
 			return;
@@ -543,7 +517,7 @@ namespace RenderXVK {
 
 	// ===================== SWAPCHAIN =====================
 
-	SwapchainSupportDetails QuerySwapchainSupport(VkPhysicalDevice device, VkSurfaceKHR surface) {
+	inline SwapchainSupportDetails QuerySwapchainSupport(VkPhysicalDevice device, VkSurfaceKHR surface) {
 		PROFILE_FUNCTION();
 		SwapchainSupportDetails details{};
 
@@ -601,7 +575,7 @@ namespace RenderXVK {
 		return details;
 	}
 
-	VkSurfaceFormatKHR ChooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& formats) {
+	inline VkSurfaceFormatKHR ChooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& formats) {
 		PROFILE_FUNCTION();
 
 		if (formats.empty()) {
@@ -630,7 +604,7 @@ namespace RenderXVK {
 		return formats[0];
 	}
 
-	VkPresentModeKHR ChoosePresentMode(const std::vector<VkPresentModeKHR>& modes) {
+	inline VkPresentModeKHR ChoosePresentMode(const std::vector<VkPresentModeKHR>& modes) {
 		PROFILE_FUNCTION();
 
 		if (modes.empty()) {
@@ -650,7 +624,7 @@ namespace RenderXVK {
 		return VK_PRESENT_MODE_FIFO_KHR; // FIFO is guaranteed to be available
 	}
 
-	VkExtent2D ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& caps, Window window) {
+	inline VkExtent2D ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& caps, Window window) {
 		PROFILE_FUNCTION();
 
 		if (caps.currentExtent.width != UINT32_MAX) {
@@ -679,10 +653,73 @@ namespace RenderXVK {
 		return actualExtent;
 	}
 
+	inline void CreateSwapchainFramebuffers(RenderPassHandle renderPass) {
+		VulkanContext& ctx = GetVulkanContext();
+
+		if (ctx.device == VK_NULL_HANDLE) {
+			RENDERX_ERROR("Invalid device");
+			return;
+		}
+
+		auto it = g_RenderPasses.find(renderPass.id);
+		if (it == g_RenderPasses.end()) {
+			RENDERX_ERROR("Invalid render pass handle: {}", renderPass.id);
+			return;
+		}
+
+		const VkRenderPass vkPass = it->second;
+		if (vkPass == VK_NULL_HANDLE) {
+			RENDERX_ERROR("Render pass is VK_NULL_HANDLE");
+			return;
+		}
+
+		if (ctx.swapchainImageviews.empty()) {
+			RENDERX_ERROR("No swapchain image views available");
+			return;
+		}
+
+		if (ctx.swapchainExtent.width == 0 || ctx.swapchainExtent.height == 0) {
+			RENDERX_ERROR("Invalid swapchain extent: {}x{}", ctx.swapchainExtent.width, ctx.swapchainExtent.height);
+			return;
+		}
+
+		ctx.swapchainFramebuffers.resize(ctx.swapchainImageviews.size());
+
+		for (size_t i = 0; i < ctx.swapchainImageviews.size(); i++) {
+			if (ctx.swapchainImageviews[i] == VK_NULL_HANDLE) {
+				RENDERX_ERROR("Image view {} is VK_NULL_HANDLE", i);
+				return;
+			}
+
+			const VkImageView attachments[] = { ctx.swapchainImageviews[i] };
+
+			VkFramebufferCreateInfo framebufferInfo{};
+			framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+			framebufferInfo.renderPass = vkPass;
+			framebufferInfo.attachmentCount = 1;
+			framebufferInfo.pAttachments = attachments;
+			framebufferInfo.width = ctx.swapchainExtent.width;
+			framebufferInfo.height = ctx.swapchainExtent.height;
+			framebufferInfo.layers = 1;
+
+			VkResult result = vkCreateFramebuffer(ctx.device, &framebufferInfo, nullptr, &ctx.swapchainFramebuffers[i]);
+			if (result != VK_SUCCESS) {
+				RENDERX_ERROR("Failed to create framebuffer {}: {}", i, VkResultToString(result));
+				return;
+			}
+
+			if (ctx.swapchainFramebuffers[i] == VK_NULL_HANDLE) {
+				RENDERX_ERROR("Framebuffer {} creation succeeded but returned VK_NULL_HANDLE", i);
+				return;
+			}
+		}
+
+		RENDERX_INFO("Created {} framebuffers ({}x{})", ctx.swapchainFramebuffers.size(),
+			ctx.swapchainExtent.width, ctx.swapchainExtent.height);
+	}
+
 	bool CreateSwapchain(VulkanContext& ctx, Window window) {
 		PROFILE_FUNCTION();
-		RENDERX_INFO("Creating swapchain...");
-
 		if (!window.nativeHandle) {
 			RENDERX_ERROR("Null window pointer");
 			return false;
@@ -816,8 +853,8 @@ namespace RenderXVK {
 		colorAttach.format = RenderX::TextureFormat::BGRA8_SRGB;
 		colorAttach.finalState = RenderX::ResourceState::Present;
 		renderPassDesc.colorAttachments.push_back(colorAttach);
-		//temp
-		// renderPassDesc.hasDepthStencil = true;
+		// temp
+		//  renderPassDesc.hasDepthStencil = true;
 
 		auto renderPass = VKCreateRenderPass(renderPassDesc);
 		CreateSwapchainFramebuffers(renderPass);
@@ -827,74 +864,7 @@ namespace RenderXVK {
 		return true;
 	}
 
-	void CreateSwapchainFramebuffers(RenderPassHandle renderPass) {
-		RENDERX_INFO("Creating swapchain framebuffers...");
-		VulkanContext& ctx = GetVulkanContext();
-
-		if (ctx.device == VK_NULL_HANDLE) {
-			RENDERX_ERROR("Invalid device");
-			return;
-		}
-
-		auto it = g_RenderPasses.find(renderPass.id);
-		if (it == g_RenderPasses.end()) {
-			RENDERX_ERROR("Invalid render pass handle: {}", renderPass.id);
-			return;
-		}
-
-		const VkRenderPass vkPass = it->second;
-		if (vkPass == VK_NULL_HANDLE) {
-			RENDERX_ERROR("Render pass is VK_NULL_HANDLE");
-			return;
-		}
-
-		if (ctx.swapchainImageviews.empty()) {
-			RENDERX_ERROR("No swapchain image views available");
-			return;
-		}
-
-		if (ctx.swapchainExtent.width == 0 || ctx.swapchainExtent.height == 0) {
-			RENDERX_ERROR("Invalid swapchain extent: {}x{}", ctx.swapchainExtent.width, ctx.swapchainExtent.height);
-			return;
-		}
-
-		ctx.swapchainFramebuffers.resize(ctx.swapchainImageviews.size());
-
-		for (size_t i = 0; i < ctx.swapchainImageviews.size(); i++) {
-			if (ctx.swapchainImageviews[i] == VK_NULL_HANDLE) {
-				RENDERX_ERROR("Image view {} is VK_NULL_HANDLE", i);
-				return;
-			}
-
-			const VkImageView attachments[] = { ctx.swapchainImageviews[i] };
-
-			VkFramebufferCreateInfo framebufferInfo{};
-			framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-			framebufferInfo.renderPass = vkPass;
-			framebufferInfo.attachmentCount = 1;
-			framebufferInfo.pAttachments = attachments;
-			framebufferInfo.width = ctx.swapchainExtent.width;
-			framebufferInfo.height = ctx.swapchainExtent.height;
-			framebufferInfo.layers = 1;
-
-			VkResult result = vkCreateFramebuffer(ctx.device, &framebufferInfo, nullptr, &ctx.swapchainFramebuffers[i]);
-			if (result != VK_SUCCESS) {
-				RENDERX_ERROR("Failed to create framebuffer {}: {}", i, VkResultToString(result));
-				return;
-			}
-
-			if (ctx.swapchainFramebuffers[i] == VK_NULL_HANDLE) {
-				RENDERX_ERROR("Framebuffer {} creation succeeded but returned VK_NULL_HANDLE", i);
-				return;
-			}
-		}
-
-		RENDERX_INFO("Created {} framebuffers ({}x{})", ctx.swapchainFramebuffers.size(),
-			ctx.swapchainExtent.width, ctx.swapchainExtent.height);
-	}
-
 	void InitFrameContex() {
-		RENDERX_INFO("Initializing frame contexts...");
 		auto& ctx = GetVulkanContext();
 
 		if (ctx.device == VK_NULL_HANDLE) {
@@ -919,7 +889,6 @@ namespace RenderXVK {
 		poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
 		poolInfo.queueFamilyIndex = ctx.graphicsQueueFamilyIndex;
 
-		RENDERX_INFO("Creating synchronization objects for {} swapchain images", ctx.swapchainImageviews.size());
 		ctx.swapchainImageSync.resize(ctx.swapchainImageviews.size());
 
 		for (size_t i = 0; i < ctx.swapchainImageSync.size(); ++i) {
@@ -943,7 +912,6 @@ namespace RenderXVK {
 			}
 		}
 
-		RENDERX_INFO("Creating frame resources for {} frames in flight", MAX_FRAMES_IN_FLIGHT);
 		for (size_t i = 0; i < g_Frames.size(); ++i) {
 			auto& frame = g_Frames[i];
 

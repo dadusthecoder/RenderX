@@ -45,12 +45,11 @@ namespace RenderXVK {
 			VK_CHECK(res);
 		}
 		g_CurrentFrame = (g_CurrentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
-		glfwPollEvents();
 	}
 	void VKCmdOpen(CommandList& cmdList) {
 		PROFILE_FUNCTION();
 		RENDERX_ASSERT_MSG(cmdList.IsValid(), "Invalid Command List");
-		RENDERX_ASSERT_MSG(!cmdList.isOpen, "CommandList is already open");
+		RENDERX_ASSERT_MSG(!cmdList.isOpen, "VKCmdOpen : CommandList is already open");
 
 		cmdList.isOpen = true;
 		auto& frame = GetCurrentFrameContex();
@@ -63,9 +62,9 @@ namespace RenderXVK {
 
 	void VKCmdClose(CommandList& cmdList) {
 		PROFILE_FUNCTION();
-		RENDERX_ASSERT_MSG(cmdList.IsValid(), "Invalid CommandList");
+		RENDERX_ASSERT_MSG(cmdList.IsValid(), "VKCmdClose : Invalid CommandList");
 		auto& frame = GetCurrentFrameContex();
-		RENDERX_ASSERT_MSG(cmdList.isOpen, "To close a CommnadList it must be created and opened first");
+		RENDERX_ASSERT_MSG(cmdList.isOpen, "VKCmdClose :To close a CommnadList it must be created and opened first");
 		vkEndCommandBuffer(frame.commandBuffers[cmdList.id]);
 		cmdList.isOpen = false;
 	}
@@ -73,8 +72,8 @@ namespace RenderXVK {
 	void VKCmdDraw(CommandList& cmdList, uint32_t vertexCount, uint32_t instanceCount,
 		uint32_t firstVertex, uint32_t firstInstance) {
 		PROFILE_FUNCTION();
-		RENDERX_ASSERT_MSG(cmdList.IsValid(), "Invalid CommandList");
-		RENDERX_ASSERT_MSG(cmdList.isOpen, "CommadList is not in the open state");
+		RENDERX_ASSERT_MSG(cmdList.IsValid(), " VKCmdDraw : Invalid CommandList");
+		RENDERX_ASSERT_MSG(cmdList.isOpen, " VKCmdDraw : CommadList is not in the open state");
 		vkCmdDraw(GetCurrentFrameContex().commandBuffers[cmdList.id],
 			vertexCount, instanceCount, firstVertex, firstInstance);
 	}
@@ -83,8 +82,8 @@ namespace RenderXVK {
 		uint32_t indexCount, int32_t vertexOffset,
 		uint32_t instanceCount, uint32_t firstIndex, uint32_t firstInstance) {
 		PROFILE_FUNCTION();
-		RENDERX_ASSERT_MSG(cmdList.IsValid(), "Invalid CommandList")
-		RENDERX_ASSERT_MSG(cmdList.isOpen, "CommadList is not in the open state");
+		RENDERX_ASSERT_MSG(cmdList.IsValid(), "VKCmdDraw : Invalid CommandList")
+		RENDERX_ASSERT_MSG(cmdList.isOpen, " VKCmdDrawIndexed : CommadList is not in the open state");
 		vkCmdDrawIndexed(GetCurrentFrameContex().commandBuffers[cmdList.id], indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
 	}
 
@@ -115,7 +114,7 @@ namespace RenderXVK {
 	void VKExecuteCommandList(CommandList& cmdList) {
 		PROFILE_FUNCTION();
 		auto& frame = GetCurrentFrameContex();
-		RENDERX_ASSERT_MSG(cmdList.IsValid(), "Invalid CommandList");
+		RENDERX_ASSERT_MSG(cmdList.IsValid(), " VKExecuteCommandList : Invalid CommandList");
 		RENDERX_ASSERT(cmdList.id < frame.commandBuffers.size());
 
 		VulkanContext& ctx = GetVulkanContext();

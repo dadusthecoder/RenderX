@@ -80,7 +80,7 @@ namespace RenderXVK {
 
 		return handle;
 	}
- 
+
 	void VKDestroyRenderPass(RenderPassHandle& handle) {
 		auto& ctx = GetVulkanContext();
 		auto it = g_RenderPasses.find(handle.id);
@@ -99,7 +99,7 @@ namespace RenderXVK {
 		PROFILE_FUNCTION();
 
 		RENDERX_ASSERT_MSG(cmd.IsValid(), "Invalid CommandList");
-		RENDERX_ASSERT_MSG(cmd.isOpen, "CommandList must be open");
+		RENDERX_ASSERT_MSG(cmd.isOpen, "VKCmdBeginRenderPass : CommandList must be open");
 		auto& frame = GetCurrentFrameContex();
 		auto& ctx = GetVulkanContext();
 
@@ -133,7 +133,7 @@ namespace RenderXVK {
 		PROFILE_FUNCTION();
 
 		RENDERX_ASSERT_MSG(cmdList.IsValid(), "Invalid CommandList");
-		RENDERX_ASSERT_MSG(cmdList.isOpen, "CommandList must be open");
+		RENDERX_ASSERT_MSG(cmdList.isOpen, "VKCmdEndRenderPass : CommandList must be open");
 
 		auto& frame = GetCurrentFrameContex();
 		vkCmdEndRenderPass(frame.commandBuffers[cmdList.id]);

@@ -20,7 +20,12 @@ namespace RenderX {
 
 #define RENDERX_LOG_INIT() ::RenderX ::Log::Init()
 #define RENDERX_TRACE(...) ::RenderX ::Log::GetCoreLogger()->trace(__VA_ARGS__)
+
+#ifndef  RENDERX_DISABLE_INFO
 #define RENDERX_INFO(...) ::RenderX ::Log::GetCoreLogger()->info(__VA_ARGS__)
+#else RENDERX_INFO(...) 
+#endif
+
 #define RENDERX_WARN(...) ::RenderX ::Log::GetCoreLogger()->warn(__VA_ARGS__)
 #define RENDERX_ERROR(...) ::RenderX ::Log::GetCoreLogger()->error(__VA_ARGS__)
 #define RENDERX_CRITICAL(...) ::RenderX ::Log::GetCoreLogger()->critical(__VA_ARGS__)

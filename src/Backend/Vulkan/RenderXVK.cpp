@@ -4,13 +4,10 @@
 namespace RenderX {
 namespace RenderXVK {
 
-	// ===================== INIT =====================
 	void VKInit(const Window& window) {
-		RENDERX_INFO("==== Vulkan Init Started ====");
-
+	
 		VulkanContext& ctx = GetVulkanContext();
 		ctx.window = window.nativeHandle;
-
 
 		if (!InitInstance(window.extensionCount, window.instanceExtensions)) {
 			RENDERX_ERROR("VKInit failed: InitInstance");
@@ -18,7 +15,7 @@ namespace RenderXVK {
 		}
 
 		CreateSurface(window);
-		// -------------------- Surface --------------------
+
 		if (!window.nativeHandle) {
 			RENDERX_ERROR("VKInit failed: nativeHandle is null");
 			return;
@@ -32,10 +29,7 @@ namespace RenderXVK {
 			RENDERX_ERROR("VKInit failed: PickPhysicalDevice");
 			return;
 		}
-		RENDERX_INFO(
-			"Physical device selected (graphics queue family = {})",
-			ctx.graphicsQueueFamilyIndex);
-
+	
 		if (!InitLogicalDevice(
 				ctx.physicalDevice,
 				ctx.graphicsQueueFamilyIndex,

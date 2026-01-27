@@ -2,7 +2,6 @@
 
 namespace RenderX {
 	template <typename Enum>
-
 	struct EnableBitMaskOperators {
 		static constexpr bool enable = false;
 	};
