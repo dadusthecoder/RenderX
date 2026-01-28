@@ -11,12 +11,13 @@
 #include <optional>
 #include <unordered_map>
 #include <limits>
+#include <random>
 #include <cstdint>
 #include <cstring>
 #include <string>
 
-namespace RenderX {
-namespace RenderXVK {
+namespace Rx {
+namespace RxVK {
 
 	// Internal Vulkan backend helpers. These are NOT part of the public RenderX API.
 	// They are kept inline so they can be used privately from backend sources without
@@ -114,6 +115,7 @@ namespace RenderXVK {
 
 		// Current swapchain image index for this frame
 		uint32_t swapchainImageIndex = 0;
+		VkDescriptorPool DescriptorPool;
 	};
 
 	struct SwapchainImageSync {
@@ -131,6 +133,30 @@ namespace RenderXVK {
 		VkBuffer buffer = VK_NULL_HANDLE;
 		uint32_t bindingCount = 0;
 		size_t size = 0;
+	};
+
+	// struct VulkanBuffer {
+	//	VkBuffer buffer = VK_NULL_HANDLE;
+	//	VkDeviceMemory memory = VK_NULL_HANDLE;
+	//	VkDeviceSize size = 0;
+	//	void* mappedData = nullptr;
+	//	bool isValid = false;
+
+	//	VulkanBuffer() = default;
+	//};
+
+	/// Vulkan-specific texture resource
+	struct VulkanTexture {
+		VkImage image = VK_NULL_HANDLE;
+		VkImageView view = VK_NULL_HANDLE;
+		VkDeviceMemory memory = VK_NULL_HANDLE;
+		VkFormat format = VK_FORMAT_UNDEFINED;
+		uint32_t width = 0;
+		uint32_t height = 0;
+		uint32_t mipLevels = 1;
+		bool isValid = false;
+
+		VulkanTexture() = default;
 	};
 
 	struct VulkanShader {
@@ -168,16 +194,100 @@ namespace RenderXVK {
 		std::vector<VkImageView> swapchainImageviews;
 	};
 
-	// ===================== GLOBAL RESOURCE MAPS =====================
+	// =====================  Vulkan Handle/Resource Pool=====================
+	template <typename ResourceType, typename Tag>
+	class ResourcePool {
+	public:
+		using ValueType = uint64_t;
 
-	extern std::unordered_map<uint32_t, VulkanBuffer> g_Buffers;
-	extern std::unordered_map<uint32_t, VulkanShader> g_Shaders;
-	extern std::unordered_map<uint32_t, VkRenderPass> g_RenderPasses;
+		ResourcePool() {
+			ResourceType invalidResource{};
+			_My_resource.push_back(invalidResource);
+
+			std::random_device rd;
+			std::mt19937 gen(rd());
+			std::uniform_int_distribution<> dest(1, 100);
+			_My_key = dest(gen);
+		}
+		~ResourcePool() {
+			_My_freelist.clear();
+			_My_resource.clear();
+		}
+
+		Handle<Tag> allocate(ResourceType resource) {
+			ValueType index;
+			Handle<Tag> handle;
+			if (_My_freelist.empty()) {
+				index = static_cast<ValueType>(_My_resource.size());
+				handle.id = index ^ _My_key;
+				_My_resource.push_back(resource);
+				return handle;
+			}
+			else {
+				index = _My_freelist.back();
+				_My_freelist.pop_back();
+				_My_resource[index] = resource;
+				handle.id = index ^ _My_key;
+				return handle;
+			}
+		}
+
+		bool IsAlive(const Handle<Tag>& handle) {
+		}
+
+		void free(Handle<Tag>& handle) {
+			RENDERX_ASSERT_MSG(handle.IsValid(), "trying to free invalid handle");
+			auto index = handle.id ^ _My_key;
+			handle.id = 0;
+			_My_resource[index] = ResourceType{};
+			_My_freelist.push_back(index);
+		}
+
+		ResourceType& get(Handle<Tag> handle) {
+			RENDERX_ASSERT_MSG(handle.IsValid(), "trying to get invalid handle");
+			auto index = handle.id ^ _My_key;
+			return _My_resource[index];
+		}
+
+		void clear() {
+			_My_freelist.clear();
+			_My_resource.clear();
+			_My_generation.clear();
+		}
+	private:
+		std::vector<ResourceType> _My_resource;
+		std::vector<ValueType> _My_freelist;
+		std::vector<ValueType> _My_generation;
+		ValueType _My_key = 0;
+	};
+
+	// ===================== GLOBAL RESOURCE POOLS =====================
+
+	// New ResourcePool instances for consistent resource management
+	extern ResourcePool<VulkanBuffer, HandleType::Buffer> g_BufferPool;
+	extern ResourcePool<VulkanShader, HandleType::Shader> g_ShaderPool;
+	extern ResourcePool<VkPipeline, HandleType::Pipeline> g_PipelinePool;
+	extern ResourcePool<VkRenderPass, HandleType::RenderPass> g_RenderPassPool;
+	extern ResourcePool<VulkanTexture, HandleType::Texture> g_TexturePool;
 
 	// ===================== CONTEXT ACCESS =====================
 
 	VulkanContext& GetVulkanContext();
-	FrameContex& GetCurrentFrameContex();
+	FrameContex& GetCurrentFrameContex(uint32_t index);
+
+
+	// Temp Testing Function (Executed Once Through Program)
+	inline void TempTest() {
+		VulkanTexture texture;
+		auto texturehandle = g_TexturePool.allocate(texture);
+		auto textureHandle1 = g_TexturePool.allocate(texture);
+		g_TexturePool.free(texturehandle);
+		auto texturehandle2 = g_TexturePool.allocate(texture);
+		g_TexturePool.free(textureHandle1);
+		auto textureHandle3 = g_TexturePool.allocate(texture);
+		g_TexturePool.get(texturehandle2);
+		g_TexturePool.get(textureHandle3);
+	};
 
 	// ===================== INITIALIZATION FUNCTIONS =====================
 
@@ -211,7 +321,7 @@ namespace RenderXVK {
 		const VkSurfaceCapabilitiesKHR& capabilities,
 		Window window);
 	bool CreateSwapchain(VulkanContext& ctx, Window window);
-	void InitFrameContex();
+	void InitFrameContext();
 	void CreateSurface(Window);
 
 	// ===================== VULKAN HELPERS =====================
@@ -277,7 +387,7 @@ namespace RenderXVK {
 	}
 
 
-	inline VkShaderStageFlags ToVkShaderStage(ShaderStage type) {
+	inline VkShaderStageFlagBits ToVkShaderStage(ShaderStage type) {
 		switch (type) {
 		case ShaderStage::Vertex: return VK_SHADER_STAGE_VERTEX_BIT;
 		case ShaderStage::Fragment: return VK_SHADER_STAGE_FRAGMENT_BIT;
@@ -408,7 +518,7 @@ namespace RenderXVK {
 			return VK_ATTACHMENT_STORE_OP_DONT_CARE;
 
 		default:
-			RENDERX_ERROR("Unknown LoadOp");
+			RENDERX_ERROR("Unknown StoreOp");
 			return VK_ATTACHMENT_STORE_OP_DONT_CARE;
 		}
 	}
@@ -429,5 +539,59 @@ namespace RenderXVK {
 			return VK_IMAGE_LAYOUT_UNDEFINED;
 		}
 	}
-} // namespace RenderXVK
-} // namespace RenderX
+
+	inline VkDescriptorType ToVkDescriptorType(ResourceType type) {
+		switch (type) {
+		case ResourceType::ConstantBuffer:
+			return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+
+		case ResourceType::StorageBuffer:
+		case ResourceType::RWStorageBuffer:
+			return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+
+		case ResourceType::Texture_SRV:
+			return VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+
+		case ResourceType::Texture_UAV:
+			return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+
+		case ResourceType::Sampler:
+			return VK_DESCRIPTOR_TYPE_SAMPLER;
+
+		case ResourceType::CombinedTextureSampler:
+			return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+
+		case ResourceType::AccelerationStructure:
+			return VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+
+		default:
+			RENDERX_ERROR("Unknown ResourceType");
+			return VK_DESCRIPTOR_TYPE_MAX_ENUM;
+		}
+	}
+
+	inline VkShaderStageFlags ToVkShaderStageFlags(ShaderStage stages) {
+		VkShaderStageFlags vkStages = 0;
+
+		if (Has(stages, ShaderStage::Vertex))
+			vkStages |= VK_SHADER_STAGE_VERTEX_BIT;
+
+		if (Has(stages, ShaderStage::Fragment))
+			vkStages |= VK_SHADER_STAGE_FRAGMENT_BIT;
+
+		if (Has(stages, ShaderStage::Geometry))
+			vkStages |= VK_SHADER_STAGE_GEOMETRY_BIT;
+
+		if (Has(stages, ShaderStage::TessControl))
+			vkStages |= VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
+
+		if (Has(stages, ShaderStage::TessEvaluation))
+			vkStages |= VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
+
+		if (Has(stages, ShaderStage::Compute))
+			vkStages |= VK_SHADER_STAGE_COMPUTE_BIT;
+
+		return vkStages;
+	}
+} // namespace RxVK
+} // namespace Rx

@@ -4,8 +4,7 @@
 #include "RenderXGL.h"
 
 #include <GL/glew.h>
-
-#include <GLFW/glfw3.h>
+#include <windows.h>
 
 #include <vector>
 #include <array>
@@ -17,8 +16,8 @@
 #include <string>
 
 // Small helpers specific to the OpenGL backend
-namespace RenderX {
-namespace RenderXGL {
+namespace Rx {
+namespace RxGL {
 
 
 	struct GLCommandListState {
@@ -38,9 +37,11 @@ namespace RenderXGL {
 		uint32_t firstIndex = 0;
 	};
     	
-	extern GLFWwindow* s_Window ;
+	extern HWND s_WindowHandle;
+	extern HDC s_DeviceContext;
+	extern HGLRC s_RenderContext;
 	extern std::unordered_map<uint32_t, GLCommandListState> s_GLCommandLists;
-	extern uint32_t s_NextGLCmdId ;
+	extern uint32_t s_NextGLCmdId;
 
 	// Translate RenderX::DataFormat into OpenGL vertex attribute parameters.
 	inline void GLGetVertexFormat(DataFormat fmt,
@@ -110,5 +111,5 @@ namespace RenderXGL {
 			break;
 		}
 	}
-} // namespace RenderXGL
-} // namespace RenderX::RenderXGL
+} // namespace RxGL
+} // namespace Rx

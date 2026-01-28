@@ -8,8 +8,8 @@
 #include <GLFW/glfw3native.h>
 
 int main() {
-	using namespace RenderX;
-	
+	using namespace Rx;
+
 	if (!glfwInit()) {
 		// RENDERX_ERROR("Failed to initialize GLFW");
 		return 0;
@@ -25,7 +25,7 @@ int main() {
 		glfwPollEvents();
 	}
 
-    Window Window;
+	Window Window;
 	Window.api = GraphicsAPI::Vulkan;
 	Window.platform = Platform::Windows;
 	Window.instanceExtensions = glfwGetRequiredInstanceExtensions(&Window.extensionCount);
@@ -36,17 +36,17 @@ int main() {
 	Init(Window);
 
 #if 1
-	auto vertexShader = CreateShader({ ShaderType::Vertex,
-		Files::ReadBinaryFile("D:/dev/cpp/RenderX/Test/HelloTriangle/Shaders/bsc.vert.spv ") });
+	auto vertexShader = CreateShader({ ShaderStage::Vertex,
+		Files::ReadBinaryFile("D:/dev/cpp/RenderX/Test/HelloTriangle/Shaders/bsc.vert.spv") });
 
-	auto fragmentShader = CreateShader({ ShaderType::Fragment,
+	auto fragmentShader = CreateShader({ ShaderStage::Fragment,
 		Files::ReadBinaryFile("D:/dev/cpp/RenderX/Test/HelloTriangle/Shaders/bsc.frag.spv") });
 #else
 
-	auto vertexShader = CreateShader({ ShaderType::Vertex,
+	auto vertexShader = CreateShader({ ShaderStage::Vertex,
 		Files::ReadTextFile("D:/dev/cpp/RenderX/Test/HelloTriangle/Shaders/bsc.vert") });
 
-	auto fragmentShader = CreateShader({ ShaderType::Fragment,
+	auto fragmentShader = CreateShader({ ShaderStage::Fragment,
 		Files::ReadTextFile("D:/dev/cpp/RenderX/Test/HelloTriangle/Shaders/bsc.frag") });
 #endif
 	const float vertices[] = {
@@ -73,27 +73,22 @@ int main() {
 		vertices });
 
 	VertexInputState vertexInputState;
-	vertexInputState.attributes.push_back({
-		0, // location
-		0, // binding
+	vertexInputState.attributes.push_back({ 0, // location
+		0,									   // binding
 		DataFormat::RGB32F,
-		0});
+		0 });
 
-	vertexInputState.bindings.push_back({0, sizeof(float) * 3, false});
+	vertexInputState.bindings.push_back({ 0, sizeof(float) * 3, false });
 
-    SRGLayoutDesc srgLayout{};
+	ResourceGroupLayoutDesc srgLayout{};
 	srgLayout.debugName = "Pipeline Layout";
-	srgLayout.set = 0 ;
-	srgLayout.visibility = PipelineStage::Vertex |  PipelineStage::Fragment ;
 	srgLayout.Resources = {
-		SRGLayoutItem::ConstantBuffer( 0 , PipelineStage::Vertex),
-		SRGLayoutItem::Texture_UAV( 1 , PipelineStage::Fragment)
+		ResourceGroupLayoutItem::ConstantBuffer(0, ShaderStage::Vertex)
 	};
 
-	SRGDesc srgDesc{};
-	srgDesc.debugName = "Sahder Resource Grpoup : 1";
-    
-	
+	ResourceGroupDesc srgDesc{};
+	srgDesc.debugName = "Sahder Resource Group : 1";
+
 	PipelineDesc pipelineDesc{};
 	pipelineDesc.shaders = { vertexShader, fragmentShader };
 	pipelineDesc.vertexInputState = vertexInputState;
@@ -105,14 +100,14 @@ int main() {
 	pipelineDesc.depthStencil = DepthStencilState();
 
 	auto pipeline = CreateGraphicsPipeline(pipelineDesc);
-
+    
 	std::vector<ClearValue> clearValues;
 	ClearValue clear{};
 	clear.color = ClearColor(0.10f, 0.0f, 0.30f, 1.0f);
 	clearValues.push_back(clear);
-
+	int i = 0;
 	while (!glfwWindowShouldClose(window)) {
-		Begin();
+		auto frame = Begin();
 		auto cmd = CreateCommandList();
 		cmd.open();
 
@@ -126,8 +121,9 @@ int main() {
 		cmd.endRenderPass();
 		cmd.close();
 		ExecuteCommandList(cmd);
-		End();
+		End(frame);
 		glfwPollEvents();
+		i++;
 	}
 
 	ShutDown();

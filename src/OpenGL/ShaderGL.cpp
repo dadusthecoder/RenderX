@@ -8,24 +8,24 @@
 #include "RenderX/Log.h"
 #include "ProLog/ProLog.h"
 
-namespace RenderX {
+namespace Rx {
 
-namespace RenderXGL {
+namespace RxGL {
 
 	// Cache of pipeline descriptions, keyed by GL program ID.
 	static std::unordered_map<uint32_t, PipelineDesc> PipelineCache;
 
 	// Convert engine ShaderType to OpenGL shader enums
-	static inline GLenum TOGLShaderType(ShaderType type) {
-		switch (type) {
-		case ShaderType::Vertex: return GL_VERTEX_SHADER;
-		case ShaderType::Fragment: return GL_FRAGMENT_SHADER;
-		case ShaderType::Geometry: return GL_GEOMETRY_SHADER;
-		case ShaderType::Compute: return GL_COMPUTE_SHADER;
-		case ShaderType::TessControl: return GL_TESS_CONTROL_SHADER;
-		case ShaderType::TessEvaluation: return GL_TESS_EVALUATION_SHADER;
+	static inline GLenum TOGLShaderType(ShaderStage stage) {
+		switch (stage) {
+		case ShaderStage::Vertex: return GL_VERTEX_SHADER;
+		case ShaderStage::Fragment: return GL_FRAGMENT_SHADER;
+		case ShaderStage::Geometry: return GL_GEOMETRY_SHADER;
+		case ShaderStage::Compute: return GL_COMPUTE_SHADER;
+		case ShaderStage::TessControl: return GL_TESS_CONTROL_SHADER;
+		case ShaderStage::TessEvaluation: return GL_TESS_EVALUATION_SHADER;
 		default:
-			RENDERX_ERROR("Unknown ShaderType: {}", static_cast<int>(type));
+			RENDERX_ERROR("Unknown ShaderType: {}", static_cast<int>(stage));
 			return 0;
 		}
 	}
@@ -142,7 +142,6 @@ namespace RenderXGL {
 
 		GLuint program = glCreateProgram();
 
-		PipelineCache[program] = desc;
 
 		for (auto shader : desc.shaders) {
 			glAttachShader(program, shader.id);
@@ -174,6 +173,9 @@ namespace RenderXGL {
 		// Shader deletion is handled by client-side code when appropriate
 		RENDERX_INFO("Shader program linked successfully | Program ID: {}", program);
 
+		// Only insert into the cache after a successful link
+		PipelineCache.emplace(static_cast<uint32_t>(program), desc);
+
 		return PipelineHandle(program);
 	}
 
@@ -183,12 +185,19 @@ namespace RenderXGL {
 
 		glUseProgram(handle.id);
 
+		// Lookup the pipeline description from the cache safely
+		auto it = PipelineCache.find(handle.id);
+		if (it == PipelineCache.end()) {
+			RENDERX_ERROR("Pipeline (program {}) not found in cache", handle.id);
+			return;
+		}
+
 		// Return if the pipeline is Compute
-		if (PipelineCache[handle.id].type == PipelineType::Compute)
+		if (it->second.type == PipelineType::Compute)
 			return;
 
 		// Fill mode
-		switch (PipelineCache[handle.id].rasterizer.fillMode) {
+		switch (it->second.rasterizer.fillMode) {
 		case FillMode::Solid: glPolygonMode(GL_FRONT_AND_BACK, GL_FILL); break;
 		case FillMode::Wireframe: glPolygonMode(GL_FRONT_AND_BACK, GL_LINE); break;
 		case FillMode::Point: glPolygonMode(GL_FRONT_AND_BACK, GL_POINT); break;
@@ -214,7 +223,7 @@ namespace RenderXGL {
 		}
 
 		// Front winding
-		glFrontFace(PipelineCache[handle.id].rasterizer.frontCounterClockwise ? GL_CCW : GL_CW);
+		glFrontFace(it->second.rasterizer.frontCounterClockwise ? GL_CCW : GL_CW);
 
 		// Depth bias
 		if (PipelineCache[handle.id].rasterizer.depthBias != 0.0f ||
@@ -228,41 +237,41 @@ namespace RenderXGL {
 		}
 
 		// Depth-Stencil State
-		if (PipelineCache[handle.id].depthStencil.depthEnable) {
+		if (it->second.depthStencil.depthEnable) {
 			glEnable(GL_DEPTH_TEST);
-			glDepthFunc(TOGLCompare(PipelineCache[handle.id].depthStencil.depthFunc));
-			glDepthMask(PipelineCache[handle.id].depthStencil.depthWriteEnable ? GL_TRUE : GL_FALSE);
+			glDepthFunc(TOGLCompare(it->second.depthStencil.depthFunc));
+			glDepthMask(it->second.depthStencil.depthWriteEnable ? GL_TRUE : GL_FALSE);
 		}
 		else {
 			glDisable(GL_DEPTH_TEST);
 		}
 
-		if (PipelineCache[handle.id].depthStencil.stencilEnable) {
+		if (it->second.depthStencil.stencilEnable) {
 			glEnable(GL_STENCIL_TEST);
-			glStencilMask(PipelineCache[handle.id].depthStencil.stencilWriteMask);
+			glStencilMask(it->second.depthStencil.stencilWriteMask);
 		}
 		else {
 			glDisable(GL_STENCIL_TEST);
 		}
 
 		// Blending State
-		if (PipelineCache[handle.id].blend.enable) {
+		if (it->second.blend.enable) {
 			glEnable(GL_BLEND);
 
 			glBlendFuncSeparate(
-				TOGLBlendFunc(PipelineCache[handle.id].blend.srcColor),
-				TOGLBlendFunc(PipelineCache[handle.id].blend.dstColor),
-				TOGLBlendFunc(PipelineCache[handle.id].blend.srcAlpha),
-				TOGLBlendFunc(PipelineCache[handle.id].blend.dstAlpha));
+				TOGLBlendFunc(it->second.blend.srcColor),
+				TOGLBlendFunc(it->second.blend.dstColor),
+				TOGLBlendFunc(it->second.blend.srcAlpha),
+				TOGLBlendFunc(it->second.blend.dstAlpha));
 
 			glBlendEquationSeparate(
-				TOGLBlendOp(PipelineCache[handle.id].blend.colorOp),
-				TOGLBlendOp(PipelineCache[handle.id].blend.alphaOp));
+				TOGLBlendOp(it->second.blend.colorOp),
+				TOGLBlendOp(it->second.blend.alphaOp));
 
-			glBlendColor(PipelineCache[handle.id].blend.blendFactor.r,
-				PipelineCache[handle.id].blend.blendFactor.g,
-				PipelineCache[handle.id].blend.blendFactor.b,
-				PipelineCache[handle.id].blend.blendFactor.a);
+			glBlendColor(it->second.blend.blendFactor.r,
+				it->second.blend.blendFactor.g,
+				it->second.blend.blendFactor.b,
+				it->second.blend.blendFactor.a);
 		}
 		else {
 			glDisable(GL_BLEND);
@@ -280,6 +289,6 @@ namespace RenderXGL {
 		return &it->second;
 	}
 
-} // namespace RenderXGL
+} // namespace RxGL
 
-} // namespace RenderX
+} // namespace Rx

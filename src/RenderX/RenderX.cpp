@@ -1,24 +1,29 @@
 #include "RenderX/RenderX.h"
 #include "RenderX/RenderXCore.h"
-#include "Backend/OpenGL/RenderXGL.h"
-#include "Backend/Vulkan/RenderXVK.h"
+#include "RenderX/DebugProfiler.h"
+#include "OpenGL/RenderXGL.h"
+#include "Vulkan/RenderXVK.h"
 #include "Log.h"
 #include "ProLog/ProLog.h"
 #include <cstring>
 
-namespace RenderX {
+namespace Rx {
 
 	// Global Variables
 	RenderDispatchTable g_DispatchTable;
 	GraphicsAPI API = GraphicsAPI::None;
 
 	void Init(const Window& window) {
+#ifdef _DEBUG
+		Debug::ConfigureDetailedProfiling();
+#else
 		ProLog::ProfilerConfig config;
 		config.enableProfiling = true;
 		config.enableLogging = true;
 		config.bufferSize = 500;
 		config.autoFlush = true;
 		ProLog::SetConfig(config);
+#endif
 		PROFILE_START_SESSION("RenderX", "RenderX.json");
 		RENDERX_LOG_INIT();
 
@@ -27,7 +32,7 @@ namespace RenderX {
 		switch (window.api) {
 		case GraphicsAPI::OpenGL: {
 			RENDERX_INFO("Initializing OpenGL backend...");
-#define RENDERER_FUNC(_ret, _name, ...) g_DispatchTable._name = RenderXGL::GL##_name;
+#define RENDERER_FUNC(_ret, _name, ...) g_DispatchTable._name = RxGL::GL##_name;
 #include "RenderX/RenderXAPI.def"
 #undef RENDERER_FUNC
 
@@ -42,7 +47,7 @@ namespace RenderX {
 
 		case GraphicsAPI::Vulkan: {
 			RENDERX_INFO("Initializing Vulkan backend...");
-#define RENDERER_FUNC(_ret, _name, ...) g_DispatchTable._name = RenderXVK::VK##_name;
+#define RENDERER_FUNC(_ret, _name, ...) g_DispatchTable._name = RxVK::VK##_name;
 #include "RenderX/RenderXAPI.def"
 #undef RENDERER_FUNC
 
@@ -67,14 +72,14 @@ namespace RenderX {
 	}
 
 	void ShutDown() {
-		PROFILE_PRINT_STATS();
+		Debug::PrintProfileReport();
 		PROFILE_END_SESSION();
 		return;
 	}
 
 	// API Functions
-	void Begin() { g_DispatchTable.Begin(); }
-	void End() { g_DispatchTable.End(); }
+	uint32_t Begin() { return g_DispatchTable.Begin(); }
+	void End(uint32_t frameIndex) { g_DispatchTable.End(frameIndex); }
 
 	ShaderHandle CreateShader(const ShaderDesc& desc) { return g_DispatchTable.CreateShader(desc); }
 	PipelineHandle CreateGraphicsPipeline(PipelineDesc& desc) { return g_DispatchTable.CreateGraphicsPipeline(desc); }
@@ -110,4 +115,4 @@ namespace RenderX {
 
 
 
-} // namespace RenderX
+} // namespace Rx

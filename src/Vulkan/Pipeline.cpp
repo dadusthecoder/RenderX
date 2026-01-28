@@ -2,70 +2,58 @@
 #include "RenderXVK.h"
 #include "CommonVK.h"
 
-namespace RenderX {
-
-
-	// ===================== RENDERXVK =====================
-
-	namespace RenderXVK {
-
-		std::unordered_map<uint32_t, VulkanShader> s_Shaders;
-		static std::unordered_map<uint32_t, VkPipeline> s_Pipelines;
-		static std::unordered_map<uint32_t, VkPipelineLayout> s_PipelineLayouts;
-
-		static uint32_t s_NextShaderId = 1;
-		static uint32_t s_NextPipelineId = 1;
-
-	} // namespace RenderXVK
-
+namespace Rx {
 
 	// ===================== SHADER =====================
-	ShaderHandle RenderXVK::VKCreateShader(const ShaderDesc& desc) {
+	ShaderHandle RxVK::VKCreateShader(const ShaderDesc& desc) {
 		VkShaderModuleCreateInfo ci{};
 		ci.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
 		ci.codeSize = desc.bytecode.size();
 		ci.pCode = reinterpret_cast<const uint32_t*>(desc.bytecode.data());
 
 		VkShaderModule shaderModule;
-		auto& ctx = RenderXVK::GetVulkanContext();
+		auto& ctx = RxVK::GetVulkanContext();
 
 		if (vkCreateShaderModule(ctx.device, &ci, nullptr, &shaderModule) != VK_SUCCESS) {
 			RENDERX_CRITICAL("Failed to create shader module");
 			return {};
 		}
 
-		ShaderHandle handle{ RenderXVK::s_NextShaderId++ };
-		RenderXVK::s_Shaders[handle.id] = { desc.entryPoint, desc.type, shaderModule };
+		// Use ResourcePool for shader management
+		VulkanShader shader{ desc.entryPoint, desc.type, shaderModule };
+		ShaderHandle handle = RxVK::g_ShaderPool.allocate(shader);
+
 		return handle;
 	}
 
-	void VKDestroyShader(ShaderHandle handle) {
-		auto it = RenderXVK::s_Shaders.find(handle.id);
-		if (it == RenderXVK::s_Shaders.end()) return;
+	// void RxVK::VKDestroyShader(ShaderHandle handle) {
+	// 	auto it = RxVK::s_Shaders.find(handle.id);
+	// 	if (it == RxVK::s_Shaders.end()) return;
 
-		auto& ctx = RenderXVK::GetVulkanContext();
-		vkDestroyShaderModule(ctx.device, it->second.shaderModule, nullptr);
-		RenderXVK::s_Shaders.erase(it);
-	}
+	// 	auto& ctx = RxVK::GetVulkanContext();
+	// 	vkDestroyShaderModule(ctx.device, it->second.shaderModule, nullptr);
+	// 	RxVK::s_Shaders.erase(it);
+	// }
 
 	// ===================== GRAPHICS PIPELINE =====================
-	PipelineHandle RenderXVK::VKCreateGraphicsPipeline(PipelineDesc& desc) {
+	PipelineHandle RxVK::VKCreateGraphicsPipeline(PipelineDesc& desc) {
 		auto& ctx = GetVulkanContext();
 
 		// ---------- Shader Stages ----------
 		std::vector<VkPipelineShaderStageCreateInfo> stages;
 		for (auto& sh : desc.shaders) {
-			auto it = s_Shaders.find(sh.id);
-			if (it == s_Shaders.end()) {
+			// Try ResourcePool first
+			auto& shader = g_ShaderPool.get(sh);
+			if (shader.shaderModule == VK_NULL_HANDLE) {
 				RENDERX_CRITICAL("Invalid shader handle");
-				return {};
+				return PipelineHandle{};
 			}
 
 			VkPipelineShaderStageCreateInfo stage{};
 			stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-			stage.stage = ToVkShaderStage(it->second.type);
-			stage.module = it->second.shaderModule;
-			stage.pName = it->second.entryPoint.c_str();
+			stage.stage = ToVkShaderStage(shader.type);
+			stage.module = shader.shaderModule;
+			stage.pName = shader.entryPoint.c_str();
 			stages.push_back(stage);
 		}
 
@@ -171,7 +159,11 @@ namespace RenderX {
 		VkPipelineLayout layout;
 		VkPipelineLayoutCreateInfo lci{};
 		lci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-		vkCreatePipelineLayout(ctx.device, &lci, nullptr, &layout);
+		VkResult lres = vkCreatePipelineLayout(ctx.device, &lci, nullptr, &layout);
+		if (lres != VK_SUCCESS) {
+			RENDERX_ERROR("Failed to create pipeline layout: {}", VkResultToString(lres));
+			return {};
+		}
 
 		// ---------- Create Pipeline ----------
 		VkGraphicsPipelineCreateInfo pci{};
@@ -191,33 +183,29 @@ namespace RenderX {
 		VkPipeline pipeline;
 		if (vkCreateGraphicsPipelines(ctx.device, VK_NULL_HANDLE, 1, &pci, nullptr, &pipeline) != VK_SUCCESS) {
 			RENDERX_CRITICAL("Failed to create graphics pipeline");
+			// destroy the pipeline layout to avoid leaking it
+			if (layout != VK_NULL_HANDLE) {
+				vkDestroyPipelineLayout(ctx.device, layout, nullptr);
+			}
 			return {};
 		}
 
-		PipelineHandle handle{ s_NextPipelineId++ };
-		s_Pipelines[handle.id] = pipeline;
-		s_PipelineLayouts[handle.id] = layout;
+		auto handle = g_PipelinePool.allocate(pipeline);
 		RENDERX_INFO("Created Vulkan Graphics Pipeline with ID {}", handle.id);
 		return handle;
 	}
 
 	// command List Functions
 
-	void RenderXVK::VKCmdSetPipeline(CommandList& cmdList, PipelineHandle pipeline) {
+	void RxVK::VKCmdSetPipeline(CommandList& cmdList, PipelineHandle pipeline) {
 		PROFILE_FUNCTION();
 
-		RENDERX_ASSERT_MSG(cmdList.IsValid(), "Invalid CommadList");
-		RENDERX_ASSERT_MSG(cmdList.isOpen, "CommandList must be open")
+		RENDERX_ASSERT_MSG(cmdList.IsValid(), "Invalid CommandList");
+		RENDERX_ASSERT_MSG(cmdList.isOpen, "CommandList must be open");
 
-		auto it = s_Pipelines.find(pipeline.id);
-		if (it == s_Pipelines.end()) {
-			RENDERX_ERROR("Invalid Pipeline Handle  , line:{} File:{}", __LINE__, __FILE__);
-			return;
-		}
-		auto& frame = GetCurrentFrameContex();
-
+		auto& frame = GetCurrentFrameContex(g_CurrentFrame);
 		// temp vkBindPoint
-		vkCmdBindPipeline(frame.commandBuffers[cmdList.id], VK_PIPELINE_BIND_POINT_GRAPHICS, it->second);
+		vkCmdBindPipeline(frame.commandBuffers[cmdList.id], VK_PIPELINE_BIND_POINT_GRAPHICS, g_PipelinePool.get(pipeline));
 	}
 
-} // namespace RenderX
+} // namespace Rx

@@ -30,12 +30,10 @@ set(CMAKE_OBJECT_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin-int")
 # Multi-config generators (VS, Xcode)
 foreach(CONFIG Debug Release RelWithDebInfo MinSizeRel)
     string(TOUPPER "${CONFIG}" CONFIG_UPPER)
-
-    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_${CONFIG_UPPER} "${CMAKE_BINARY_DIR}/bin/${CONFIG}")
-    set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_${CONFIG_UPPER} "${CMAKE_BINARY_DIR}/bin/${CONFIG}")
-    set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_${CONFIG_UPPER} "${CMAKE_BINARY_DIR}/bin/${CONFIG}")
-
-    set(CMAKE_OBJECT_OUTPUT_DIRECTORY_${CONFIG_UPPER} "${CMAKE_BINARY_DIR}/bin-int/${CONFIG}")
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_${CONFIG_UPPER} "${CMAKE_BINARY_DIR}/bin/${CONFIG}/${PROJECT_NAME}")
+    set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_${CONFIG_UPPER} "${CMAKE_BINARY_DIR}/bin/${CONFIG}/${PROJECT_NAME}")
+    set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_${CONFIG_UPPER} "${CMAKE_BINARY_DIR}/bin/${CONFIG}/${PROJECT_NAME}")
+    set(CMAKE_OBJECT_OUTPUT_DIRECTORY_${CONFIG_UPPER} "${CMAKE_BINARY_DIR}/bin-int/${CONFIG}/${PROJECT_NAME}")
 endforeach()
 
 # ────────────────────────────────────────────────────────────────
@@ -46,6 +44,8 @@ add_subdirectory(External/spdlog)
 add_subdirectory(External/glfw)
 add_subdirectory(External_local/glew-2.1.0/build/cmake)
 add_subdirectory(External_local/ProLog)
+
+
 add_subdirectory(Test/HelloTriangle)
 
 # ────────────────────────────────────────────────────────────────
@@ -54,17 +54,17 @@ add_subdirectory(Test/HelloTriangle)
 file(GLOB_RECURSE SOURCES
     "${CMAKE_SOURCE_DIR}/src/RenderX/*.cpp"
     "${CMAKE_SOURCE_DIR}/src/RenderX/*.h"
-    "${CMAKE_SOURCE_DIR}/src/Backend/OpenGL/*.cpp"
-    "${CMAKE_SOURCE_DIR}/src/Backend/OpenGL/*.h"
-    "${CMAKE_SOURCE_DIR}/src/Backend/Vulkan/*.cpp"
-    "${CMAKE_SOURCE_DIR}/src/Backend/Vulkan/*.h"
+    "${CMAKE_SOURCE_DIR}/src/OpenGL/*.cpp"
+    "${CMAKE_SOURCE_DIR}/src/OpenGL/*.h"
+    "${CMAKE_SOURCE_DIR}/src/Vulkan/*.cpp"
+    "${CMAKE_SOURCE_DIR}/src/Vulkan/*.h"
 )
 
 find_package(Vulkan REQUIRED)
 # ────────────────────────────────────────────────────────────────
 #   RenderX Shared Library
 # ────────────────────────────────────────────────────────────────
-add_library(${PROJECT_NAME} SHARED ${SOURCES} "src/Backend/Vulkan/FrameBufferVK.cpp")
+add_library(${PROJECT_NAME} SHARED ${SOURCES})
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE RENDERX_BUILD_DLL)
 

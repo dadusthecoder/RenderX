@@ -1,7 +1,7 @@
 #include "CommonGL.h"
 
-namespace RenderX {
-namespace RenderXGL {
+namespace Rx {
+namespace RxGL {
 
 	FramebufferHandle GLCreateFramebuffer(const FramebufferDesc&) {
 		RENDERX_ASSERT(false && "OpenGL Framebuffer not implemented yet");
@@ -9,6 +9,6 @@ namespace RenderXGL {
 	}
 
 	void GLDestroyFramebuffer(FramebufferHandle&) {}
-} // namespace RenderXGL
+} // namespace RxGL
 
-} // namespace RenderX
+} // namespace Rx

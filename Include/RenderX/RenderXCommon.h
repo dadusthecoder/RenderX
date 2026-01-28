@@ -69,38 +69,56 @@
 #endif
 #endif
 
-namespace RenderX {
 
-	/// Lightweight strongly-typed wrapper around a 32-bit resource id.
-	/// All GPU-resident objects in RenderX are referenced via Handle-based aliases.
-	struct RENDERX_API Handle {
-		uint32_t id = 0;
+#define RENDERX_DEFINE_HANDLE(Name) \
+	namespace HandleType {          \
+		struct Name {};             \
+	}                               \
+	using Name##Handle = Handle<HandleType::Name>;
 
+
+namespace Rx {
+	// Base Handle Template
+	template <typename Tag>
+	struct Handle {
+	public:
+		using ValueType = uint64_t;
+		static constexpr ValueType INVALID = 0;
+
+		Handle(ValueType key) : id(key) {}
 		Handle() = default;
-		Handle(uint32_t handleId) : id(handleId) {}
 
-		bool IsValid() const { return id != 0; }
+		uint32_t generation() const {
+			return static_cast<uint32_t>(id >> 32);
+		}
+		uint32_t index() const {
+			return static_cast<uint32_t>(id & 0xFFFFFFFFu);
+		}
+		bool IsValid() const { return id != INVALID; }
 
-		bool operator==(const Handle& other) const { return id == other.id; }
-		bool operator!=(const Handle& other) const { return id != other.id; }
-		bool operator<(const Handle& other) const { return id < other.id; }
+		// operators
+		bool operator==(const Handle& o) const { return value == o.id; }
+		bool operator!=(const Handle& o) const { return value != o.id; }
+		bool operator<(const Handle& o) const { return value < o.id; }
+
+		ValueType id = INVALID;
 	};
 
-	using BufferHandle = Handle;
-	using TextureHandle = Handle;
-	using SamplerHandle = Handle;
-	using ShaderHandle = Handle;
-	using PipelineHandle = Handle;
-	using FramebufferHandle = Handle;
-	using RenderPassHandle = Handle;
-	using SurfaceHandle = Handle;
-	using SwapchainHandle = Handle;
-	using SRGLayoutHandle = Handle;
-	using BufferViewHandle = Handle;
-	using TextureViewHandle = Handle;
+	// Typed Handle Definitions
+	RENDERX_DEFINE_HANDLE(Buffer)
+	RENDERX_DEFINE_HANDLE(BufferView)
+	RENDERX_DEFINE_HANDLE(Texture)
+	RENDERX_DEFINE_HANDLE(TextureView)
+	RENDERX_DEFINE_HANDLE(Sampler)
+	RENDERX_DEFINE_HANDLE(Shader)
+	RENDERX_DEFINE_HANDLE(Pipeline)
+	RENDERX_DEFINE_HANDLE(PipelineLayout)
+	RENDERX_DEFINE_HANDLE(Framebuffer)
+	RENDERX_DEFINE_HANDLE(RenderPass)
+	RENDERX_DEFINE_HANDLE(ResourceGroupLayout)
+	RENDERX_DEFINE_HANDLE(ResourceGroup)
+	RENDERX_DEFINE_HANDLE(QueryPool)
 
-
-	constexpr uint32_t INVALID_HANDLE = 0;
 
 	// GLM type aliases for consistency
 	using Vec2 = glm::vec2;
@@ -320,7 +338,7 @@ namespace RenderX {
 		static constexpr bool enable = true;
 	};
 
-	enum class SRGLifetime : uint8_t {
+	enum class ResourceGroupLifetime : uint8_t {
 		Persistent,
 		PerFrame,
 		PerDraw
@@ -546,9 +564,9 @@ namespace RenderX {
 
 
 	// ==================== Sahder Resource Groups (NEW) ====================
-	// here SRG stands for Shader Resource Group
-	/// Describes a single binding slot in a SRGLayout
-	struct SRGLayoutItem {
+	// here ResourceGroup stands for Shader Resource Group
+	/// Describes a single binding slot in a ResourceGroupLayout
+	struct ResourceGroupLayoutItem {
 		// Binding index (e.g., layout(binding = 0))
 		uint32_t binding;
 		// What kind of resource
@@ -558,90 +576,99 @@ namespace RenderX {
 		// Array size (1 for non-arrays, >1 for arrays)
 		uint32_t count;
 
-		SRGLayoutItem()
+		ResourceGroupLayoutItem()
 			: binding(0), type(ResourceType::ConstantBuffer),
 			  stages(ShaderStage::All), count(1) {}
 
-		SRGLayoutItem(uint32_t bind, ResourceType t, ShaderStage s = ShaderStage::All, uint32_t cnt = 1)
+		ResourceGroupLayoutItem(uint32_t bind, ResourceType t, ShaderStage s = ShaderStage::All, uint32_t cnt = 1)
 			: binding(bind), type(t), stages(s), count(cnt) {}
 
 		// Convenience factory methods
-		static SRGLayoutItem ConstantBuffer(uint32_t binding, ShaderStage stages = ShaderStage::All) {
-			return SRGLayoutItem(binding, ResourceType::ConstantBuffer, stages, 1);
+		static ResourceGroupLayoutItem ConstantBuffer(uint32_t binding, ShaderStage stages = ShaderStage::All) {
+			return ResourceGroupLayoutItem(binding, ResourceType::ConstantBuffer, stages, 1);
 		}
 
-		static SRGLayoutItem StorageBuffer(uint32_t binding, ShaderStage stages = ShaderStage::All, bool writable = false) {
-			return SRGLayoutItem(binding,
+		static ResourceGroupLayoutItem StorageBuffer(uint32_t binding, ShaderStage stages = ShaderStage::All, bool writable = false) {
+			return ResourceGroupLayoutItem(binding,
 				writable ? ResourceType::RWStorageBuffer : ResourceType::StorageBuffer,
 				stages, 1);
 		}
 
-		static SRGLayoutItem Texture_SRV(uint32_t binding, ShaderStage stages = ShaderStage::All, uint32_t count = 1) {
-			return SRGLayoutItem(binding, ResourceType::Texture_SRV, stages, count);
+		static ResourceGroupLayoutItem Texture_SRV(uint32_t binding, ShaderStage stages = ShaderStage::All, uint32_t count = 1) {
+			return ResourceGroupLayoutItem(binding, ResourceType::Texture_SRV, stages, count);
 		}
 
-		static SRGLayoutItem Texture_UAV(uint32_t binding, ShaderStage stages = ShaderStage::All, uint32_t count = 1) {
-			return SRGLayoutItem(binding, ResourceType::Texture_UAV, stages, count);
+		static ResourceGroupLayoutItem Texture_UAV(uint32_t binding, ShaderStage stages = ShaderStage::All, uint32_t count = 1) {
+			return ResourceGroupLayoutItem(binding, ResourceType::Texture_UAV, stages, count);
 		}
 
-		static SRGLayoutItem Sampler(uint32_t binding, ShaderStage stages = ShaderStage::All) {
-			return SRGLayoutItem(binding, ResourceType::Sampler, stages, 1);
+		static ResourceGroupLayoutItem Sampler(uint32_t binding, ShaderStage stages = ShaderStage::All) {
+			return ResourceGroupLayoutItem(binding, ResourceType::Sampler, stages, 1);
 		}
 
-		static SRGLayoutItem CombinedTextureSampler(uint32_t binding, ShaderStage stages = ShaderStage::All) {
-			return SRGLayoutItem(binding, ResourceType::CombinedTextureSampler, stages, 1);
+		static ResourceGroupLayoutItem CombinedTextureSampler(uint32_t binding, ShaderStage stages = ShaderStage::All) {
+			return ResourceGroupLayoutItem(binding, ResourceType::CombinedTextureSampler, stages, 1);
 		}
 	};
 
 	/// Describes the layout/structure of a descriptor set
-	struct SRGLayoutDesc {
-		std::vector<SRGLayoutItem> Resources;
+	struct ResourceGroupLayoutDesc {
+		std::vector<ResourceGroupLayoutItem> Resources;
 		const char* debugName = nullptr;
 
-		SRGLayoutDesc() = default;
+		ResourceGroupLayoutDesc() = default;
 
-		SRGLayoutDesc(uint32_t setIndex, const std::vector<SRGLayoutItem>& items)
+		ResourceGroupLayoutDesc(uint32_t setIndex, const std::vector<ResourceGroupLayoutItem>& items)
 			: Resources(items) {}
 	};
 
 	/// Describes a single resource binding in a descriptor set instance
-	struct SRGItem {
+	struct ResourceGroupItem {
 		uint32_t binding;
 		ResourceType type;
 
-		// Union for different resource types
+		// Union for different resource types. CombinedTextureSampler needs both
+		// texture and sampler stored simultaneously; place those into a small
+		// struct inside the union to avoid overwriting when both are used.
 		union {
 			BufferViewHandle buffer;
 			TextureViewHandle texture;
 			SamplerHandle sampler;
 			uint64_t rawHandle;
+
+			struct CombinedHandles {
+				TextureViewHandle texture;
+				SamplerHandle sampler;
+			};
+
+			CombinedHandles combinedHandles;
 		};
 
 
 		uint32_t arrayIndex = 0; // For Resource to arrays of descriptors
 
-		SRGItem()
+		ResourceGroupItem()
 			: binding(0), type(ResourceType::ConstantBuffer), rawHandle(0) {}
 
 		// Convenience factory methods
-		static SRGItem ConstantBuffer(uint32_t binding, BufferViewHandle buf, uint32_t offset = 0, uint32_t range = 0) {
-			SRGItem item;
+		static ResourceGroupItem ConstantBuffer(uint32_t binding, BufferViewHandle buf, uint32_t offset = 0, uint32_t range = 0) {
+			ResourceGroupItem item;
 			item.binding = binding;
 			item.type = ResourceType::ConstantBuffer;
 			item.buffer = buf;
 			return item;
 		}
 
-		static SRGItem StorageBuffer(uint32_t binding, BufferViewHandle buf, bool writable = false) {
-			SRGItem item;
+		static ResourceGroupItem StorageBuffer(uint32_t binding, BufferViewHandle buf, bool writable = false) {
+			ResourceGroupItem item;
 			item.binding = binding;
 			item.type = writable ? ResourceType::RWStorageBuffer : ResourceType::StorageBuffer;
 			item.buffer = buf;
 			return item;
 		}
 
-		static SRGItem Texture_SRV(uint32_t binding, TextureViewHandle tex, uint32_t arrayIndex = 0) {
-			SRGItem item;
+		static ResourceGroupItem Texture_SRV(uint32_t binding, TextureViewHandle tex, uint32_t arrayIndex = 0) {
+			ResourceGroupItem item;
 			item.binding = binding;
 			item.type = ResourceType::Texture_SRV;
 			item.texture = tex;
@@ -649,42 +676,44 @@ namespace RenderX {
 			return item;
 		}
 
-		static SRGItem Texture_UAV(uint32_t binding, TextureViewHandle tex, uint32_t mipLevel = 0) {
-			SRGItem item;
+		static ResourceGroupItem Texture_UAV(uint32_t binding, TextureViewHandle tex, uint32_t mipLevel = 0) {
+			ResourceGroupItem item;
 			item.binding = binding;
 			item.type = ResourceType::Texture_UAV;
 			item.texture = tex;
 			return item;
 		}
 
-		static SRGItem Sampler(uint32_t binding, SamplerHandle samp) {
-			SRGItem item;
+		static ResourceGroupItem Sampler(uint32_t binding, SamplerHandle samp) {
+			ResourceGroupItem item;
 			item.binding = binding;
 			item.type = ResourceType::Sampler;
 			item.sampler = samp;
 			return item;
 		}
 
-		static SRGItem CombinedTextureSampler(uint32_t binding, TextureHandle tex, SamplerHandle samp) {
-			SRGItem item;
+		static ResourceGroupItem CombinedTextureSampler(uint32_t binding, TextureViewHandle tex, SamplerHandle samp) {
+			ResourceGroupItem item;
 			item.binding = binding;
 			item.type = ResourceType::CombinedTextureSampler;
-			item.texture = tex;
-			item.sampler = samp; // Store both - backend will handle appropriately
+			// Store both handles into the combined struct so the union doesn't
+			// overwrite one with the other.
+			item.combinedHandles.texture = tex;
+			item.combinedHandles.sampler = samp;
 			return item;
 		}
 	};
 
 	/// Describes a descriptor set instance
-	struct SRGDesc {
-		SRGLayoutHandle layout;			// Must match layout used in pipeline
-		std::vector<SRGItem> Resources; // Actual resources to bind
-		SRGLifetime flags = SRGLifetime::Persistent;
+	struct ResourceGroupDesc {
+		ResourceGroupLayoutHandle layout;		  // Must match layout used in pipeline
+		std::vector<ResourceGroupItem> Resources; // Actual resources to bind
+		ResourceGroupLifetime flags = ResourceGroupLifetime::Persistent;
 		const char* debugName = nullptr;
 
-		SRGDesc() = default;
+		ResourceGroupDesc() = default;
 
-		SRGDesc(SRGLayoutHandle layoutHandle, const std::vector<SRGItem>& items)
+		ResourceGroupDesc(ResourceGroupLayoutHandle layoutHandle, const std::vector<ResourceGroupItem>& items)
 			: layout(layoutHandle), Resources(items) {}
 	};
 
@@ -699,11 +728,10 @@ namespace RenderX {
 		DepthStencilState depthStencil;
 		BlendState blend;
 		RenderPassHandle renderPass;
-		SRGLayoutHandle SRGLayout;
+		ResourceGroupLayoutHandle resourceGroupLayout;
 
 		PipelineDesc()
-			: primitiveType(PrimitiveType::Triangles), renderPass(INVALID_HANDLE) {
-		}
+			: primitiveType(PrimitiveType::Triangles), renderPass(0) {}
 	};
 
 	struct ClearValue {
@@ -756,19 +784,19 @@ namespace RenderX {
 		RenderPassHandle renderPass;
 
 		std::vector<TextureHandle> colorAttachments;
-		TextureHandle depthStencilAttachment = INVALID_HANDLE;
+		TextureHandle depthStencilAttachment;
 
 		uint32_t width = 0;
 		uint32_t height = 0;
 		uint32_t layers = 1;
 
 		FramebufferDesc(int w, int h)
-			: renderPass(INVALID_HANDLE), depthStencilAttachment(INVALID_HANDLE),
+			: renderPass(0), depthStencilAttachment(0),
 			  width(w), height(h) {
 		}
 
 		FramebufferDesc(const IVec2& size)
-			: renderPass(INVALID_HANDLE), depthStencilAttachment(INVALID_HANDLE),
+			: renderPass(0), depthStencilAttachment(0),
 			  width(size.x), height(size.y) {
 		}
 	};
@@ -794,10 +822,12 @@ namespace RenderX {
 		}
 	};
 
-	struct RENDERX_API CommandList : public Handle {
+
+	struct RENDERX_API CommandList {
 		void open();
 		void close();
 		bool isOpen = false;
+		bool IsValid() const { return id != 0; };
 
 		void setPipeline(const PipelineHandle& pipeline);
 		void setVertexBuffer(const BufferHandle& buffer, uint64_t offset = 0);
@@ -812,6 +842,8 @@ namespace RenderX {
 			const ClearValue*, uint32_t);
 
 		void endRenderPass();
+
+		uint64_t id;
 	};
 
 } // namespace  RenderX

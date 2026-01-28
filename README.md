@@ -25,6 +25,8 @@ Current status:
 - `src/RenderX/` – core RHI interfaces and common code
 - `src/Backend/OpenGL/` – OpenGL implementation of the RHI
 - `src/Backend/Vulkan/` – Vulkan implementation (WIP)
+- `src/OpenGL/` – OpenGL implementation (moved/flattened)
+- `src/Vulkan/` – Vulkan implementation (moved/flattened)
 - `Include/` – public headers for consumers of the RenderX library
 - `External/` – third‑party libraries as git submodules
 - `External_local/` – locally vendored libraries (e.g. GLEW, ProLog)
@@ -128,6 +130,8 @@ This produces:
 
 - `RenderX` shared library in `Build/bin/<Config>/`
 - `HelloTriangle` test application in `Build/test/HelloTriangle/<Config>/`
+ - `RenderX` shared library in `Build/bin/<Config>/RenderX/`
+ - `HelloTriangle` test application in `Build/test/HelloTriangle/<Config>/`
 
 A post‑build step copies `RenderX.dll` next to the `HelloTriangle` executable so the test app can run directly.
 
@@ -144,6 +148,50 @@ You should see a simple triangle rendered using the RenderX RHI.
 
 ---
 
+## 🔍 Debug Profiling (NEW)
+
+RenderX includes **detailed debug profiling** to help you identify bottlenecks:
+
+### Features
+- ✅ **Automatic in Debug builds** – zero config needed
+- ✅ **Chrome DevTools timeline** – microsecond-precision visualization  
+- ✅ **Categorized events** – GPU, Sync, Swapchain, Memory, CommandBuffer, Descriptor
+- ✅ **Aggregated statistics** – function call counts, min/max/avg times, % of session
+- ✅ **Zero Release overhead** – all profiling macros expand to no-op in Release
+
+### Quick Start
+```cpp
+#include "RenderX/RenderX.h"
+
+int main() {
+    RenderX::Init(window);  // Profiling enabled automatically in Debug
+    
+    for (int frame = 0; frame < 100; ++frame) {
+        PROFILE_FRAME_BEGIN(frame);
+        RenderX::Begin();
+        // ... render ...
+        RenderX::End();
+        PROFILE_FRAME_END(frame);
+    }
+    
+    RenderX::ShutDown();  // Writes RenderX.json and profile_statistics.txt
+}
+```
+
+Then view results:
+```bash
+# Timeline (Chrome DevTools)
+open chrome://tracing
+# Load RenderX.json
+
+# Statistics (text)
+cat profile_statistics.txt
+```
+
+**See [PROFILING_QUICKSTART.md](PROFILING_QUICKSTART.md) for complete guide.**
+
+---
+
 ## Backend selection
 
 By default both OpenGL and Vulkan backends are built; which one is used is controlled in code (e.g., via your renderer initialization path). A more explicit CMake‑time toggle may be added later; for now, consumers should assume OpenGL is the stable backend and Vulkan is experimental.
@@ -154,6 +202,7 @@ By default both OpenGL and Vulkan backends are built; which one is used is contr
 
 - C++ standard: C++17 (see `CMakeLists.txt`)
 - Output directories are configured so that binaries are placed under `Build/bin/<Config>` and intermediate objects under `Build/bin-int/<Config>`
+ - Output directories are configured so that binaries are placed under `Build/bin/<Config>/<PROJECT_NAME>/` (e.g. `Build/bin/<Config>/RenderX/`) and intermediate objects under `Build/bin-int/<Config>`
 - The build currently always compiles both OpenGL and Vulkan backends; backend selection is handled in code.
 
 ---

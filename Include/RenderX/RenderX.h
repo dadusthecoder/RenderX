@@ -11,7 +11,7 @@
 // implementations routed through the dispatch table.
 //------------------------------------------------------------------------------
 
-namespace RenderX {
+namespace Rx {
 
 	//------------------------------------------------------------------------------
 	// API INITIALIZATION
@@ -76,13 +76,6 @@ namespace RenderX {
 	RENDERX_API void ShutDown();
 
 	// frame Lifecycle
-	RENDERX_API void Begin();
-	RENDERX_API void End();
-
-	RENDERX_API SurfaceHandle CreateSurface(void* nativeWindow);
-	RENDERX_API SwapchainHandle CreateSwapchain(SurfaceHandle surface);
-
-	RENDERX_API void DestroySwapchain(SwapchainHandle);
-	RENDERX_API void DestroySurface(SurfaceHandle);
-	
-} // namespace RenderX
+	RENDERX_API uint32_t Begin();
+	RENDERX_API void End(uint32_t frameIndex);	
+} // namespace Rx

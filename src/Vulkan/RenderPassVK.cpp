@@ -3,10 +3,9 @@
 #include "CommonVK.h"
 
 
-namespace RenderX {
-namespace RenderXVK {
+namespace Rx {
+namespace RxVK {
 
-	std::unordered_map<uint32_t, VkRenderPass> g_RenderPasses;
 	static uint32_t s_NextRenderPassId = 1;
 
 	RenderPassHandle VKCreateRenderPass(const RenderPassDesc& desc) {
@@ -75,20 +74,21 @@ namespace RenderXVK {
 		VkRenderPass rp;
 		VK_CHECK(vkCreateRenderPass(ctx.device, &ci, nullptr, &rp));
 
-		RenderPassHandle handle = s_NextRenderPassId++;
-		g_RenderPasses[handle.id] = rp;
+		// Use ResourcePool for RenderPass management
+		RenderPassHandle handle = g_RenderPassPool.allocate(rp);
 
 		return handle;
 	}
 
 	void VKDestroyRenderPass(RenderPassHandle& handle) {
 		auto& ctx = GetVulkanContext();
-		auto it = g_RenderPasses.find(handle.id);
-		if (it == g_RenderPasses.end())
-			return;
 
-		vkDestroyRenderPass(ctx.device, it->second, nullptr);
-		g_RenderPasses.erase(it);
+		// Try ResourcePool first
+		auto& rp = g_RenderPassPool.get(handle);
+		if (rp != VK_NULL_HANDLE) {
+			vkDestroyRenderPass(ctx.device, rp, nullptr);
+			g_RenderPassPool.free(handle);
+		}
 	}
 
 	void VKCmdBeginRenderPass(
@@ -100,10 +100,16 @@ namespace RenderXVK {
 
 		RENDERX_ASSERT_MSG(cmd.IsValid(), "Invalid CommandList");
 		RENDERX_ASSERT_MSG(cmd.isOpen, "VKCmdBeginRenderPass : CommandList must be open");
-		auto& frame = GetCurrentFrameContex();
+		auto& frame = GetCurrentFrameContex(g_CurrentFrame);
 		auto& ctx = GetVulkanContext();
 
-		VkRenderPass rp = g_RenderPasses[pass.id];
+		// Try ResourcePool first
+		auto& rp = g_RenderPassPool.get(pass);
+		if (rp == VK_NULL_HANDLE) {
+			RENDERX_ERROR("Invalid render pass handle: {}", pass.id);
+			return;
+		}
+
 		VkFramebuffer framebuffer = ctx.swapchainFramebuffers[frame.swapchainImageIndex];
 
 		std::vector<VkClearValue> vkClears;
@@ -135,7 +141,7 @@ namespace RenderXVK {
 		RENDERX_ASSERT_MSG(cmdList.IsValid(), "Invalid CommandList");
 		RENDERX_ASSERT_MSG(cmdList.isOpen, "VKCmdEndRenderPass : CommandList must be open");
 
-		auto& frame = GetCurrentFrameContex();
+		auto& frame = GetCurrentFrameContex(g_CurrentFrame);
 		vkCmdEndRenderPass(frame.commandBuffers[cmdList.id]);
 	}
 
@@ -143,7 +149,7 @@ namespace RenderXVK {
 		return GetVulkanContext().swapchainRenderPassHandle;
 	}
 
-} // namespace  RenderXVK
+} // namespace  RxVK
 
 
-} // namespace RenderX
+} // namespace Rx

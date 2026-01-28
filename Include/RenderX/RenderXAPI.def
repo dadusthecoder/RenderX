@@ -2,8 +2,8 @@
 RENDERER_FUNC(void, Init, const Window&)
 
 // frame Lifetime
-RENDERER_FUNC(void, Begin)
-RENDERER_FUNC(void, End)
+RENDERER_FUNC(uint32_t, Begin)
+RENDERER_FUNC(void, End, uint32_t)
 
 // pipeline Graphics
 RENDERER_FUNC(PipelineHandle, CreateGraphicsPipeline, PipelineDesc& desc)
@@ -17,14 +17,15 @@ RENDERER_FUNC(BufferHandle, CreateBuffer, const BufferDesc& desc)
 RENDERER_FUNC(CommandList, CreateCommandList)
 RENDERER_FUNC(void, DestroyCommandList, CommandList& cmdList)
 RENDERER_FUNC(void, ExecuteCommandList, CommandList& cmdList)
+// RENDERER_FUNC(uint32_t , GetCurrentFrameIndex)
 
 //
-RENDERER_FUNC(SRGLayoutHandle , CreateSRGLayout , const SRGLayoutDesc& desc)
+RENDERER_FUNC(ResourceGroupLayoutHandle, CreateResourceGroupLayout, const ResourceGroupLayoutDesc& desc)
 
 RENDERER_FUNC(RenderPassHandle, CreateRenderPass, const RenderPassDesc&)
 RENDERER_FUNC(void, DestroyRenderPass, RenderPassHandle&)
 RENDERER_FUNC(RenderPassHandle, GetDefaultRenderPass)
-	
+
 RENDERER_FUNC(FramebufferHandle, CreateFramebuffer, const FramebufferDesc&)
 RENDERER_FUNC(void, DestroyFramebuffer, FramebufferHandle&)
 

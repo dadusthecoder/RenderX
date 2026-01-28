@@ -1,6 +1,6 @@
 #include "CommonGL.h"
 
-namespace RenderX {
+namespace Rx {
 
 	static inline GLenum TOGLBufferUse(BufferUsage usage) {
 		switch (usage) {
@@ -34,14 +34,14 @@ namespace RenderX {
 		}
 	}
 
-	namespace RenderXGL {
+	namespace RxGL {
 
 		// Low-level helper used by the RHI entry point
 		BufferHandle GLCreateBuffer(const BufferDesc& desc) {
 			PROFILE_FUNCTION();
 			BufferHandle handle;
 			GLenum target = TOGLBufferTarget(desc.type);
-			glGenBuffers(1, &handle.id);
+			glGenBuffers(1, reinterpret_cast<GLuint*>(&handle.id));
 			glBindBuffer(target, handle.id);
 			glBufferData(target, static_cast<GLsizeiptr>(desc.size), desc.initialData, TOGLBufferUse(desc.usage));
 			RENDERX_INFO("OpenGL: Created Buffer | ID: {} | Size: {} bytes", handle.id, desc.size);
@@ -73,6 +73,6 @@ namespace RenderX {
 			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffer.id);
 		}
 
-	} // namespace RenderXGL
+	} // namespace RxGL
 
-} // namespace RenderX
+} // namespace Rx

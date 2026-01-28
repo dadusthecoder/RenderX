@@ -1,6 +1,6 @@
 #include <type_traits>
 
-namespace RenderX {
+namespace Rx {
 	template <typename Enum>
 	struct EnableBitMaskOperators {
 		static constexpr bool enable = false;

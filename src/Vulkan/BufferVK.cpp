@@ -2,9 +2,9 @@
 #include "RenderXVK.h"
 #include "CommonVK.h"
 
-namespace RenderX {
+namespace Rx {
 
-	VkBufferUsageFlags ToVkBufferType(BufferDesc desc) {
+	inline VkBufferUsageFlags ToVkBufferType(BufferDesc desc) {
 		VkBufferUsageFlags usage = 0;
 		switch (desc.type) {
 		case BufferType::Vertex:
@@ -33,7 +33,7 @@ namespace RenderX {
 		return usage;
 	}
 
-	VkMemoryPropertyFlags ToVkBufferUsage(BufferUsage usage) {
+	inline VkMemoryPropertyFlags ToVkBufferUsage(BufferUsage usage) {
 		switch (usage) {
 		case BufferUsage::Static:
 			return VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
@@ -47,17 +47,13 @@ namespace RenderX {
 		return 0;
 	}
 
-	namespace RenderXVK {
-
-		// Static members
-		static uint32_t s_NextBufferId = 1;
-		std::unordered_map<uint32_t, VulkanBuffer> g_Buffers;
+	namespace RxVK {
 
 		// Helper functions
 		uint32_t VKFindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) {
 			PROFILE_FUNCTION();
 			VkPhysicalDeviceMemoryProperties memPoroerties{};
-			vkGetPhysicalDeviceMemoryProperties(RenderXVK::GetVulkanContext().physicalDevice, &memPoroerties);
+			vkGetPhysicalDeviceMemoryProperties(RxVK::GetVulkanContext().physicalDevice, &memPoroerties);
 
 			for (uint32_t i = 0; i < memPoroerties.memoryTypeCount; i++) {
 				if (typeFilter & (1 << i) && (memPoroerties.memoryTypes[i].propertyFlags & properties) == properties)
@@ -112,7 +108,7 @@ namespace RenderX {
 			VkCommandBufferAllocateInfo allocInfoCmd{};
 			allocInfoCmd.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
 			allocInfoCmd.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-			allocInfoCmd.commandPool = GetCurrentFrameContex().commandPool;
+			allocInfoCmd.commandPool = GetCurrentFrameContex(g_CurrentFrame).commandPool;
 			allocInfoCmd.commandBufferCount = 1;
 			result = vkAllocateCommandBuffers(ctx.device, &allocInfoCmd, &commandBuffer);
 			if (!CheckVk(result, "Failed to allocate command buffer for staging copy")) {
@@ -192,24 +188,23 @@ namespace RenderX {
 				}
 			}
 
-			handle.id = s_NextBufferId++;
 			vulkanBuffer.bindingCount = desc.bindingCount;
-			g_Buffers[handle.id] = vulkanBuffer;
-
+			handle = g_BufferPool.allocate(vulkanBuffer);
 			RENDERX_INFO("Vulkan: Created Buffer | ID: {} | Size: {} bytes", handle.id, desc.size);
 			return handle;
 		}
 
 		void VKDestroyBuffer(const BufferHandle& handle) {
 			PROFILE_FUNCTION();
-			RenderXVK::VulkanContext& ctx = RenderXVK::GetVulkanContext();
-			auto it = RenderXVK::g_Buffers.find(handle.id);
-			if (it == RenderXVK::g_Buffers.end())
-				return;
+			RxVK::VulkanContext& ctx = RxVK::GetVulkanContext();
 
-			vkDestroyBuffer(ctx.device, it->second.buffer, nullptr);
-			vkFreeMemory(ctx.device, it->second.memory, nullptr);
-			RenderXVK::g_Buffers.erase(it);
+			// Try ResourcePool first
+			auto& buffer = g_BufferPool.get(handle);
+			if (buffer.buffer != VK_NULL_HANDLE) {
+				vkDestroyBuffer(ctx.device, buffer.buffer, nullptr);
+				vkFreeMemory(ctx.device, buffer.memory, nullptr);
+				g_BufferPool.free(const_cast<BufferHandle&>(handle));
+			}
 		}
 
 		// command list related functions can go here
@@ -220,18 +215,21 @@ namespace RenderX {
 			RENDERX_ASSERT_MSG(cmdList.isOpen, "CommandList must be open");
 			RENDERX_ASSERT_MSG(handle.IsValid(), "Invalid BufferHandle");
 
-			auto& frame = GetCurrentFrameContex();
+			auto& frame = GetCurrentFrameContex(g_CurrentFrame);
 
-			auto it = g_Buffers.find(handle.id);
-			RENDERX_ASSERT_MSG(it != g_Buffers.end(), "Buffer not found");
+			// get from ResourcePool 
+			auto& buffer = g_BufferPool.get(handle);
+			if (buffer.buffer == VK_NULL_HANDLE) {
+				RENDERX_ASSERT(false);
+			}
 
 			VkDeviceSize vkOffset = static_cast<VkDeviceSize>(offset);
 
 			vkCmdBindVertexBuffers(
 				frame.commandBuffers[cmdList.id],
-				0,						 // binding
-				it->second.bindingCount, // binding count
-				&it->second.buffer,
+				0,					 // binding
+				buffer.bindingCount, // binding count
+				&buffer.buffer,
 				&vkOffset);
 		}
 
@@ -241,23 +239,27 @@ namespace RenderX {
 			RENDERX_ASSERT_MSG(cmdList.IsValid(), "Invalid CommandList");
 			RENDERX_ASSERT_MSG(cmdList.isOpen, "CommandList must be open");
 
-			auto& frame = GetCurrentFrameContex();
-			auto it = g_Buffers.find(buffer.id);
+			auto& frame = GetCurrentFrameContex(g_CurrentFrame);
 
-			RENDERX_ASSERT_MSG(it != g_Buffers.end(), "Invalid BufferHandle");
+			// Try to get from ResourcePool first
+			auto& bufferData = g_BufferPool.get(buffer);
+			if (bufferData.buffer == VK_NULL_HANDLE) {
+				RENDERX_ASSERT(false);
+			}
+
 			// RENDERX_ASSERT_MSG(it->second.type == BufferType::Index, "Buffer is not an index buffer");
 
-			// Choose index type (you can extend this later)
+			// Choose index type (extend this later)
 			VkIndexType indexType = VK_INDEX_TYPE_UINT32;
 
 			vkCmdBindIndexBuffer(
 				frame.commandBuffers[cmdList.id],
-				it->second.buffer,
+				bufferData.buffer,
 				offset,
 				indexType);
 		}
 
 
-	} // namespace RenderXVk
+	} // namespace RxVk
 
-} // namespace RenderX
+} // namespace Rx

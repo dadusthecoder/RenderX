@@ -10,10 +10,23 @@ constexpr bool enableValidationLayers = true;
 constexpr bool enableValidationLayers = false;
 #endif
 
-namespace RenderX {
-namespace RenderXVK {
+namespace Rx {
+namespace RxVK {
 
 	static std::array<FrameContex, MAX_FRAMES_IN_FLIGHT> g_Frames;
+
+	// ResourcePool instances for resource management
+	ResourcePool<VulkanTexture, HandleType::Texture> g_TexturePool;
+	ResourcePool<VulkanBuffer, HandleType::Buffer> g_BufferPool;
+	ResourcePool<VulkanShader, HandleType::Shader> g_ShaderPool;
+	ResourcePool<VkPipeline, HandleType::Pipeline> g_PipelinePool;
+	ResourcePool<VkRenderPass, HandleType::RenderPass> g_RenderPassPool;
+
+	// // Legacy unordered_map declarations (deprecated, kept for compatibility)
+	// std::unordered_map<uint64_t, VulkanBuffer> g_Buffers;
+	// std::unordered_map<uint64_t, VulkanShader> g_Shaders;
+	// std::unordered_map<uint64_t, VkRenderPass> g_RenderPasses;
+
 	uint32_t g_CurrentFrame = 0;
 
 	VulkanContext& GetVulkanContext() {
@@ -21,8 +34,8 @@ namespace RenderXVK {
 		return g_Context;
 	}
 
-	FrameContex& GetCurrentFrameContex() {
-		return g_Frames[g_CurrentFrame];
+	FrameContex& GetCurrentFrameContex(uint32_t index) {
+		return g_Frames[index];
 	}
 
 	constexpr std::array<VkDynamicState, 2> g_DynamicStates{
@@ -521,7 +534,7 @@ namespace RenderXVK {
 		PROFILE_FUNCTION();
 		SwapchainSupportDetails details{};
 
-		std::this_thread::sleep_for(std::chrono::milliseconds(100));
+		// Removed unintended sleep to avoid adding latency during swapchain queries
 
 		if (device == VK_NULL_HANDLE) {
 			RENDERX_ERROR("Invalid physical device");
@@ -661,13 +674,7 @@ namespace RenderXVK {
 			return;
 		}
 
-		auto it = g_RenderPasses.find(renderPass.id);
-		if (it == g_RenderPasses.end()) {
-			RENDERX_ERROR("Invalid render pass handle: {}", renderPass.id);
-			return;
-		}
-
-		const VkRenderPass vkPass = it->second;
+		const VkRenderPass vkPass = g_RenderPassPool.get(renderPass);
 		if (vkPass == VK_NULL_HANDLE) {
 			RENDERX_ERROR("Render pass is VK_NULL_HANDLE");
 			return;
@@ -781,11 +788,13 @@ namespace RenderXVK {
 		if (result != VK_SUCCESS) {
 			RENDERX_ERROR("Failed to create swapchain: {}", VkResultToString(result));
 			RENDERX_ASSERT(false);
+			return false;
 		}
 
 		if (ctx.swapchain == VK_NULL_HANDLE) {
 			RENDERX_ERROR("Swapchain creation succeeded but returned VK_NULL_HANDLE");
 			RENDERX_ASSERT(false);
+			return false;
 		}
 
 		ctx.swapchainImageFormat = surfaceFormat.format;
@@ -848,10 +857,10 @@ namespace RenderXVK {
 
 		RENDERX_INFO("Swapchain created: {}x{}, {} images", extent.width, extent.height, swapchainImageCount);
 
-		RenderX::RenderPassDesc renderPassDesc{};
-		RenderX::AttachmentDesc colorAttach;
-		colorAttach.format = RenderX::TextureFormat::BGRA8_SRGB;
-		colorAttach.finalState = RenderX::ResourceState::Present;
+		Rx::RenderPassDesc renderPassDesc{};
+		Rx::AttachmentDesc colorAttach;
+		colorAttach.format = Rx::TextureFormat::BGRA8_SRGB;
+		colorAttach.finalState = Rx::ResourceState::Present;
 		renderPassDesc.colorAttachments.push_back(colorAttach);
 		// temp
 		//  renderPassDesc.hasDepthStencil = true;
@@ -864,7 +873,7 @@ namespace RenderXVK {
 		return true;
 	}
 
-	void InitFrameContex() {
+	void InitFrameContext() {
 		auto& ctx = GetVulkanContext();
 
 		if (ctx.device == VK_NULL_HANDLE) {
@@ -884,66 +893,259 @@ namespace RenderXVK {
 		VkSemaphoreCreateInfo semaphoreInfo{};
 		semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
-		VkCommandPoolCreateInfo poolInfo{};
-		poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-		poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-		poolInfo.queueFamilyIndex = ctx.graphicsQueueFamilyIndex;
+		VkCommandPoolCreateInfo cmdPoolInfo{};
+		cmdPoolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+		cmdPoolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+		cmdPoolInfo.queueFamilyIndex = ctx.graphicsQueueFamilyIndex;
+
+		VkDescriptorPoolCreateInfo descPoolInfo{};
+		descPoolInfo.poolSizeCount = 1;
+		// descPoolInfo.pPoolSizes = {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER , 1};
+
 
 		ctx.swapchainImageSync.resize(ctx.swapchainImageviews.size());
 
+
+		// Create per-swapchain-image semaphores; ensure cleanup on partial failure
 		for (size_t i = 0; i < ctx.swapchainImageSync.size(); ++i) {
 			auto& iSync = ctx.swapchainImageSync[i];
 
 			VkResult result = vkCreateSemaphore(ctx.device, &semaphoreInfo, nullptr, &iSync.imageAvailableSemaphore);
 			if (result != VK_SUCCESS) {
 				RENDERX_ERROR("Failed to create imageAvailableSemaphore for image {}: {}", i, VkResultToString(result));
+				// cleanup previously created semaphores
+				for (size_t j = 0; j < i; ++j) {
+					if (ctx.swapchainImageSync[j].imageAvailableSemaphore != VK_NULL_HANDLE)
+						vkDestroySemaphore(ctx.device, ctx.swapchainImageSync[j].imageAvailableSemaphore, nullptr);
+					if (ctx.swapchainImageSync[j].renderFinishedSemaphore != VK_NULL_HANDLE)
+						vkDestroySemaphore(ctx.device, ctx.swapchainImageSync[j].renderFinishedSemaphore, nullptr);
+					ctx.swapchainImageSync[j].imageAvailableSemaphore = VK_NULL_HANDLE;
+					ctx.swapchainImageSync[j].renderFinishedSemaphore = VK_NULL_HANDLE;
+				}
 				return;
 			}
 
 			result = vkCreateSemaphore(ctx.device, &semaphoreInfo, nullptr, &iSync.renderFinishedSemaphore);
 			if (result != VK_SUCCESS) {
 				RENDERX_ERROR("Failed to create renderFinishedSemaphore for image {}: {}", i, VkResultToString(result));
+				// destroy the imageAvailableSemaphore created for this index and previous ones
+				if (iSync.imageAvailableSemaphore != VK_NULL_HANDLE)
+					vkDestroySemaphore(ctx.device, iSync.imageAvailableSemaphore, nullptr);
+				for (size_t j = 0; j < i; ++j) {
+					if (ctx.swapchainImageSync[j].imageAvailableSemaphore != VK_NULL_HANDLE)
+						vkDestroySemaphore(ctx.device, ctx.swapchainImageSync[j].imageAvailableSemaphore, nullptr);
+					if (ctx.swapchainImageSync[j].renderFinishedSemaphore != VK_NULL_HANDLE)
+						vkDestroySemaphore(ctx.device, ctx.swapchainImageSync[j].renderFinishedSemaphore, nullptr);
+					ctx.swapchainImageSync[j].imageAvailableSemaphore = VK_NULL_HANDLE;
+					ctx.swapchainImageSync[j].renderFinishedSemaphore = VK_NULL_HANDLE;
+				}
 				return;
 			}
 
 			if (iSync.imageAvailableSemaphore == VK_NULL_HANDLE || iSync.renderFinishedSemaphore == VK_NULL_HANDLE) {
 				RENDERX_ERROR("Semaphore creation for image {} returned VK_NULL_HANDLE", i);
+				// cleanup created semaphores
+				for (size_t j = 0; j <= i; ++j) {
+					if (ctx.swapchainImageSync[j].imageAvailableSemaphore != VK_NULL_HANDLE)
+						vkDestroySemaphore(ctx.device, ctx.swapchainImageSync[j].imageAvailableSemaphore, nullptr);
+					if (ctx.swapchainImageSync[j].renderFinishedSemaphore != VK_NULL_HANDLE)
+						vkDestroySemaphore(ctx.device, ctx.swapchainImageSync[j].renderFinishedSemaphore, nullptr);
+					ctx.swapchainImageSync[j].imageAvailableSemaphore = VK_NULL_HANDLE;
+					ctx.swapchainImageSync[j].renderFinishedSemaphore = VK_NULL_HANDLE;
+				}
 				return;
 			}
 		}
 
+
+		// Create per-frame resources; ensure cleanup on partial failures
 		for (size_t i = 0; i < g_Frames.size(); ++i) {
 			auto& frame = g_Frames[i];
 
 			VkResult result = vkCreateFence(ctx.device, &fenceInfo, nullptr, &frame.fence);
 			if (result != VK_SUCCESS) {
 				RENDERX_ERROR("Failed to create fence for frame {}: {}", i, VkResultToString(result));
+				// cleanup previously created frames
+				for (size_t j = 0; j < i; ++j) {
+					if (g_Frames[j].fence != VK_NULL_HANDLE)
+						vkDestroyFence(ctx.device, g_Frames[j].fence, nullptr);
+					if (g_Frames[j].presentSemaphore != VK_NULL_HANDLE)
+						vkDestroySemaphore(ctx.device, g_Frames[j].presentSemaphore, nullptr);
+					if (g_Frames[j].renderSemaphore != VK_NULL_HANDLE)
+						vkDestroySemaphore(ctx.device, g_Frames[j].renderSemaphore, nullptr);
+					if (g_Frames[j].commandPool != VK_NULL_HANDLE)
+						vkDestroyCommandPool(ctx.device, g_Frames[j].commandPool, nullptr);
+					g_Frames[j].fence = VK_NULL_HANDLE;
+					g_Frames[j].presentSemaphore = VK_NULL_HANDLE;
+					g_Frames[j].renderSemaphore = VK_NULL_HANDLE;
+					g_Frames[j].commandPool = VK_NULL_HANDLE;
+				}
+				// also cleanup swapchain image semaphores
+				for (auto& s : ctx.swapchainImageSync) {
+					if (s.imageAvailableSemaphore != VK_NULL_HANDLE)
+						vkDestroySemaphore(ctx.device, s.imageAvailableSemaphore, nullptr);
+					if (s.renderFinishedSemaphore != VK_NULL_HANDLE)
+						vkDestroySemaphore(ctx.device, s.renderFinishedSemaphore, nullptr);
+					s.imageAvailableSemaphore = VK_NULL_HANDLE;
+					s.renderFinishedSemaphore = VK_NULL_HANDLE;
+				}
 				return;
 			}
 
 			result = vkCreateSemaphore(ctx.device, &semaphoreInfo, nullptr, &frame.presentSemaphore);
 			if (result != VK_SUCCESS) {
 				RENDERX_ERROR("Failed to create presentSemaphore for frame {}: {}", i, VkResultToString(result));
+				// cleanup created resources for previous frames and this one
+				if (frame.fence != VK_NULL_HANDLE) {
+					vkDestroyFence(ctx.device, frame.fence, nullptr);
+					frame.fence = VK_NULL_HANDLE;
+				}
+				for (size_t j = 0; j < i; ++j) {
+					if (g_Frames[j].fence != VK_NULL_HANDLE)
+						vkDestroyFence(ctx.device, g_Frames[j].fence, nullptr);
+					if (g_Frames[j].presentSemaphore != VK_NULL_HANDLE)
+						vkDestroySemaphore(ctx.device, g_Frames[j].presentSemaphore, nullptr);
+					if (g_Frames[j].renderSemaphore != VK_NULL_HANDLE)
+						vkDestroySemaphore(ctx.device, g_Frames[j].renderSemaphore, nullptr);
+					if (g_Frames[j].commandPool != VK_NULL_HANDLE)
+						vkDestroyCommandPool(ctx.device, g_Frames[j].commandPool, nullptr);
+					g_Frames[j].fence = VK_NULL_HANDLE;
+					g_Frames[j].presentSemaphore = VK_NULL_HANDLE;
+					g_Frames[j].renderSemaphore = VK_NULL_HANDLE;
+					g_Frames[j].commandPool = VK_NULL_HANDLE;
+				}
+				// cleanup swapchain image semaphores
+				for (auto& s : ctx.swapchainImageSync) {
+					if (s.imageAvailableSemaphore != VK_NULL_HANDLE)
+						vkDestroySemaphore(ctx.device, s.imageAvailableSemaphore, nullptr);
+					if (s.renderFinishedSemaphore != VK_NULL_HANDLE)
+						vkDestroySemaphore(ctx.device, s.renderFinishedSemaphore, nullptr);
+					s.imageAvailableSemaphore = VK_NULL_HANDLE;
+					s.renderFinishedSemaphore = VK_NULL_HANDLE;
+				}
 				return;
 			}
 
 			result = vkCreateSemaphore(ctx.device, &semaphoreInfo, nullptr, &frame.renderSemaphore);
 			if (result != VK_SUCCESS) {
 				RENDERX_ERROR("Failed to create renderSemaphore for frame {}: {}", i, VkResultToString(result));
+				// cleanup resources for this and previous frames
+				if (frame.presentSemaphore != VK_NULL_HANDLE) {
+					vkDestroySemaphore(ctx.device, frame.presentSemaphore, nullptr);
+					frame.presentSemaphore = VK_NULL_HANDLE;
+				}
+				if (frame.fence != VK_NULL_HANDLE) {
+					vkDestroyFence(ctx.device, frame.fence, nullptr);
+					frame.fence = VK_NULL_HANDLE;
+				}
+				for (size_t j = 0; j < i; ++j) {
+					if (g_Frames[j].fence != VK_NULL_HANDLE)
+						vkDestroyFence(ctx.device, g_Frames[j].fence, nullptr);
+					if (g_Frames[j].presentSemaphore != VK_NULL_HANDLE)
+						vkDestroySemaphore(ctx.device, g_Frames[j].presentSemaphore, nullptr);
+					if (g_Frames[j].renderSemaphore != VK_NULL_HANDLE)
+						vkDestroySemaphore(ctx.device, g_Frames[j].renderSemaphore, nullptr);
+					if (g_Frames[j].commandPool != VK_NULL_HANDLE)
+						vkDestroyCommandPool(ctx.device, g_Frames[j].commandPool, nullptr);
+					g_Frames[j].fence = VK_NULL_HANDLE;
+					g_Frames[j].presentSemaphore = VK_NULL_HANDLE;
+					g_Frames[j].renderSemaphore = VK_NULL_HANDLE;
+					g_Frames[j].commandPool = VK_NULL_HANDLE;
+				}
+				// cleanup swapchain image semaphores
+				for (auto& s : ctx.swapchainImageSync) {
+					if (s.imageAvailableSemaphore != VK_NULL_HANDLE)
+						vkDestroySemaphore(ctx.device, s.imageAvailableSemaphore, nullptr);
+					if (s.renderFinishedSemaphore != VK_NULL_HANDLE)
+						vkDestroySemaphore(ctx.device, s.renderFinishedSemaphore, nullptr);
+					s.imageAvailableSemaphore = VK_NULL_HANDLE;
+					s.renderFinishedSemaphore = VK_NULL_HANDLE;
+				}
 				return;
 			}
 
-			result = vkCreateCommandPool(ctx.device, &poolInfo, nullptr, &frame.commandPool);
+			result = vkCreateCommandPool(ctx.device, &cmdPoolInfo, nullptr, &frame.commandPool);
 			if (result != VK_SUCCESS) {
 				RENDERX_ERROR("Failed to create command pool for frame {}: {}", i, VkResultToString(result));
+				// cleanup this frame and previous frames
+				if (frame.renderSemaphore != VK_NULL_HANDLE) {
+					vkDestroySemaphore(ctx.device, frame.renderSemaphore, nullptr);
+					frame.renderSemaphore = VK_NULL_HANDLE;
+				}
+				if (frame.presentSemaphore != VK_NULL_HANDLE) {
+					vkDestroySemaphore(ctx.device, frame.presentSemaphore, nullptr);
+					frame.presentSemaphore = VK_NULL_HANDLE;
+				}
+				if (frame.fence != VK_NULL_HANDLE) {
+					vkDestroyFence(ctx.device, frame.fence, nullptr);
+					frame.fence = VK_NULL_HANDLE;
+				}
+				for (size_t j = 0; j < i; ++j) {
+					if (g_Frames[j].fence != VK_NULL_HANDLE)
+						vkDestroyFence(ctx.device, g_Frames[j].fence, nullptr);
+					if (g_Frames[j].presentSemaphore != VK_NULL_HANDLE)
+						vkDestroySemaphore(ctx.device, g_Frames[j].presentSemaphore, nullptr);
+					if (g_Frames[j].renderSemaphore != VK_NULL_HANDLE)
+						vkDestroySemaphore(ctx.device, g_Frames[j].renderSemaphore, nullptr);
+					if (g_Frames[j].commandPool != VK_NULL_HANDLE)
+						vkDestroyCommandPool(ctx.device, g_Frames[j].commandPool, nullptr);
+					g_Frames[j].fence = VK_NULL_HANDLE;
+					g_Frames[j].presentSemaphore = VK_NULL_HANDLE;
+					g_Frames[j].renderSemaphore = VK_NULL_HANDLE;
+					g_Frames[j].commandPool = VK_NULL_HANDLE;
+				}
+				// cleanup swapchain image semaphores
+				for (auto& s : ctx.swapchainImageSync) {
+					if (s.imageAvailableSemaphore != VK_NULL_HANDLE)
+						vkDestroySemaphore(ctx.device, s.imageAvailableSemaphore, nullptr);
+					if (s.renderFinishedSemaphore != VK_NULL_HANDLE)
+						vkDestroySemaphore(ctx.device, s.renderFinishedSemaphore, nullptr);
+					s.imageAvailableSemaphore = VK_NULL_HANDLE;
+					s.renderFinishedSemaphore = VK_NULL_HANDLE;
+				}
 				return;
 			}
 
 			if (frame.fence == VK_NULL_HANDLE || frame.presentSemaphore == VK_NULL_HANDLE ||
 				frame.renderSemaphore == VK_NULL_HANDLE || frame.commandPool == VK_NULL_HANDLE) {
 				RENDERX_ERROR("Frame {} resource creation returned VK_NULL_HANDLE", i);
+				// cleanup already created resources
+				for (size_t j = 0; j <= i; ++j) {
+					if (g_Frames[j].fence != VK_NULL_HANDLE)
+						vkDestroyFence(ctx.device, g_Frames[j].fence, nullptr);
+					if (g_Frames[j].presentSemaphore != VK_NULL_HANDLE)
+						vkDestroySemaphore(ctx.device, g_Frames[j].presentSemaphore, nullptr);
+					if (g_Frames[j].renderSemaphore != VK_NULL_HANDLE)
+						vkDestroySemaphore(ctx.device, g_Frames[j].renderSemaphore, nullptr);
+					if (g_Frames[j].commandPool != VK_NULL_HANDLE)
+						vkDestroyCommandPool(ctx.device, g_Frames[j].commandPool, nullptr);
+					g_Frames[j].fence = VK_NULL_HANDLE;
+					g_Frames[j].presentSemaphore = VK_NULL_HANDLE;
+					g_Frames[j].renderSemaphore = VK_NULL_HANDLE;
+					g_Frames[j].commandPool = VK_NULL_HANDLE;
+				}
+				// cleanup swapchain image semaphores
+				for (auto& s : ctx.swapchainImageSync) {
+					if (s.imageAvailableSemaphore != VK_NULL_HANDLE)
+						vkDestroySemaphore(ctx.device, s.imageAvailableSemaphore, nullptr);
+					if (s.renderFinishedSemaphore != VK_NULL_HANDLE)
+						vkDestroySemaphore(ctx.device, s.renderFinishedSemaphore, nullptr);
+					s.imageAvailableSemaphore = VK_NULL_HANDLE;
+					s.renderFinishedSemaphore = VK_NULL_HANDLE;
+				}
 				return;
 			}
+
+
+			std::vector<VkDescriptorPoolSize> poolSizes = { { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1 } };
+
+			VkDescriptorPoolCreateInfo descCi{};
+			descCi.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+			descCi.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+			descCi.maxSets = 3;
+			descCi.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+			descCi.pPoolSizes = poolSizes.data();
+			VK_CHECK(vkCreateDescriptorPool(ctx.device, &descCi, nullptr, &frame.DescriptorPool));
 		}
 
 		RENDERX_INFO("Frame contexts initialized successfully: {} frames", MAX_FRAMES_IN_FLIGHT);
@@ -952,19 +1154,8 @@ namespace RenderXVK {
 	// ===================== VULKAN HELPERS =====================
 
 	VkRenderPass GetVulkanRenderPass(RenderPassHandle handle) {
-		if (handle.id == 0) {
-			RENDERX_WARN("Invalid render pass handle: id is 0");
-			return VK_NULL_HANDLE;
-		}
-
-		const auto it = g_RenderPasses.find(handle.id);
-		if (it == g_RenderPasses.end()) {
-			RENDERX_WARN("Render pass not found for handle: {}", handle.id);
-			return VK_NULL_HANDLE;
-		}
-
-		return it->second;
+		return g_RenderPassPool.get(handle);
 	}
 
-} // namespace RenderXVK
-} // namespace RenderX
+} // namespace RxVK
+} // namespace Rx

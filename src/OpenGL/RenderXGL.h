@@ -1,9 +1,9 @@
 #pragma once
 #include "RenderX/RenderXCommon.h"
 
-namespace RenderX {
+namespace Rx {
 
-namespace RenderXGL {
+namespace RxGL {
 
 // Declare backend functions matching RenderXAPI.def
 #undef RENDERER_FUNC
@@ -14,6 +14,6 @@ namespace RenderXGL {
 void GLBindPipeline(const PipelineHandle pipeline);
 const PipelineDesc* GLGetPipelineDesc(const PipelineHandle pipeline);
 
-} // namespace RenderXGL
+} // namespace RxGL
 
-} // namespace RenderX
+} // namespace Rx

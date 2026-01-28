@@ -15,7 +15,7 @@ add_executable(HelloTriangle Test.cpp Files.cpp)
 # ──────────────────────────────────────────────
 target_include_directories(HelloTriangle PRIVATE
     "${CMAKE_SOURCE_DIR}/Include"      # RenderX public headers
-)
+)   
 
 # ──────────────────────────────────────────────
 #  Link with RenderX library built in /build/bin/<config>/

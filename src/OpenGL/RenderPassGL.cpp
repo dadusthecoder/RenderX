@@ -1,6 +1,6 @@
 #include "CommonGL.h"
-namespace RenderX {
-namespace RenderXGL {
+namespace Rx {
+namespace RxGL {
 	// temp
 	RenderPassHandle GLCreateRenderPass(const RenderPassDesc&) {
 		RENDERX_ASSERT(false && "OpenGL RenderPass not implemented yet");
@@ -23,7 +23,7 @@ namespace RenderXGL {
 	}
 
 	void GLCmdEndRenderPass(CommandList&) {}
-} // namespace RenderXGl
+} // namespace RxGl
 
 
-} // namespace  RenderX
+} // namespace  Rx

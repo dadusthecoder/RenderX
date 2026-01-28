@@ -2,14 +2,18 @@
 #include "RenderXVK.h"
 #include "CommonVK.h"
 
-namespace RenderX::RenderXVK {
+namespace Rx::RxVK {
 
 	static std::unordered_map<uint32_t, VkFramebuffer> s_Framebuffers;
 	static uint32_t s_NextFramebufferId = 1;
 
 	FramebufferHandle VKCreateFramebuffer(const FramebufferDesc& desc) {
 		auto& ctx = GetVulkanContext();
+		(void)ctx; // Context will be used when implementing this function
 
+		// TODO: implement VKCreateFramebuffer - creating VkFramebuffer and
+		// registering it in s_Framebuffers. Currently this is intentionally
+		// unimplemented and returns an invalid handle.
 		// RENDERX_ASSERT(desc.renderPass.IsValid());
 		// RENDERX_ASSERT(desc.width > 0 && desc.height > 0);
 		//

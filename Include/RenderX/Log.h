@@ -3,7 +3,7 @@
 #include <spdlog/spdlog.h>
 #include <spdlog/fmt/ostr.h> // allows logging custom structs via operator<<
 
-namespace RenderX {
+namespace Rx {
 
 	class Log {
 	public:
@@ -18,15 +18,15 @@ namespace RenderX {
 
 }
 
-#define RENDERX_LOG_INIT() ::RenderX ::Log::Init()
-#define RENDERX_TRACE(...) ::RenderX ::Log::GetCoreLogger()->trace(__VA_ARGS__)
-#define RENDERX_INFO(...) ::RenderX ::Log::GetCoreLogger()->info(__VA_ARGS__)
-#define RENDERX_WARN(...) ::RenderX ::Log::GetCoreLogger()->warn(__VA_ARGS__)
-#define RENDERX_ERROR(...) ::RenderX ::Log::GetCoreLogger()->error(__VA_ARGS__)
-#define RENDERX_CRITICAL(...) ::RenderX ::Log::GetCoreLogger()->critical(__VA_ARGS__)
+#define RENDERX_LOG_INIT() ::Rx ::Log::Init()
+#define RENDERX_TRACE(...) ::Rx ::Log::GetCoreLogger()->trace(__VA_ARGS__)
+#define RENDERX_INFO(...) ::Rx ::Log::GetCoreLogger()->info(__VA_ARGS__)
+#define RENDERX_WARN(...) ::Rx ::Log::GetCoreLogger()->warn(__VA_ARGS__)
+#define RENDERX_ERROR(...) ::Rx ::Log::GetCoreLogger()->error(__VA_ARGS__)
+#define RENDERX_CRITICAL(...) ::Rx ::Log::GetCoreLogger()->critical(__VA_ARGS__)
 
-#define CLIENT_TRACE(...) ::RenderX ::Log::GetClientLogger()->trace(__VA_ARGS__)
-#define CLIENT_INFO(...) ::RenderX ::Log::GetClientLogger()->info(__VA_ARGS__)
-#define CLIENT_WARN(...) ::RenderX ::Log::GetClientLogger()->warn(__VA_ARGS__)
-#define CLIENT_ERROR(...) ::RenderX ::Log::GetClientLogger()->error(__VA_ARGS__)
-#define CLIENT_CRITICAL(...) ::RenderX ::Log::GetClientLogger()->critical(__VA_ARGS__)
+#define CLIENT_TRACE(...) ::Rx ::Log::GetClientLogger()->trace(__VA_ARGS__)
+#define CLIENT_INFO(...) ::Rx ::Log::GetClientLogger()->info(__VA_ARGS__)
+#define CLIENT_WARN(...) ::Rx ::Log::GetClientLogger()->warn(__VA_ARGS__)
+#define CLIENT_ERROR(...) ::Rx ::Log::GetClientLogger()->error(__VA_ARGS__)
+#define CLIENT_CRITICAL(...) ::Rx ::Log::GetClientLogger()->critical(__VA_ARGS__)
