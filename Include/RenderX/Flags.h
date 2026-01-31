@@ -101,4 +101,10 @@ namespace Rx {
 		mask &= ~flag;
 	}
 
+#define ENABLE_BITMASK_OPERATORS(_enum)            \
+	template <>                                    \
+	struct EnableBitMaskOperators<_enum> { \
+		static constexpr bool enable = true;       \
+	};
+
 } // namespace  RenderX

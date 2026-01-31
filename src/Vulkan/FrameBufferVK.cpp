@@ -49,13 +49,20 @@ namespace Rx::RxVK {
 	}
 
 	void VKDestroyFramebuffer(FramebufferHandle& handle) {
+		// auto& ctx = GetVulkanContext();
+		// auto it = s_Framebuffers.find(handle.id);
+		// if (it == s_Framebuffers.end())
+		// 	return;
+
 		auto& ctx = GetVulkanContext();
 		auto it = s_Framebuffers.find(handle.id);
 		if (it == s_Framebuffers.end())
 			return;
 
-		vkDestroyFramebuffer(ctx.device, it->second, nullptr);
-		s_Framebuffers.erase(it);
-	}
 
-}
+		if (it->second != VK_NULL_HANDLE) {
+			vkDestroyFramebuffer(ctx.device, it->second, nullptr);
+		}
+		s_Framebuffers.erase(it);
+		handle.id = 0;
+	}}

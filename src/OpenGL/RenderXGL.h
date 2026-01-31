@@ -13,6 +13,8 @@ namespace RxGL {
 
 void GLBindPipeline(const PipelineHandle pipeline);
 const PipelineDesc* GLGetPipelineDesc(const PipelineHandle pipeline);
+void GLClearPipelineCache();
+void GLClearVAOCache();
 
 } // namespace RxGL
 

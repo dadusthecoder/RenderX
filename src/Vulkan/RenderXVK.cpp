@@ -7,9 +7,17 @@ namespace RxVK {
 
 	void VKInit(const Window& window) {
 		PROFILE_FUNCTION();
-	
+
+		RENDERX_ASSERT_MSG(window.nativeHandle != nullptr, "VKInit: window.nativeHandle is null");
+		RENDERX_ASSERT_MSG(window.extensionCount >= 0, "VKInit: extensionCount is negative");
+		if (window.extensionCount > 0) {
+			RENDERX_ASSERT_MSG(window.instanceExtensions != nullptr, "VKInit: instanceExtensions is null but extensionCount > 0");
+		}
+
 		VulkanContext& ctx = GetVulkanContext();
 		ctx.window = window.nativeHandle;
+		MAX_FRAMES_IN_FLIGHT = window.maxFramesInFlight;
+		RENDERX_ASSERT_MSG(MAX_FRAMES_IN_FLIGHT > 0, "VKInit: maxFramesInFlight must be > 0");
 
 		{
 			PROFILE_GPU_CALL("InitInstance");
@@ -27,6 +35,7 @@ namespace RxVK {
 		{
 			PROFILE_GPU_CALL("CreateSurface");
 			CreateSurface(window);
+			RENDERX_ASSERT_MSG(ctx.surface != VK_NULL_HANDLE, "VKInit: surface creation failed");
 		}
 
 		{
@@ -39,8 +48,9 @@ namespace RxVK {
 				RENDERX_ERROR("VKInit failed: PickPhysicalDevice");
 				return;
 			}
+			RENDERX_ASSERT_MSG(ctx.physicalDevice != VK_NULL_HANDLE, "VKInit: physicalDevice is null");
 		}
-	
+
 		{
 			PROFILE_GPU_CALL("InitLogicalDevice");
 			if (!InitLogicalDevice(
@@ -51,6 +61,17 @@ namespace RxVK {
 				RENDERX_ERROR("VKInit failed: InitLogicalDevice");
 				return;
 			}
+			RENDERX_ASSERT_MSG(ctx.device != VK_NULL_HANDLE, "VKInit: device is null");
+			RENDERX_ASSERT_MSG(ctx.graphicsQueue != VK_NULL_HANDLE, "VKInit: graphics queue is null");
+		}
+
+		{
+			PROFILE_GPU_CALL("InitVulkanMemoryAllocator");
+			if (!InitVulkanMemoryAllocator(ctx.instance, ctx.physicalDevice, ctx.device)) {
+				RENDERX_ERROR("VKInit failed: InitVulkanMemoryAllocator");
+				return;
+			}
+			RENDERX_ASSERT_MSG(ctx.allocator != VK_NULL_HANDLE, "VKInit: allocator is null");
 		}
 
 		{
@@ -59,6 +80,7 @@ namespace RxVK {
 				RENDERX_ERROR("VKInit failed: CreateSwapchain");
 				return;
 			}
+			RENDERX_ASSERT_MSG(ctx.swapchain != VK_NULL_HANDLE, "VKInit: swapchain is null");
 		}
 
 		{
@@ -75,16 +97,25 @@ namespace RxVK {
 				"Backend still relies on GLFW window elsewhere.");
 		}
 
+		CreatePersistentDescriptorPool();
+
+
 		RENDERX_ASSERT_MSG(ctx.physicalDevice != VK_NULL_HANDLE, "Physical device is invalid");
 		RENDERX_ASSERT_MSG(ctx.device != VK_NULL_HANDLE, "Logical device is invalid");
+		RENDERX_ASSERT_MSG(ctx.allocator != VK_NULL_HANDLE, "VMA allocator is invalid");
 
 		RENDERX_INFO("Vulkan Init Completed Successfully");
-        RENDERX_INFO("Running Test Functions");
-
-        TempTest();
 		return;
 	}
-	
+
+	void VKShutdown() {
+		// Ensure Vulkan resources from different modules are cleaned up in proper order
+		RENDERX_WARN("Destroying all vulkan resource");
+		freeAllVulkanResources();
+		// Common resources (frames, swapchain, device, instance)
+		VKShutdownCommon();
+	}
+
 
 } // namespace RxVK
 } // namespace Rx

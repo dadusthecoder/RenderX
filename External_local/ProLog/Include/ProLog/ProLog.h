@@ -184,8 +184,16 @@ namespace ProLog {
 } // namespace Profiler
 
 // ============================================================================
-// Convenience Macros
+// Feature Toggles
 // ============================================================================
+#define ENABLE_PROFILING 0 // set to 0 to disable profiling
+#define ENABLE_LOGGING 0  // set to 0 to disable logging
+// ============================================================================
+// Profiling Macros
+// ============================================================================
+
+#if ENABLE_PROFILING
+
 #define PROFILE_SCOPE(name) ProLog::Timer timer##__LINE__(name)
 #define PROFILE_SCOPE_CAT(name, category) ProLog::Timer timer##__LINE__(name, category)
 #define PROFILE_FUNCTION() PROFILE_SCOPE(__FUNCTION__)
@@ -194,6 +202,37 @@ namespace ProLog {
 #define PROFILE_BEGIN(name) ProLog::PerformanceMarker::BeginEvent(name)
 #define PROFILE_END(name) ProLog::PerformanceMarker::EndEvent(name)
 
+#define PROFILE_START_SESSION(name, filepath) \
+	ProLog::ProfilerSession::Get().BeginSession(name, filepath)
+
+#define PROFILE_END_SESSION() \
+	ProLog::ProfilerSession::Get().EndSession()
+
+#define PROFILE_PRINT_STATS() \
+	ProLog::ProfilerSession::Get().PrintStatistics()
+
+#else
+
+// Compile out completely (zero overhead)
+#define PROFILE_SCOPE(name)
+#define PROFILE_SCOPE_CAT(name, category)
+#define PROFILE_FUNCTION()
+#define PROFILE_FUNCTION_CAT(category)
+
+#define PROFILE_BEGIN(name)
+#define PROFILE_END(name)
+
+#define PROFILE_START_SESSION(name, filepath)
+#define PROFILE_END_SESSION()
+#define PROFILE_PRINT_STATS()
+
+#endif
+// ============================================================================
+// Logging Macros
+// ============================================================================
+
+#if ENABLE_LOGGING
+
 #define LOG_TRACE(...) ::ProLog::Logger::Get().GetLogger()->trace(__VA_ARGS__)
 #define LOG_DEBUG(...) ::ProLog::Logger::Get().GetLogger()->debug(__VA_ARGS__)
 #define LOG_INFO(...) ::ProLog::Logger::Get().GetLogger()->info(__VA_ARGS__)
@@ -201,9 +240,21 @@ namespace ProLog {
 #define LOG_ERROR(...) ::ProLog::Logger::Get().GetLogger()->error(__VA_ARGS__)
 #define LOG_CRITICAL(...) ::ProLog::Logger::Get().GetLogger()->critical(__VA_ARGS__)
 
-#define LOG_IF(condition, level, ...) \
-	if (condition) LOG_##level(__VA_ARGS__)
+#define LOG_IF(condition, level, ...)            \
+	do {                                         \
+		if (condition) LOG_##level(__VA_ARGS__); \
+	} while (0)
 
-#define PROFILE_START_SESSION(name, filepath) ProLog::ProfilerSession::Get().BeginSession(name, filepath)
-#define PROFILE_END_SESSION() ProLog::ProfilerSession::Get().EndSession()
-#define PROFILE_PRINT_STATS() ProLog::ProfilerSession::Get().PrintStatistics()
+#else
+
+// Compile out logging completely
+#define LOG_TRACE(...)
+#define LOG_DEBUG(...)
+#define LOG_INFO(...)
+#define LOG_WARN(...)
+#define LOG_ERROR(...)
+#define LOG_CRITICAL(...)
+
+#define LOG_IF(condition, level, ...)
+
+#endif

@@ -1,14 +1,13 @@
 #pragma once
-
 #include "ProLog/ProLog.h"
 #include <string>
 
 // Forward declaration to avoid circular includes
 namespace Rx {
-	namespace Debug {
-		inline void ConfigureDetailedProfiling();
-		inline void PrintProfileReport();
-	}
+namespace Debug {
+	inline void ConfigureDetailedProfiling();
+	inline void PrintProfileReport();
+}
 }
 
 // ============================================================================
@@ -17,27 +16,27 @@ namespace Rx {
 // These macros provide fine-grained profiling with metadata capture
 // Automatically disabled in Release builds via ProLog config
 
-#ifdef _DEBUG
+#ifdef RENDERX_DEBUG
 
 #define PROFILE_GPU_CALL(name) \
 	PROFILE_SCOPE_CAT(name, "GPU")
 
-#define PROFILE_GPU_CALL_WITH_SIZE(name, size) \
+#define PROFILE_GPU_CALL_WITH_SIZE(name, size)  \
 	ProLog::Timer timer##__LINE__(name, "GPU"); \
 	timer##__LINE__.AddMetadata("size_bytes", std::to_string(size))
 
 #define PROFILE_GPU_CALL_WITH_QUEUE(name, queue) \
-	ProLog::Timer timer##__LINE__(name, "GPU"); \
+	ProLog::Timer timer##__LINE__(name, "GPU");  \
 	timer##__LINE__.AddMetadata("queue", queue)
 
-#define PROFILE_MEMORY(name, size) \
+#define PROFILE_MEMORY(name, size)                 \
 	ProLog::Timer timer##__LINE__(name, "Memory"); \
 	timer##__LINE__.AddMetadata("bytes", std::to_string(size))
 
 #define PROFILE_MEMORY_ALLOC(size) \
 	PROFILE_MEMORY("MemoryAllocation", size)
 
-#define PROFILE_MEMORY_FREE(size) \
+#define PROFILE_MEMORY_FREE(size)                          \
 	ProLog::Timer timer##__LINE__("MemoryFree", "Memory"); \
 	timer##__LINE__.AddMetadata("freed_bytes", std::to_string(size))
 
@@ -63,7 +62,7 @@ namespace Rx {
 #define PROFILE_FRAME_END(frameIndex) \
 	ProLog::PerformanceMarker::EndEvent("Frame_" + std::to_string(frameIndex))
 
-#define PROFILE_FRAME_STAT(name, value) \
+#define PROFILE_FRAME_STAT(name, value)               \
 	ProLog::Timer timer##__LINE__(name, "FrameStat"); \
 	timer##__LINE__.AddMetadata("value", std::to_string(value))
 
@@ -91,22 +90,22 @@ namespace Rx {
 // DEBUG PROFILING CONFIGURATION HELPER
 // ============================================================================
 namespace Rx {
-	namespace Debug {
-		inline void ConfigureDetailedProfiling() {
-#ifdef _DEBUG
-			ProLog::ProfilerConfig config;
-			config.enableProfiling = true;
-			config.enableLogging = true;
-			config.bufferSize = 2000;  // Larger buffer for detailed traces
-			config.autoFlush = true;
-			ProLog::SetConfig(config);
+namespace Debug {
+	inline void ConfigureDetailedProfiling() {
+#ifdef RENDERX_DEBUG
+		ProLog::ProfilerConfig config;
+		config.enableProfiling = true;
+		config.enableLogging = true;
+		config.bufferSize = 2000; // Larger buffer for detailed traces
+		config.autoFlush = true;
+		ProLog::SetConfig(config);
 #endif
-		}
-
-		inline void PrintProfileReport() {
-#ifdef _DEBUG
-			PROFILE_PRINT_STATS();
-#endif
-		}
 	}
+
+	inline void PrintProfileReport() {
+#ifdef RENDERX_DEBUG
+		PROFILE_PRINT_STATS();
+#endif
+	}
+}
 }

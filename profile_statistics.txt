@@ -1,29 +1,26 @@
 ===========================================
 PROFILING STATISTICS - RenderX
-Session Duration: 4072 ms
+Session Duration: 4557 ms
 ===========================================
 
 Function                                Calls     Total (ms)     Avg (ms)       Min (ms)       Max (ms)       % Time    
 ------------------------------------------------------------------------------------------------------------------------
-SetBackend                              1         2293.114       2293.114       2293.114       2293.114       49.5      %
-InitInstance                            1         1941.580       1941.580       1941.580       1941.580       41.9      %
-InitSwapchain                           1         231.152        231.152        231.152        231.152        5.0       %
-InitLogicalDevice                       1         50.184         50.184         50.184         50.184         1.1       %
-VKExecuteCommandList                    432       35.277         0.082          0.025          0.470          0.8       %
-VKCreateCommandList                     432       18.821         0.044          0.011          0.248          0.4       %
-VKCmdBeginRenderPass                    432       18.358         0.042          0.010          0.572          0.4       %
-VKCmdSetPipeline                        432       6.677          0.015          0.005          0.079          0.1       %
-VKCmdOpen                               432       6.502          0.015          0.004          0.174          0.1       %
-VKCmdDrawIndexed                        432       6.434          0.015          0.004          0.211          0.1       %
-PickPhysicalDevice                      1         6.337          6.337          6.337          6.337          0.1       %
-VKCmdSetVertexBuffer                    432       4.579          0.011          0.002          0.305          0.1       %
-QuerySwapchainSupport                   3         4.178          1.393          0.031          3.529          0.1       %
-VKCmdSetIndexBuffer                     432       2.471          0.006          0.001          0.361          0.1       %
-VKCmdClose                              432       2.409          0.006          0.002          0.032          0.1       %
-VKCmdEndRenderPass                      432       2.389          0.006          0.002          0.060          0.1       %
-VKCreateBuffer                          2         1.262          0.631          0.570          0.692          0.0       %
-VKFindMemoryType                        2         0.006          0.003          0.002          0.004          0.0       %
-ChooseSwapSurfaceFormat                 1         0.000          0.000          0.000          0.000          0.0       %
-ChooseSwapExtent                        1         0.000          0.000          0.000          0.000          0.0       %
-ChoosePresentMode                       1         0.000          0.000          0.000          0.000          0.0       %
+GLEnd                                   614       4067.333       6.624          0.834          8.072          93.5      %
+Init                                    1         71.485         71.485         71.485         71.485         1.6       %
+GLInit                                  1         71.429         71.429         71.429         71.429         1.6       %
+GLExecuteCommandList                    614       61.483         0.100          0.058          0.503          1.4       %
+GLDrawIndexed                           614       47.485         0.077          0.046          0.237          1.1       %
+GLBegin                                 614       20.287         0.033          0.008          0.573          0.5       %
+GLBindPipeline                          614       6.663          0.011          0.006          0.074          0.2       %
+GLCmdOpen                               614       1.362          0.002          0.001          0.010          0.0       %
+GLCreateShader                          2         0.822          0.411          0.243          0.579          0.0       %
+compileShader                           2         0.782          0.391          0.225          0.557          0.0       %
+GLCreateGraphicsPipeline                1         0.773          0.773          0.773          0.773          0.0       %
+GLCreateBuffer                          3         0.380          0.127          0.036          0.229          0.0       %
+GLCmdSetIndexBuffer                     614       0.284          0.000          0.000          0.069          0.0       %
+GLCmdSetVertexBuffer                    614       0.153          0.000          0.000          0.001          0.0       %
+GLCmdClose                              614       0.041          0.000          0.000          0.001          0.0       %
+GLCreatePipelineLayout                  1         0.028          0.028          0.028          0.028          0.0       %
+GLCreateCommandList                     3         0.002          0.001          0.000          0.002          0.0       %
+GLCreateBufferView                      1         0.000          0.000          0.000          0.000          0.0       %
 ===========================================

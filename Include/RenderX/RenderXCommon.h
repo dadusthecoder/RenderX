@@ -17,8 +17,8 @@
 #define RENDERX_DEBUGBREAK() std::abort()
 #endif
 
-// ==================== Assert Macros ====================
-#ifdef _DEBUG
+// === Assert Macros ===
+#ifdef RENDERX_DEBUG
 #define RENDERX_ASSERT(expr)                                    \
 	{                                                           \
 		if (!(expr)) {                                          \
@@ -87,19 +87,12 @@ namespace Rx {
 
 		Handle(ValueType key) : id(key) {}
 		Handle() = default;
-
-		uint32_t generation() const {
-			return static_cast<uint32_t>(id >> 32);
-		}
-		uint32_t index() const {
-			return static_cast<uint32_t>(id & 0xFFFFFFFFu);
-		}
 		bool IsValid() const { return id != INVALID; }
 
 		// operators
-		bool operator==(const Handle& o) const { return value == o.id; }
-		bool operator!=(const Handle& o) const { return value != o.id; }
-		bool operator<(const Handle& o) const { return value < o.id; }
+		bool operator==(const Handle& o) const { return id == o.id; }
+		bool operator!=(const Handle& o) const { return id != o.id; }
+		bool operator<(const Handle& o) const { return id < o.id; }
 
 		ValueType id = INVALID;
 	};
@@ -115,7 +108,6 @@ namespace Rx {
 	RENDERX_DEFINE_HANDLE(PipelineLayout)
 	RENDERX_DEFINE_HANDLE(Framebuffer)
 	RENDERX_DEFINE_HANDLE(RenderPass)
-	RENDERX_DEFINE_HANDLE(ResourceGroupLayout)
 	RENDERX_DEFINE_HANDLE(ResourceGroup)
 	RENDERX_DEFINE_HANDLE(QueryPool)
 
@@ -159,6 +151,7 @@ namespace Rx {
 
 		const char** instanceExtensions;
 		uint32_t extensionCount;
+		uint32_t maxFramesInFlight = 3;
 	};
 
 
@@ -312,13 +305,10 @@ namespace Rx {
 		Compute = 1 << 5,
 		All = Vertex | Fragment | Compute
 	};
+	ENABLE_BITMASK_OPERATORS(ShaderStage)
 
-	template <>
-	struct EnableBitMaskOperators<ShaderStage> {
-		static constexpr bool enable = true;
-	};
 
-	// ==================== Resource State Tracking ====================
+	// === Resource State Tracking ===
 	enum class ResourceState : uint16_t {
 		Undefined = 0,
 		Common = 1 << 0,
@@ -333,17 +323,12 @@ namespace Rx {
 		IndirectArgument = 1 << 9
 	};
 
-	template <>
-	struct EnableBitMaskOperators<ResourceState> {
-		static constexpr bool enable = true;
-	};
+	ENABLE_BITMASK_OPERATORS(ResourceState)
 
 	enum class ResourceGroupLifetime : uint8_t {
 		Persistent,
-		PerFrame,
-		PerDraw
+		PerFrame
 	};
-
 
 	enum class ResourceType : uint8_t {
 
@@ -432,17 +417,66 @@ namespace Rx {
 
 	struct VertexInputState {
 		std::vector<VertexAttribute> attributes;
-		std::vector<VertexBinding> bindings;
+		std::vector<VertexBinding> vertexBindings;
 	};
 
 	// Resource descriptions for craeation
+	enum class BufferFlags : uint32_t {
+		Vertex = 1 << 0,
+		Index = 1 << 1,
+		Uniform = 1 << 2,
+		Storage = 1 << 3,
+		Indirect = 1 << 4,
+		TransferSrc = 1 << 5,
+		TransferDst = 1 << 6,
+		Static = 1 << 8,
+		Dynamic = 1 << 9,
+		Streaming = 1 << 10,
+	};
+	ENABLE_BITMASK_OPERATORS(BufferFlags)
+
+	inline bool IsValidBufferFlags(BufferFlags flags) {
+		// Can't be both static and dynamic
+		bool hasStatic = Has(flags, BufferFlags::Static);
+		bool hasDynamic = Has(flags, BufferFlags::Dynamic);
+
+		if (hasStatic && hasDynamic) {
+			return false; // Invalid combination
+		}
+
+		// Must have at least one usage flag (not just Static/Dynamic)
+		BufferFlags usageMask = BufferFlags::Vertex | BufferFlags::Index |
+								BufferFlags::Uniform | BufferFlags::Storage |
+								BufferFlags::Indirect | BufferFlags::TransferSrc |
+								BufferFlags::TransferDst;
+
+		if (Has(flags, usageMask)) {
+			return false; // Must have at least one usage
+		}
+
+		return true;
+	}
+
+	enum class MemoryType : uint8_t {
+		GpuOnly = 1 << 0,  // Device-local, no CPU access
+		CpuToGpu = 1 << 1, // Host-visible, optimized for CPU writes
+		GpuToCpu = 1 << 2, // Host-visible, optimized for CPU reads (cached)
+		CpuOnly = 1 << 3,  // Host memory, rarely accessed by GPU
+		Auto = 1 << 4,	   // Prefer device-local but allow fallback
+	};
 
 	struct BufferDesc {
-		BufferType type;
-		BufferUsage usage;
+		BufferFlags flags;
+		MemoryType momory;
 		size_t size;
 		uint32_t bindingCount;
 		const void* initialData;
+	};
+
+	struct BufferViewDesc {
+		BufferHandle buffer;
+		uint32_t offset = 0;
+		uint32_t range = 0; // 0 = whole buffer
 	};
 
 	struct SamplerDesc {
@@ -515,7 +549,7 @@ namespace Rx {
 		bool multisampleEnable;
 
 		RasterizerState()
-			: fillMode(FillMode::Solid), cullMode(CullMode::Back),
+			: fillMode(FillMode::Solid), cullMode(CullMode::None),
 			  frontCounterClockwise(false), depthBias(0.0f), depthBiasClamp(0.0f),
 			  slopeScaledDepthBias(0.0f), depthClipEnable(true), scissorEnable(false),
 			  multisampleEnable(false) {
@@ -563,7 +597,7 @@ namespace Rx {
 
 
 
-	// ==================== Sahder Resource Groups (NEW) ====================
+	// === Sahder Resource Groups (NEW) ===
 	// here ResourceGroup stands for Shader Resource Group
 	/// Describes a single binding slot in a ResourceGroupLayout
 	struct ResourceGroupLayoutItem {
@@ -611,15 +645,16 @@ namespace Rx {
 		}
 	};
 
-	/// Describes the layout/structure of a descriptor set
-	struct ResourceGroupLayoutDesc {
-		std::vector<ResourceGroupLayoutItem> Resources;
+	/// Describes the layout/structure of a pipeline inputs
+	struct ResourceGroupLayout {
+		std::vector<ResourceGroupLayoutItem> resourcebindings;
+		uint32_t setIndex = 0;
 		const char* debugName = nullptr;
 
-		ResourceGroupLayoutDesc() = default;
+		ResourceGroupLayout() = default;
 
-		ResourceGroupLayoutDesc(uint32_t setIndex, const std::vector<ResourceGroupLayoutItem>& items)
-			: Resources(items) {}
+		ResourceGroupLayout(const std::vector<ResourceGroupLayoutItem>& items)
+			: resourcebindings(items) {}
 	};
 
 	/// Describes a single resource binding in a descriptor set instance
@@ -630,17 +665,16 @@ namespace Rx {
 		// Union for different resource types. CombinedTextureSampler needs both
 		// texture and sampler stored simultaneously; place those into a small
 		// struct inside the union to avoid overwriting when both are used.
-		union {
-			BufferViewHandle buffer;
+		struct CombinedHandles {
 			TextureViewHandle texture;
 			SamplerHandle sampler;
+		};
+
+		union {
+			BufferViewHandle bufferView;
+			TextureViewHandle textureView;
+			SamplerHandle sampler;
 			uint64_t rawHandle;
-
-			struct CombinedHandles {
-				TextureViewHandle texture;
-				SamplerHandle sampler;
-			};
-
 			CombinedHandles combinedHandles;
 		};
 
@@ -651,11 +685,11 @@ namespace Rx {
 			: binding(0), type(ResourceType::ConstantBuffer), rawHandle(0) {}
 
 		// Convenience factory methods
-		static ResourceGroupItem ConstantBuffer(uint32_t binding, BufferViewHandle buf, uint32_t offset = 0, uint32_t range = 0) {
+		static ResourceGroupItem ConstantBuffer(uint32_t binding, BufferViewHandle buf) {
 			ResourceGroupItem item;
 			item.binding = binding;
 			item.type = ResourceType::ConstantBuffer;
-			item.buffer = buf;
+			item.bufferView = buf;
 			return item;
 		}
 
@@ -663,7 +697,7 @@ namespace Rx {
 			ResourceGroupItem item;
 			item.binding = binding;
 			item.type = writable ? ResourceType::RWStorageBuffer : ResourceType::StorageBuffer;
-			item.buffer = buf;
+			item.bufferView = buf;
 			return item;
 		}
 
@@ -671,7 +705,7 @@ namespace Rx {
 			ResourceGroupItem item;
 			item.binding = binding;
 			item.type = ResourceType::Texture_SRV;
-			item.texture = tex;
+			item.textureView = tex;
 			item.arrayIndex = arrayIndex;
 			return item;
 		}
@@ -680,7 +714,7 @@ namespace Rx {
 			ResourceGroupItem item;
 			item.binding = binding;
 			item.type = ResourceType::Texture_UAV;
-			item.texture = tex;
+			item.textureView = tex;
 			return item;
 		}
 
@@ -704,16 +738,17 @@ namespace Rx {
 		}
 	};
 
-	/// Describes a descriptor set instance
+	/// Describes a ResourceGroup instance
 	struct ResourceGroupDesc {
-		ResourceGroupLayoutHandle layout;		  // Must match layout used in pipeline
+		PipelineLayoutHandle layout;			  // Must match layout used in pipeline
 		std::vector<ResourceGroupItem> Resources; // Actual resources to bind
 		ResourceGroupLifetime flags = ResourceGroupLifetime::Persistent;
+		uint32_t setIndex = 0;
 		const char* debugName = nullptr;
 
 		ResourceGroupDesc() = default;
 
-		ResourceGroupDesc(ResourceGroupLayoutHandle layoutHandle, const std::vector<ResourceGroupItem>& items)
+		ResourceGroupDesc(PipelineLayoutHandle layoutHandle, const std::vector<ResourceGroupItem>& items)
 			: layout(layoutHandle), Resources(items) {}
 	};
 
@@ -728,7 +763,7 @@ namespace Rx {
 		DepthStencilState depthStencil;
 		BlendState blend;
 		RenderPassHandle renderPass;
-		ResourceGroupLayoutHandle resourceGroupLayout;
+		PipelineLayoutHandle layout;
 
 		PipelineDesc()
 			: primitiveType(PrimitiveType::Triangles), renderPass(0) {}
@@ -826,9 +861,9 @@ namespace Rx {
 	struct RENDERX_API CommandList {
 		void open();
 		void close();
-		bool isOpen = false;
+		bool isOpen = false; // deprected
+		uint64_t id;
 		bool IsValid() const { return id != 0; };
-
 		void setPipeline(const PipelineHandle& pipeline);
 		void setVertexBuffer(const BufferHandle& buffer, uint64_t offset = 0);
 		void setIndexBuffer(const BufferHandle& buffer, uint64_t offset = 0);
@@ -836,14 +871,12 @@ namespace Rx {
 			uint32_t firstVertex = 0, uint32_t firstInstance = 0);
 		void drawIndexed(uint32_t indexCount, int32_t vertexOffset = 0,
 			uint32_t instanceCount = 1, uint32_t firstIndex = 0, uint32_t firstInstance = 0);
-
 		void beginRenderPass(
 			RenderPassHandle pass,
 			const ClearValue*, uint32_t);
-
 		void endRenderPass();
-
-		uint64_t id;
+		void writeBuffer(BufferHandle handle, void* data, uint32_t offset, uint32_t size);
+		void setResourceGroup(const ResourceGroupHandle& handle);
 	};
 
 } // namespace  RenderX

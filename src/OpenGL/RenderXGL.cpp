@@ -8,6 +8,8 @@ namespace RxGL {
 	HWND s_WindowHandle = nullptr;
 	HDC s_DeviceContext = nullptr;
 	HGLRC s_RenderContext = nullptr;
+	int s_WindowWidth = 0;
+	int s_WindowHeight = 0;
 
 	// WGL extension function pointer for vsync control
 	typedef BOOL(WINAPI* PFNWGLSWAPINTERVALEXTPROC)(int);
@@ -22,6 +24,8 @@ namespace RxGL {
 		}
 
 		s_WindowHandle = static_cast<HWND>(window.nativeHandle);
+		s_WindowWidth = window.width;
+		s_WindowHeight = window.height;
 		if (!IsWindow(s_WindowHandle)) {
 			RENDERX_CRITICAL("GLInit: Invalid window handle");
 			return;
@@ -34,7 +38,9 @@ namespace RxGL {
 			return;
 		}
 
-		// Set pixel format
+		// Set pixel format (can only be done once per HWND lifetime).
+		// If a pixel format is already set for this window, reuse it and skip SetPixelFormat,
+		// which would otherwise fail when switching backends (e.g., Vulkan -> OpenGL -> Vulkan).
 		PIXELFORMATDESCRIPTOR pfd{};
 		pfd.nSize = sizeof(PIXELFORMATDESCRIPTOR);
 		pfd.nVersion = 1;
@@ -45,53 +51,112 @@ namespace RxGL {
 		pfd.cStencilBits = 8;
 		pfd.iLayerType = PFD_MAIN_PLANE;
 
-		int pixelFormat = ChoosePixelFormat(s_DeviceContext, &pfd);
-		if (!pixelFormat) {
-			RENDERX_CRITICAL("GLInit: Failed to choose pixel format");
+		int existingFormat = GetPixelFormat(s_DeviceContext);
+		if (existingFormat == 0) {
+			int pixelFormat = ChoosePixelFormat(s_DeviceContext, &pfd);
+			if (!pixelFormat) {
+				RENDERX_CRITICAL("GLInit: Failed to choose pixel format");
+				ReleaseDC(s_WindowHandle, s_DeviceContext);
+				s_DeviceContext = nullptr;
+				return;
+			}
+
+			if (!SetPixelFormat(s_DeviceContext, pixelFormat, &pfd)) {
+				RENDERX_CRITICAL("GLInit: Failed to set pixel format");
+				ReleaseDC(s_WindowHandle, s_DeviceContext);
+				s_DeviceContext = nullptr;
+				return;
+			}
+		} else {
+			// Reuse existing pixel format when reinitializing GL on the same window.
+		}
+
+		// Try to create a modern core profile context using WGL_ARB_create_context
+		// Create a temporary context first so we can load wglCreateContextAttribsARB
+		HGLRC tempContext = wglCreateContext(s_DeviceContext);
+		if (!tempContext) {
+			RENDERX_CRITICAL("GLInit: Failed to create temp OpenGL context");
 			ReleaseDC(s_WindowHandle, s_DeviceContext);
 			s_DeviceContext = nullptr;
 			return;
 		}
 
-		if (!SetPixelFormat(s_DeviceContext, pixelFormat, &pfd)) {
-			RENDERX_CRITICAL("GLInit: Failed to set pixel format");
+		if (!wglMakeCurrent(s_DeviceContext, tempContext)) {
+			RENDERX_CRITICAL("GLInit: Failed to make temp OpenGL context current");
+			wglDeleteContext(tempContext);
 			ReleaseDC(s_WindowHandle, s_DeviceContext);
 			s_DeviceContext = nullptr;
 			return;
 		}
 
-		// Create OpenGL context
-		s_RenderContext = wglCreateContext(s_DeviceContext);
-		if (!s_RenderContext) {
-			RENDERX_CRITICAL("GLInit: Failed to create OpenGL context");
-			ReleaseDC(s_WindowHandle, s_DeviceContext);
-			s_DeviceContext = nullptr;
-			return;
-		}
-
-		// Make context current
-		if (!wglMakeCurrent(s_DeviceContext, s_RenderContext)) {
-			RENDERX_CRITICAL("GLInit: Failed to make OpenGL context current");
-			wglDeleteContext(s_RenderContext);
-			ReleaseDC(s_WindowHandle, s_DeviceContext);
-			s_RenderContext = nullptr;
-			s_DeviceContext = nullptr;
-			s_WindowHandle = nullptr;
-			return;
-		}
-
-		// Initialize GLEW after context is current
+		// Initialize GLEW so we can fetch WGL extension entrypoints
 		glewExperimental = GL_TRUE;
 		if (glewInit() != GLEW_OK) {
-			RENDERX_CRITICAL("GLInit: Failed to initialize GLEW");
+			RENDERX_CRITICAL("GLInit: Failed to initialize GLEW (temp)");
 			wglMakeCurrent(nullptr, nullptr);
-			wglDeleteContext(s_RenderContext);
+			wglDeleteContext(tempContext);
+			ReleaseDC(s_WindowHandle, s_DeviceContext);
+			s_DeviceContext = nullptr;
+			return;
+		}
+
+		// Try to get wglCreateContextAttribsARB
+		typedef HGLRC(WINAPI* PFNWGLCREATECONTEXTATTRIBSARBPROC)(HDC, HGLRC, const int*);
+		PFNWGLCREATECONTEXTATTRIBSARBPROC wglCreateContextAttribsARB =
+			(PFNWGLCREATECONTEXTATTRIBSARBPROC)wglGetProcAddress("wglCreateContextAttribsARB");
+
+		if (wglCreateContextAttribsARB) {
+			int attribs[] = {
+				0x2091 /* WGL_CONTEXT_MAJOR_VERSION_ARB */, 4,
+				0x2092 /* WGL_CONTEXT_MINOR_VERSION_ARB */, 6,
+				0x9126 /* WGL_CONTEXT_PROFILE_MASK_ARB */, 0x00000001 /* WGL_CONTEXT_CORE_PROFILE_BIT_ARB */,
+				0
+			};
+			HGLRC newCtx = wglCreateContextAttribsARB(s_DeviceContext, 0, attribs);
+			if (newCtx) {
+				// Replace temp context with new one
+				wglMakeCurrent(nullptr, nullptr);
+				wglDeleteContext(tempContext);
+				s_RenderContext = newCtx;
+				if (!wglMakeCurrent(s_DeviceContext, s_RenderContext)) {
+					RENDERX_CRITICAL("GLInit: Failed to make modern OpenGL context current");
+					wglDeleteContext(s_RenderContext);
+					ReleaseDC(s_WindowHandle, s_DeviceContext);
+					s_RenderContext = nullptr;
+					s_DeviceContext = nullptr;
+					s_WindowHandle = nullptr;
+					return;
+				}
+			}
+			else {
+				// fallback to temp
+				s_RenderContext = tempContext;
+			}
+		}
+		else {
+			// No wglCreateContextAttribsARB available, use temp context
+			s_RenderContext = tempContext;
+		}
+
+		// Ensure GLEW is initialized for the final context
+		glewExperimental = GL_TRUE;
+		if (glewInit() != GLEW_OK) {
+			RENDERX_CRITICAL("GLInit: Failed to initialize GLEW (final)");
+			wglMakeCurrent(nullptr, nullptr);
+			if (s_RenderContext) wglDeleteContext(s_RenderContext);
 			ReleaseDC(s_WindowHandle, s_DeviceContext);
 			s_RenderContext = nullptr;
 			s_DeviceContext = nullptr;
 			s_WindowHandle = nullptr;
 			return;
 		}
+
+		// Diagnostic info: log GL strings and default framebuffer binding
+		const GLubyte* vendor = glGetString(GL_VENDOR);
+		const GLubyte* renderer = glGetString(GL_RENDERER);
+		const GLubyte* version = glGetString(GL_VERSION);
+		const GLubyte* glsl = glGetString(GL_SHADING_LANGUAGE_VERSION);
+		// diagnostic info removed to reduce startup logs
 
 		// Load WGL extensions
 		wglSwapIntervalEXT = (PFNWGLSWAPINTERVALEXTPROC)wglGetProcAddress("wglSwapIntervalEXT");
@@ -100,17 +165,29 @@ namespace RxGL {
 		}
 
 		// Set OpenGL state
-		glEnable(GL_CULL_FACE);
-		glEnable(GL_BLEND);
-		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-		glEnable(GL_DEPTH_TEST);
-		glDepthFunc(GL_LEQUAL);
+		glDisable(GL_CULL_FACE);  // Disable culling to ensure all triangles are visible
+		glDisable(GL_BLEND);  // Disable blend for now to ensure visibility
+		glDisable(GL_DEPTH_TEST);  // Disable depth test to ensure geometry shows
 
-		RENDERX_INFO("OpenGL initialized successfully (native Win32 context, GLEW configured)");
+		// Clear any existing VAO state
+		glBindVertexArray(0);
+
+		// OpenGL initialized
 	}
 
 	void GLShutdown() {
 		PROFILE_FUNCTION();
+
+		// Make the context current first to delete resources
+		if (s_RenderContext && s_DeviceContext) {
+			wglMakeCurrent(s_DeviceContext, s_RenderContext);
+		}
+
+		// Clear VAO cache (must happen before context is destroyed)
+		GLClearVAOCache();
+
+		// Clear pipeline cache
+		GLClearPipelineCache();
 
 		if (s_RenderContext) {
 			wglMakeCurrent(nullptr, nullptr);
@@ -124,7 +201,7 @@ namespace RxGL {
 		}
 
 		s_WindowHandle = nullptr;
-		RENDERX_INFO("OpenGL shutdown complete");
+		// OpenGL shutdown complete
 	}
 
 } // namespace RxGL

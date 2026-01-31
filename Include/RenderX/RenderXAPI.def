@@ -1,9 +1,14 @@
 // RenderX Lifetime
 RENDERER_FUNC(void, Init, const Window&)
+RENDERER_FUNC(void, Shutdown)
 
 // frame Lifetime
-RENDERER_FUNC(uint32_t, Begin)
+RENDERER_FUNC(void, Begin, uint32_t frameIndex)
 RENDERER_FUNC(void, End, uint32_t)
+
+// pipeline layout
+RENDERER_FUNC(PipelineLayoutHandle, CreatePipelineLayout, const ResourceGroupLayout* layout, uint32_t layoutcount)
+
 
 // pipeline Graphics
 RENDERER_FUNC(PipelineHandle, CreateGraphicsPipeline, PipelineDesc& desc)
@@ -12,15 +17,9 @@ RENDERER_FUNC(ShaderHandle, CreateShader, const ShaderDesc& desc)
 // resource Creation
 // buffer
 RENDERER_FUNC(BufferHandle, CreateBuffer, const BufferDesc& desc)
-
-// Command List Creation and Management
-RENDERER_FUNC(CommandList, CreateCommandList)
-RENDERER_FUNC(void, DestroyCommandList, CommandList& cmdList)
-RENDERER_FUNC(void, ExecuteCommandList, CommandList& cmdList)
-// RENDERER_FUNC(uint32_t , GetCurrentFrameIndex)
-
-//
-RENDERER_FUNC(ResourceGroupLayoutHandle, CreateResourceGroupLayout, const ResourceGroupLayoutDesc& desc)
+// buffer views
+RENDERER_FUNC(BufferViewHandle, CreateBufferView, const BufferViewDesc& desc)
+RENDERER_FUNC(void, DestroyBufferView, BufferViewHandle& handle)
 
 RENDERER_FUNC(RenderPassHandle, CreateRenderPass, const RenderPassDesc&)
 RENDERER_FUNC(void, DestroyRenderPass, RenderPassHandle&)
@@ -29,6 +28,15 @@ RENDERER_FUNC(RenderPassHandle, GetDefaultRenderPass)
 RENDERER_FUNC(FramebufferHandle, CreateFramebuffer, const FramebufferDesc&)
 RENDERER_FUNC(void, DestroyFramebuffer, FramebufferHandle&)
 
+RENDERER_FUNC(ResourceGroupHandle, CreateResourceGroup, const ResourceGroupDesc&)
+RENDERER_FUNC(void, DestroyResourceGroup, ResourceGroupHandle&)
+
+
+// Command List Creation and Management
+RENDERER_FUNC(const CommandList, CreateCommandList, uint32_t)
+RENDERER_FUNC(void, ExecuteCommandList, CommandList&)
+RENDERER_FUNC(void, DestroyCommandList, CommandList&, uint32_t)
+// RENDERER_FUNC(uint32_t , GetCurrentFrameIndex)
 
 // Command List Recording Operations
 RENDERER_FUNC(void, CmdOpen, CommandList& cmd)
@@ -51,8 +59,5 @@ RENDERER_FUNC(void, CmdBeginRenderPass, CommandList& cmd, RenderPassHandle pass,
 
 RENDERER_FUNC(void, CmdEndRenderPass, CommandList&)
 
-// RENDERER_FUNC(SurfaceHandle, CreateSurface, void*)
-// RENDERER_FUNC(void, DestroySurface, SurfaceHandle&)
-
-// RENDERER_FUNC(SwapchainHandle, CreateSwapchain, SurfaceHandle)
-// RENDERER_FUNC(void, DestroySwapchain, SwapchainHandle&)
+RENDERER_FUNC(void, CmdWriteBuffer, const CommandList& cmdList, BufferHandle handle, void* data, uint32_t offset, uint32_t size)
+RENDERER_FUNC(void, CmdSetResourceGroup, const CommandList& cmdList, const ResourceGroupHandle& handle)

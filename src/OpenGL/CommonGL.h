@@ -38,6 +38,8 @@ namespace RxGL {
 	};
     	
 	extern HWND s_WindowHandle;
+	extern int s_WindowWidth;
+	extern int s_WindowHeight;
 	extern HDC s_DeviceContext;
 	extern HGLRC s_RenderContext;
 	extern std::unordered_map<uint32_t, GLCommandListState> s_GLCommandLists;
@@ -111,5 +113,9 @@ namespace RxGL {
 			break;
 		}
 	}
+
+	// Forward declaration for render pass clear value support
+	const std::vector<ClearValue>& GLGetPendingClearValues();
+
 } // namespace RxGL
 } // namespace Rx

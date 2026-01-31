@@ -1,10 +1,13 @@
 #pragma once
+
 #include "RenderX/Log.h"
 #include "ProLog/ProLog.h"
 #include "RenderX/RenderXCommon.h"
 
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan.hpp>
+#include "vk_mem_alloc.h"
+
 
 #include <vector>
 #include <array>
@@ -15,15 +18,15 @@
 #include <cstdint>
 #include <cstring>
 #include <string>
+#include <utility>
+
 
 namespace Rx {
 namespace RxVK {
 
-	// Internal Vulkan backend helpers. These are NOT part of the public RenderX API.
-	// They are kept inline so they can be used privately from backend sources without
-	// exposing device/swapchain creation details to library users.
+	using Hash64 = uint64_t;
 
-	constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 3;
+	extern uint32_t MAX_FRAMES_IN_FLIGHT;
 	extern uint32_t g_CurrentFrame;
 
 	inline const char* VkResultToString(VkResult result) {
@@ -48,14 +51,14 @@ namespace RxVK {
 		case -12: return "VK_ERROR_FRAGMENTED_POOL";
 		case -13: return "VK_ERROR_UNKNOWN";
 		case -1000069000: return "VK_ERROR_OUT_OF_POOL_MEMORY";
-		case -1000072003: return "VK_ERROR_INVALID_EXTERNAL_HANDLE ";
+		case -1000072003: return "VK_ERROR_INVALID_EXTERNAL_HANDLE";
 		case -1000161000: return "VK_ERROR_FRAGMENTATION";
 		case -1000257000: return "VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS";
 		case 1000297000: return "VK_PIPELINE_COMPILE_REQUIRED";
 		case -1000174001: return "VK_ERROR_NOT_PERMITTED";
 		case -1000000000: return "VK_ERROR_SURFACE_LOST_KHR";
 		case -1000000001: return "VK_ERROR_NATIVE_WINDOW_IN_USE_KHR";
-		case 1000001003: return "VK_SUBOPTIMAL_KHR ";
+		case 1000001003: return "VK_SUBOPTIMAL_KHR";
 		case -1000001004: return "VK_ERROR_OUT_OF_DATE_KHR";
 		case -1000003001: return "VK_ERROR_INCOMPATIBLE_DISPLAY_KHR";
 		case -1000011001: return "VK_ERROR_VALIDATION_FAILED_EXT";
@@ -78,44 +81,75 @@ namespace RxVK {
 		case 1000483000: return "VK_PIPELINE_BINARY_MISSING_KHR";
 		case -1000483000: return "VK_ERROR_NOT_ENOUGH_SPACE_KHR";
 		case 0x7FFFFFFF: return "VK_RESULT_MAX_ENUM";
-		default:
-			return "Unknown VKResult";
+		default: return "Unknown VKResult";
 		}
 	}
 
-	// Macro for checking Vulkan results with detailed error reporting
-#define VK_CHECK(x)                                                                                      \
-	do {                                                                                                 \
-		VkResult err = x;                                                                                \
-		if (err != VK_SUCCESS) {                                                                         \
-			RENDERX_ERROR("[Vulkan] VkResult = {} at {}:{}", VkResultToString(err), __FILE__, __LINE__); \
-		}                                                                                                \
+#define VK_CHECK(x)                                         \
+	do {                                                    \
+		VkResult err = x;                                   \
+		if (err != VK_SUCCESS)                              \
+			RENDERX_ERROR("[Vulkan] {} at {}:{}",           \
+				VkResultToString(err), __FILE__, __LINE__); \
 	} while (0)
 
-	// Inline function for checking Vulkan results with custom message
-	inline bool
-	CheckVk(VkResult result, const char* message) {
+	inline bool CheckVk(VkResult result, const char* message) {
 		if (result != VK_SUCCESS) {
-			RENDERX_ERROR("[Vulkan] {} (VkResult = {})", message, VkResultToString(result));
+			RENDERX_ERROR("[Vulkan] {} ({})", message, VkResultToString(result));
 			return false;
 		}
 		return true;
 	}
 
-	// ===================== STRUCTURES =====================
+
+	struct DescriptorPoolSizes {
+		uint32_t uniformBufferCount = 0;
+		uint32_t storageBufferCount = 0;
+		uint32_t sampledImageCount = 0;
+		uint32_t storageImageCount = 0;
+		uint32_t samplerCount = 0;
+		uint32_t combinedImageSamplerCount = 0;
+		uint32_t maxSets = 0;
+	};
+
+	struct VulkanUploadContext {
+		VkBuffer buffer = VK_NULL_HANDLE;
+		VmaAllocation allocation = VK_NULL_HANDLE;
+		uint8_t* mappedPtr = nullptr;
+		uint32_t size = 0;
+		uint32_t offset = 0;
+	};
 
 	struct FrameContex {
 		VkCommandPool commandPool = VK_NULL_HANDLE;
-		std::vector<VkCommandBuffer> commandBuffers;
-
-		// Synchronization primitives
+		VkDescriptorPool DescriptorPool = VK_NULL_HANDLE;
 		VkSemaphore presentSemaphore = VK_NULL_HANDLE;
 		VkSemaphore renderSemaphore = VK_NULL_HANDLE;
 		VkFence fence = VK_NULL_HANDLE;
-
-		// Current swapchain image index for this frame
+		VulkanUploadContext upload;
 		uint32_t swapchainImageIndex = 0;
-		VkDescriptorPool DescriptorPool;
+	};
+
+
+
+	struct VulkanCommandList {
+		VkCommandBuffer cmdBuffer;
+		bool isOpen = false;
+		uint32_t lastFrame = 0;
+	};
+
+	struct VulkanPipelineLayout {
+		VkPipelineLayout layout;
+		std::vector<VkDescriptorSetLayout> setlayouts;
+		std::vector<Hash64> setHashs;
+
+		bool isBound = false;
+	};
+
+	struct VulkanPipeline {
+		VkPipeline pipeline;
+		PipelineLayoutHandle layout;
+		bool isBound = false;
 	};
 
 	struct SwapchainImageSync {
@@ -123,29 +157,44 @@ namespace RxVK {
 		VkSemaphore renderFinishedSemaphore = VK_NULL_HANDLE;
 	};
 
-	struct VulkanCommandList {
-		VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
-		bool isRecording = false;
+	struct VulkanResourceGroup {
+		PipelineLayoutHandle pipelineLayout;
+		VkDescriptorSet set;
+		uint32_t setIndex;
+		Hash64 hash;
+		bool isAlive = false;
+		bool isPersistent = true;
+	};
+
+	struct VulkanBufferConfig {
+		VkBufferUsageFlags usage;
+		VmaMemoryUsage vmaUsage;
+		VmaAllocationCreateFlags vmaFlags;
 	};
 
 	struct VulkanBuffer {
-		VkDeviceMemory memory = VK_NULL_HANDLE;
 		VkBuffer buffer = VK_NULL_HANDLE;
-		uint32_t bindingCount = 0;
-		size_t size = 0;
+		VmaAllocation allocation = VK_NULL_HANDLE;
+		VmaAllocationInfo allocInfo = {};
+
+		VkDeviceSize size = 0;
+		uint32_t bindingCount = 1;
+		BufferFlags flags;
+
+// Optional
+#ifdef RENDERX_DEBUG
+		const char* debugName = nullptr;
+#endif
 	};
 
-	// struct VulkanBuffer {
-	//	VkBuffer buffer = VK_NULL_HANDLE;
-	//	VkDeviceMemory memory = VK_NULL_HANDLE;
-	//	VkDeviceSize size = 0;
-	//	void* mappedData = nullptr;
-	//	bool isValid = false;
+	struct VulkanBufferView {
+		BufferHandle buffer;
+		uint32_t offset;
+		uint32_t range;
+		Hash64 hash;
+		bool isValid = false;
+	};
 
-	//	VulkanBuffer() = default;
-	//};
-
-	/// Vulkan-specific texture resource
 	struct VulkanTexture {
 		VkImage image = VK_NULL_HANDLE;
 		VkImageView view = VK_NULL_HANDLE;
@@ -155,8 +204,6 @@ namespace RxVK {
 		uint32_t height = 0;
 		uint32_t mipLevels = 1;
 		bool isValid = false;
-
-		VulkanTexture() = default;
 	};
 
 	struct VulkanShader {
@@ -171,19 +218,25 @@ namespace RxVK {
 		std::vector<VkPresentModeKHR> presentModes;
 	};
 
+	struct VulkanDeviceLimits {
+		uint32_t minUniformBufferOffsetAlignment;
+		uint32_t minStorageBufferOffsetAlignment;
+		uint32_t minDrawIndirectBufferOffsetAlignment;
+	};
+
 	struct VulkanContext {
 		void* window = nullptr;
 		VkInstance instance = VK_NULL_HANDLE;
 		VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
 		VkDevice device = VK_NULL_HANDLE;
+		VmaAllocator allocator;
+		VulkanDeviceLimits deviceLimits;
 		VkQueue graphicsQueue = VK_NULL_HANDLE;
 		uint32_t graphicsQueueFamilyIndex = 0;
-
 		VkSurfaceKHR surface = VK_NULL_HANDLE;
 
-		// Swapchain related resources
 		RenderPassHandle swapchainRenderPassHandle;
-		VkRenderPass swapchainRenderPass = VK_NULL_HANDLE; // Created from RenderPassDesc
+		VkRenderPass swapchainRenderPass = VK_NULL_HANDLE;
 		std::vector<VkFramebuffer> swapchainFramebuffers;
 		std::vector<SwapchainImageSync> swapchainImageSync;
 
@@ -194,102 +247,177 @@ namespace RxVK {
 		std::vector<VkImageView> swapchainImageviews;
 	};
 
-	// =====================  Vulkan Handle/Resource Pool=====================
 	template <typename ResourceType, typename Tag>
 	class ResourcePool {
 	public:
-		using ValueType = uint64_t;
+		using ValueType = uint32_t;
 
 		ResourcePool() {
-			ResourceType invalidResource{};
-			_My_resource.push_back(invalidResource);
+			_My_resource.emplace_back();
+			_My_generation.emplace_back(1);
 
-			std::random_device rd;
-			std::mt19937 gen(rd());
-			std::uniform_int_distribution<> dest(1, 100);
-			_My_key = dest(gen);
-		}
-		~ResourcePool() {
-			_My_freelist.clear();
-			_My_resource.clear();
+			// Generate a unique per-pool secret
+			_My_key = GenerateKey();
 		}
 
-		Handle<Tag> allocate(ResourceType resource) {
+		Tag allocate(ResourceType resource) {
 			ValueType index;
-			Handle<Tag> handle;
+			Tag handle;
+
 			if (_My_freelist.empty()) {
 				index = static_cast<ValueType>(_My_resource.size());
-				handle.id = index ^ _My_key;
 				_My_resource.push_back(resource);
-				return handle;
+				_My_generation.push_back(1);
 			}
 			else {
 				index = _My_freelist.back();
 				_My_freelist.pop_back();
 				_My_resource[index] = resource;
-				handle.id = index ^ _My_key;
-				return handle;
+				++_My_generation[index];
 			}
+
+			uint64_t raw =
+				(static_cast<uint64_t>(_My_generation[index]) << 32) |
+				static_cast<uint64_t>(index);
+
+			handle.id = Encrypt(raw);
+			return handle;
 		}
 
-		bool IsAlive(const Handle<Tag>& handle) {
-		}
+		void free(Tag& handle) {
+			RENDERX_ASSERT_MSG(handle.IsValid(),
+				"ResourcePool::free : Trying to free invalid handle");
 
-		void free(Handle<Tag>& handle) {
-			RENDERX_ASSERT_MSG(handle.IsValid(), "trying to free invalid handle");
-			auto index = handle.id ^ _My_key;
+			uint64_t raw = Decrypt(handle.id);
+
+			auto index = static_cast<ValueType>(raw & 0xFFFFFFFF);
+			auto gen = static_cast<ValueType>(raw >> 32);
+
+			RENDERX_ASSERT_MSG(
+				index < _My_resource.size() &&
+					_My_generation[index] == gen,
+				"ResourcePool::free : Stale or foreign handle detected");
+
 			handle.id = 0;
 			_My_resource[index] = ResourceType{};
 			_My_freelist.push_back(index);
 		}
 
-		ResourceType& get(Handle<Tag> handle) {
-			RENDERX_ASSERT_MSG(handle.IsValid(), "trying to get invalid handle");
-			auto index = handle.id ^ _My_key;
-			return _My_resource[index];
+		ResourceType* get(const Tag& handle) {
+			RENDERX_ASSERT_MSG(handle.IsValid(),
+				"ResourcePool::get : invalid handle");
+
+			uint64_t raw = Decrypt(handle.id);
+
+			auto index = static_cast<ValueType>(raw & 0xFFFFFFFF);
+			auto gen = static_cast<ValueType>(raw >> 32);
+
+			if (!(index < _My_resource.size() && _My_generation[index] == gen)){
+                RENDERX_WARN("ResourcePool::get : Stale or foreign handle detected")
+				return nullptr;
+			}
+
+			return &_My_resource[index];
+		}
+
+		template <typename Fn>
+		void ForEach(Fn&& fn) {
+			for (size_t i = 1; i < _My_resource.size(); ++i) {
+				if (_My_generation[i] != 0) {
+					fn(_My_resource[i]);
+				}
+			}
+		}
+
+		bool IsAlive(const Tag& handle) const {
+			if (!handle.IsValid())
+				return false;
+
+			uint64_t raw = Decrypt(handle.id);
+
+			auto index = static_cast<ValueType>(raw & 0xFFFFFFFF);
+			auto gen = static_cast<ValueType>(raw >> 32);
+
+			return index < _My_resource.size() &&
+				   _My_generation[index] == gen;
 		}
 
 		void clear() {
-			_My_freelist.clear();
 			_My_resource.clear();
 			_My_generation.clear();
+			_My_freelist.clear();
+
+			_My_resource.emplace_back();
+			_My_generation.emplace_back(1);
+		}
+	private:
+		//Encryption 
+		static uint64_t RotateLeft(uint64_t x, int r) {
+			return (x << r) | (x >> (64 - r));
+		}
+
+		static uint64_t RotateRight(uint64_t x, int r) {
+			return (x >> r) | (x << (64 - r));
+		}
+
+		uint64_t Encrypt(uint64_t value) const {
+			value ^= _My_key;
+			value = RotateLeft(value, 17);
+			return value;
+		}
+
+		uint64_t Decrypt(uint64_t value) const {
+			value = RotateRight(value, 17);
+			value ^= _My_key;
+			return value;
+		}
+
+		static uint64_t GenerateKey() {
+			static std::atomic<uint64_t> counter{ 0xA5B35705F00DBAAD };
+			return counter.fetch_add(0x9E3779B97F4A7C15ull);
 		}
 	private:
 		std::vector<ResourceType> _My_resource;
-		std::vector<ValueType> _My_freelist;
 		std::vector<ValueType> _My_generation;
-		ValueType _My_key = 0;
+		std::vector<ValueType> _My_freelist;
+
+		uint64_t _My_key = 0;
 	};
 
-	// ===================== GLOBAL RESOURCE POOLS =====================
 
-	// New ResourcePool instances for consistent resource management
-	extern ResourcePool<VulkanBuffer, HandleType::Buffer> g_BufferPool;
-	extern ResourcePool<VulkanShader, HandleType::Shader> g_ShaderPool;
-	extern ResourcePool<VkPipeline, HandleType::Pipeline> g_PipelinePool;
-	extern ResourcePool<VkRenderPass, HandleType::RenderPass> g_RenderPassPool;
-	extern ResourcePool<VulkanTexture, HandleType::Texture> g_TexturePool;
+	struct VulkanTextureView {
+	};
 
-	// ===================== CONTEXT ACCESS =====================
+	extern ResourcePool<VulkanBuffer, BufferHandle> g_BufferPool;
+	extern ResourcePool<VulkanBufferView, BufferViewHandle> g_BufferViewPool;
+	extern ResourcePool<VkRenderPass, RenderPassHandle> g_RenderPassPool;
+	extern ResourcePool<VulkanTexture, TextureHandle> g_TexturePool;
+	extern ResourcePool<VulkanShader, ShaderHandle> g_ShaderPool;
+	extern ResourcePool<VulkanPipeline, PipelineHandle> g_PipelinePool;
+	extern ResourcePool<VulkanPipelineLayout, PipelineLayoutHandle> g_LayoutPool;
+
+	extern ResourcePool<VulkanResourceGroup, ResourceGroupHandle> g_TransientResourceGroupPool;
+	extern ResourcePool<VulkanResourceGroup, ResourceGroupHandle> g_PersistentResourceGroupPool;
+
+	extern ResourcePool<VulkanCommandList, CommandList> g_CommandListPool;
+
+	extern std::unordered_map<Hash64, BufferViewHandle> g_BufferViewCache;
+	extern std::unordered_map<Hash64, ResourceGroupHandle> g_ResourceGroupCache;
+
+
+	/*
+	extern ResourcePool<VulkanTextureView, HandleType::TextureView> g_TextureViewPool;
+	extern ResourcePool<VulkanTextureView, HandleType::Sampler> g_SamplerPool;*/
+
+	//  CONTEXT ACCESS
 
 	VulkanContext& GetVulkanContext();
-	FrameContex& GetCurrentFrameContex(uint32_t index);
+	FrameContex& GetFrameContex(uint32_t index);
 
+	// Cleanup function for common Vulkan resources
+	void VKShutdownCommon();
 
-	// Temp Testing Function (Executed Once Through Program)
-	inline void TempTest() {
-		VulkanTexture texture;
-		auto texturehandle = g_TexturePool.allocate(texture);
-		auto textureHandle1 = g_TexturePool.allocate(texture);
-		g_TexturePool.free(texturehandle);
-		auto texturehandle2 = g_TexturePool.allocate(texture);
-		g_TexturePool.free(textureHandle1);
-		auto textureHandle3 = g_TexturePool.allocate(texture);
-		g_TexturePool.get(texturehandle2);
-		g_TexturePool.get(textureHandle3);
-	};
-
-	// ===================== INITIALIZATION FUNCTIONS =====================
+	//  INITIALIZATION FUNCTIONS
 
 	bool InitInstance(uint32_t extCount, const char** extentions);
 
@@ -305,7 +433,12 @@ namespace RxVK {
 		VkDevice* outDevice,
 		VkQueue* outGraphicsQueue);
 
-	// ===================== SWAPCHAIN FUNCTIONS =====================
+	bool InitVulkanMemoryAllocator(
+		VkInstance instance,
+		VkPhysicalDevice physicalDevice,
+		VkDevice device);
+
+	//  SWAPCHAIN FUNCTIONS
 
 	SwapchainSupportDetails QuerySwapchainSupport(
 		VkPhysicalDevice device,
@@ -323,10 +456,45 @@ namespace RxVK {
 	bool CreateSwapchain(VulkanContext& ctx, Window window);
 	void InitFrameContext();
 	void CreateSurface(Window);
+	bool CreatePersistentDescriptorPool();
+	bool CreatePerFrameUploadBuffer(FrameContex& frame, uint32_t bufferSize);
 
-	// ===================== VULKAN HELPERS =====================
+	// shutdown / cleanup
+	void freeResourceGroups();
+	void freeAllVulkanResources();
+
 
 	VkRenderPass GetVulkanRenderPass(RenderPassHandle handle);
+
+
+	inline VkDescriptorPool CreateDescriptorPool(const DescriptorPoolSizes& sizes, bool allowFree) {
+		std::vector<VkDescriptorPoolSize> poolSizes;
+		auto ctx = GetVulkanContext();
+		if (sizes.uniformBufferCount > 0)
+			poolSizes.push_back({ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, sizes.uniformBufferCount });
+		if (sizes.storageBufferCount > 0)
+			poolSizes.push_back({ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, sizes.storageBufferCount });
+		if (sizes.sampledImageCount > 0)
+			poolSizes.push_back({ VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, sizes.sampledImageCount });
+		if (sizes.storageImageCount > 0)
+			poolSizes.push_back({ VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, sizes.storageImageCount });
+		if (sizes.samplerCount > 0)
+			poolSizes.push_back({ VK_DESCRIPTOR_TYPE_SAMPLER, sizes.samplerCount });
+		if (sizes.combinedImageSamplerCount > 0)
+			poolSizes.push_back({ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, sizes.combinedImageSamplerCount });
+
+		VkDescriptorPoolCreateInfo poolInfo = {};
+		poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+		poolInfo.flags = allowFree ? VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT : 0;
+		poolInfo.maxSets = sizes.maxSets;
+		poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+		poolInfo.pPoolSizes = poolSizes.data();
+
+		VkDescriptorPool pool;
+		VkResult result = vkCreateDescriptorPool(ctx.device, &poolInfo, nullptr, &pool);
+
+		return (result == VK_SUCCESS) ? pool : VK_NULL_HANDLE;
+	}
 
 	// Format conversion helpers
 	inline VkFormat ToVkFormat(DataFormat format) {
@@ -592,6 +760,120 @@ namespace RxVK {
 			vkStages |= VK_SHADER_STAGE_COMPUTE_BIT;
 
 		return vkStages;
+	}
+
+	inline VkBufferUsageFlags ToVkBufferFlags(BufferFlags flags) {
+		VkBufferUsageFlags vkFlags = 0;
+
+		if (Has(flags, BufferFlags::Vertex))
+			vkFlags |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+
+		if (Has(flags, BufferFlags::Index))
+			vkFlags |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+
+		if (Has(flags, BufferFlags::Uniform))
+			vkFlags |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+
+		if (Has(flags, BufferFlags::Storage))
+			vkFlags |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+
+		if (Has(flags, BufferFlags::Indirect))
+			vkFlags |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
+
+		if (Has(flags, BufferFlags::TransferSrc))
+			vkFlags |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+
+		if (Has(flags, BufferFlags::TransferDst))
+			vkFlags |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+
+		return vkFlags;
+	}
+
+	// Convert MemoryType to VMA allocation info
+	inline VmaAllocationCreateInfo ToVmaMomoryType(MemoryType type, BufferFlags flags) {
+		VmaAllocationCreateInfo allocInfo = {};
+
+		// Note: Static/Dynamic from BufferFlags affects the allocation strategy
+		bool isDynamic = Has(flags, BufferFlags::Dynamic);
+
+		switch (type) {
+		case MemoryType::GpuOnly:
+			allocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
+			allocInfo.flags = 0;
+			break;
+
+		case MemoryType::CpuToGpu:
+			allocInfo.usage = VMA_MEMORY_USAGE_AUTO;
+			allocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+			if (isDynamic) {
+				allocInfo.flags |= VMA_ALLOCATION_CREATE_MAPPED_BIT;
+			}
+			break;
+
+		case MemoryType::GpuToCpu:
+			allocInfo.usage = VMA_MEMORY_USAGE_AUTO;
+			allocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT |
+							  VMA_ALLOCATION_CREATE_MAPPED_BIT;
+			allocInfo.requiredFlags = VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+			break;
+
+		case MemoryType::CpuOnly:
+			allocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
+			allocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT |
+							  VMA_ALLOCATION_CREATE_MAPPED_BIT;
+			break;
+
+		case MemoryType::Auto:
+			allocInfo.usage = VMA_MEMORY_USAGE_AUTO;
+			allocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT;
+			if (isDynamic) {
+				allocInfo.flags |= VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+			}
+			break;
+
+		default:
+			// Fallback
+			allocInfo.usage = VMA_MEMORY_USAGE_AUTO;
+			break;
+		}
+
+		return allocInfo;
+	}
+
+	// Convert MemoryType to raw Vulkan memory properties (if not using VMA)
+	inline VkMemoryPropertyFlags MemoryTypeToVulkan(MemoryType type) {
+		VkMemoryPropertyFlags vkFlags = 0;
+
+		switch (type) {
+		case MemoryType::GpuOnly:
+			vkFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+			break;
+
+		case MemoryType::CpuToGpu:
+			vkFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+					  VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+			break;
+
+		case MemoryType::GpuToCpu:
+			vkFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+					  VK_MEMORY_PROPERTY_HOST_COHERENT_BIT |
+					  VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+			break;
+
+		case MemoryType::CpuOnly:
+			vkFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+					  VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+			break;
+
+		case MemoryType::Auto:
+			// This is a hint, not a hard requirement
+			// Prefer device local, but fallback to host visible
+			vkFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+			//  fallback logic when this fails
+			break;
+		}
+
+		return vkFlags;
 	}
 } // namespace RxVK
 } // namespace Rx

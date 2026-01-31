@@ -10,6 +10,9 @@ namespace RxVK {
 
 	RenderPassHandle VKCreateRenderPass(const RenderPassDesc& desc) {
 		auto& ctx = GetVulkanContext();
+		RENDERX_ASSERT_MSG(ctx.device != VK_NULL_HANDLE, "VKCreateRenderPass: device is VK_NULL_HANDLE");
+		RENDERX_ASSERT_MSG(desc.colorAttachments.size() > 0 || desc.hasDepthStencil, 
+			"VKCreateRenderPass: at least one attachment is required");
 
 		std::vector<VkAttachmentDescription> attachments;
 		std::vector<VkAttachmentReference> colorRefs;
@@ -72,7 +75,11 @@ namespace RxVK {
 		ci.pSubpasses = &subpass;
 
 		VkRenderPass rp;
-		VK_CHECK(vkCreateRenderPass(ctx.device, &ci, nullptr, &rp));
+		VkResult result = vkCreateRenderPass(ctx.device, &ci, nullptr, &rp);
+		if (!CheckVk(result, "VKCreateRenderPass: Failed to create render pass")) {
+			return RenderPassHandle{};
+		}
+		RENDERX_ASSERT_MSG(rp != VK_NULL_HANDLE, "VKCreateRenderPass: created render pass is null");
 
 		// Use ResourcePool for RenderPass management
 		RenderPassHandle handle = g_RenderPassPool.allocate(rp);
@@ -82,35 +89,56 @@ namespace RxVK {
 
 	void VKDestroyRenderPass(RenderPassHandle& handle) {
 		auto& ctx = GetVulkanContext();
+		RENDERX_ASSERT_MSG(ctx.device != VK_NULL_HANDLE, "VKDestroyRenderPass: device is VK_NULL_HANDLE");
+
+		if (!handle.IsValid()) {
+			RENDERX_WARN("VKDestroyRenderPass: invalid render pass handle");
+			return;
+		}
 
 		// Try ResourcePool first
-		auto& rp = g_RenderPassPool.get(handle);
-		if (rp != VK_NULL_HANDLE) {
-			vkDestroyRenderPass(ctx.device, rp, nullptr);
+		auto* rp = g_RenderPassPool.get(handle);
+		if (rp != nullptr && *rp != VK_NULL_HANDLE) {
+			vkDestroyRenderPass(ctx.device, *rp, nullptr);
 			g_RenderPassPool.free(handle);
+		}
+		else {
+			RENDERX_WARN("VKDestroyRenderPass: render pass already null or invalid");
 		}
 	}
 
 	void VKCmdBeginRenderPass(
-		CommandList& cmd,
+		CommandList& cmdList,
 		RenderPassHandle pass,
 		const ClearValue* clears,
 		uint32_t clearCount) {
 		PROFILE_FUNCTION();
 
-		RENDERX_ASSERT_MSG(cmd.IsValid(), "Invalid CommandList");
-		RENDERX_ASSERT_MSG(cmd.isOpen, "VKCmdBeginRenderPass : CommandList must be open");
-		auto& frame = GetCurrentFrameContex(g_CurrentFrame);
+		RENDERX_ASSERT_MSG(cmdList.IsValid(), "VKCmdBeginRenderPass: Invalid CommandList");
+		auto& frame = GetFrameContex(g_CurrentFrame);
 		auto& ctx = GetVulkanContext();
-
+		auto* vkCmdList = g_CommandListPool.get(cmdList);
+		RENDERX_ASSERT_MSG(vkCmdList != nullptr, "VKCmdBeginRenderPass: retrieved null command list");
+		RENDERX_ASSERT_MSG(vkCmdList->isOpen, "VKCmdBeginRenderPass: CommandList must be open");
+		RENDERX_ASSERT_MSG(vkCmdList->cmdBuffer != VK_NULL_HANDLE, "VKCmdBeginRenderPass: command buffer is null");
+		RENDERX_ASSERT_MSG(pass.IsValid(), "VKCmdBeginRenderPass: Invalid render pass handle");
+		
+		if (clears && clearCount > 0) {
+			RENDERX_ASSERT_MSG(clears != nullptr, "VKCmdBeginRenderPass: clears pointer is null but clearCount > 0");
+		}
+		
 		// Try ResourcePool first
-		auto& rp = g_RenderPassPool.get(pass);
-		if (rp == VK_NULL_HANDLE) {
-			RENDERX_ERROR("Invalid render pass handle: {}", pass.id);
+		auto* rp = g_RenderPassPool.get(pass);
+		if (rp == nullptr || *rp == VK_NULL_HANDLE) {
+			RENDERX_ERROR("VKCmdBeginRenderPass: Invalid render pass handle: {}", pass.id);
 			return;
 		}
 
+		RENDERX_ASSERT_MSG(frame.swapchainImageIndex < ctx.swapchainFramebuffers.size(),
+			"VKCmdBeginRenderPass: swapchain image index out of bounds");
+		
 		VkFramebuffer framebuffer = ctx.swapchainFramebuffers[frame.swapchainImageIndex];
+		RENDERX_ASSERT_MSG(framebuffer != VK_NULL_HANDLE, "VKCmdBeginRenderPass: framebuffer is null");
 
 		std::vector<VkClearValue> vkClears;
 		for (uint32_t i = 0; i < clearCount; ++i) {
@@ -123,14 +151,14 @@ namespace RxVK {
 
 		VkRenderPassBeginInfo bi{};
 		bi.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-		bi.renderPass = rp;
+		bi.renderPass = *rp;
 		bi.framebuffer = framebuffer;
 		bi.renderArea.extent = ctx.swapchainExtent;
 		bi.clearValueCount = (uint32_t)vkClears.size();
 		bi.pClearValues = vkClears.data();
 
 		vkCmdBeginRenderPass(
-			frame.commandBuffers[cmd.id],
+			vkCmdList->cmdBuffer,
 			&bi,
 			VK_SUBPASS_CONTENTS_INLINE);
 	}
@@ -138,11 +166,14 @@ namespace RxVK {
 	void VKCmdEndRenderPass(CommandList& cmdList) {
 		PROFILE_FUNCTION();
 
-		RENDERX_ASSERT_MSG(cmdList.IsValid(), "Invalid CommandList");
-		RENDERX_ASSERT_MSG(cmdList.isOpen, "VKCmdEndRenderPass : CommandList must be open");
+		RENDERX_ASSERT_MSG(cmdList.IsValid(), "VKCmdEndRenderPass: Invalid CommandList");
+		auto* vkCmdList = g_CommandListPool.get(cmdList);
+		RENDERX_ASSERT_MSG(vkCmdList != nullptr, "VKCmdEndRenderPass: retrieved null command list");
+		RENDERX_ASSERT_MSG(vkCmdList->isOpen, "VKCmdEndRenderPass: CommandList must be open");
+		RENDERX_ASSERT_MSG(vkCmdList->cmdBuffer != VK_NULL_HANDLE, "VKCmdEndRenderPass: command buffer is null");
 
-		auto& frame = GetCurrentFrameContex(g_CurrentFrame);
-		vkCmdEndRenderPass(frame.commandBuffers[cmdList.id]);
+		auto& frame = GetFrameContex(g_CurrentFrame);
+		vkCmdEndRenderPass(vkCmdList->cmdBuffer);
 	}
 
 	RenderPassHandle VKGetDefaultRenderPass() {

@@ -12,8 +12,8 @@ namespace Rx {
 
 namespace RxGL {
 
-	// Cache of pipeline descriptions, keyed by GL program ID.
-	static std::unordered_map<uint32_t, PipelineDesc> PipelineCache;
+	// Cache of pipeline descriptions, keyed by handle ID (uint64_t to match PipelineHandle.id type)
+	static std::unordered_map<uint64_t, PipelineDesc> PipelineCache;
 
 	// Convert engine ShaderType to OpenGL shader enums
 	static inline GLenum TOGLShaderType(ShaderStage stage) {
@@ -25,8 +25,8 @@ namespace RxGL {
 		case ShaderStage::TessControl: return GL_TESS_CONTROL_SHADER;
 		case ShaderStage::TessEvaluation: return GL_TESS_EVALUATION_SHADER;
 		default:
-			RENDERX_ERROR("Unknown ShaderType: {}", static_cast<int>(stage));
-			return 0;
+			RENDERX_ERROR("Unknown ShaderType: {} - defaulting to Vertex shader to avoid invalid GLenum", static_cast<int>(stage));
+			return GL_VERTEX_SHADER;
 		}
 	}
 
@@ -115,7 +115,7 @@ namespace RxGL {
 			return 0;
 		}
 
-		RENDERX_INFO("{} shader compiled successfully (ID: {}).", shaderTypeStr, id);
+		// shader compiled successfully
 		return id;
 	}
 
@@ -127,13 +127,14 @@ namespace RxGL {
 			return ShaderHandle(0);
 		}
 
+
 		GLuint shader = compileShader(TOGLShaderType(desc.type), desc.source);
 		if (shader == 0) {
 			RENDERX_ERROR("Failed to create shader of type {}", static_cast<int>(desc.type));
 			return ShaderHandle(0);
 		}
 
-		RENDERX_INFO("Shader created successfully | ID: {}", shader);
+		// shader created successfully
 		return ShaderHandle(shader);
 	}
 
@@ -142,7 +143,7 @@ namespace RxGL {
 
 		GLuint program = glCreateProgram();
 
-
+		// create GL program
 		for (auto shader : desc.shaders) {
 			glAttachShader(program, shader.id);
 		}
@@ -171,24 +172,34 @@ namespace RxGL {
 		}
 
 		// Shader deletion is handled by client-side code when appropriate
-		RENDERX_INFO("Shader program linked successfully | Program ID: {}", program);
+		// shader program linked
 
 		// Only insert into the cache after a successful link
-		PipelineCache.emplace(static_cast<uint32_t>(program), desc);
+		// Create handle with program ID as uint64_t
+		uint64_t handleId = static_cast<uint64_t>(program);
+		PipelineCache.emplace(handleId, desc);
 
-		return PipelineHandle(program);
+		// pipeline added to cache
+
+		return PipelineHandle(handleId);
 	}
 
 	// Binding functions (used by GL command list execution)
 	void GLBindPipeline(const PipelineHandle handle) {
 		PROFILE_FUNCTION();
 
-		glUseProgram(handle.id);
+		// binding pipeline
+
+		glUseProgram(static_cast<GLuint>(handle.id));
 
 		// Lookup the pipeline description from the cache safely
 		auto it = PipelineCache.find(handle.id);
 		if (it == PipelineCache.end()) {
-			RENDERX_ERROR("Pipeline (program {}) not found in cache", handle.id);
+			RENDERX_ERROR("GLBindPipeline: Pipeline (handle.id={}, GLuint program={}) not found in cache. Cache has {} entries:",
+				handle.id, static_cast<GLuint>(handle.id), PipelineCache.size());
+			for (const auto& pair : PipelineCache) {
+				RENDERX_ERROR("  - Cache entry: handle.id={}, GLuint={}", pair.first, static_cast<GLuint>(pair.first));
+			}
 			return;
 		}
 
@@ -203,8 +214,7 @@ namespace RxGL {
 		case FillMode::Point: glPolygonMode(GL_FRONT_AND_BACK, GL_POINT); break;
 		}
 
-		// Culling
-		switch (PipelineCache[handle.id].rasterizer.cullMode) {
+		switch (it->second.rasterizer.cullMode) {
 		case CullMode::None:
 			glDisable(GL_CULL_FACE);
 			break;
@@ -226,11 +236,11 @@ namespace RxGL {
 		glFrontFace(it->second.rasterizer.frontCounterClockwise ? GL_CCW : GL_CW);
 
 		// Depth bias
-		if (PipelineCache[handle.id].rasterizer.depthBias != 0.0f ||
-			PipelineCache[handle.id].rasterizer.slopeScaledDepthBias != 0.0f) {
+		if (it->second.rasterizer.depthBias != 0.0f ||
+			it->second.rasterizer.slopeScaledDepthBias != 0.0f) {
 			glEnable(GL_POLYGON_OFFSET_FILL);
-			glPolygonOffset(PipelineCache[handle.id].rasterizer.slopeScaledDepthBias,
-				PipelineCache[handle.id].rasterizer.depthBias);
+			glPolygonOffset(it->second.rasterizer.slopeScaledDepthBias,
+				it->second.rasterizer.depthBias);
 		}
 		else {
 			glDisable(GL_POLYGON_OFFSET_FILL);
@@ -284,9 +294,22 @@ namespace RxGL {
 	// vertex input layout for a given pipeline.
 	const PipelineDesc* GLGetPipelineDesc(const PipelineHandle handle) {
 		auto it = PipelineCache.find(handle.id);
-		if (it == PipelineCache.end())
+		if (it == PipelineCache.end()) {
+			RENDERX_ERROR("GLGetPipelineDesc: Pipeline handle.id={} NOT found in cache! Cache size: {}", handle.id, PipelineCache.size());
+			for (const auto& pair : PipelineCache) {
+				RENDERX_ERROR("  - Available: handle.id={}, GLuint={}", pair.first, static_cast<GLuint>(pair.first));
+			}
 			return nullptr;
+		}
+		// pipeline descriptor found
 		return &it->second;
+	}
+
+	// Clear the pipeline cache (called on shutdown)
+	void GLClearPipelineCache() {
+		PROFILE_FUNCTION();
+		PipelineCache.clear();
+		// pipeline cache cleared
 	}
 
 } // namespace RxGL

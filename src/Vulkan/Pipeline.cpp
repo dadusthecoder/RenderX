@@ -4,8 +4,18 @@
 
 namespace Rx {
 
-	// ===================== SHADER =====================
+	namespace RxVK {
+
+		ResourcePool<VulkanPipelineLayout, PipelineLayoutHandle> g_LayoutPool;
+	} // namespace RxVK
+
+
+	// ==== SHADER ====
 	ShaderHandle RxVK::VKCreateShader(const ShaderDesc& desc) {
+		RENDERX_ASSERT_MSG(desc.bytecode.size() > 0, "VKCreateShader: bytecode is empty");
+		RENDERX_ASSERT_MSG(desc.bytecode.size() % sizeof(uint32_t) == 0, "VKCreateShader: bytecode size not aligned to uint32_t");
+		RENDERX_ASSERT_MSG(!desc.entryPoint.empty(), "VKCreateShader: entryPoint is empty");
+		
 		VkShaderModuleCreateInfo ci{};
 		ci.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
 		ci.codeSize = desc.bytecode.size();
@@ -13,11 +23,13 @@ namespace Rx {
 
 		VkShaderModule shaderModule;
 		auto& ctx = RxVK::GetVulkanContext();
+		RENDERX_ASSERT_MSG(ctx.device != VK_NULL_HANDLE, "VKCreateShader: device is VK_NULL_HANDLE");
 
-		if (vkCreateShaderModule(ctx.device, &ci, nullptr, &shaderModule) != VK_SUCCESS) {
-			RENDERX_CRITICAL("Failed to create shader module");
-			return {};
+		VkResult result = vkCreateShaderModule(ctx.device, &ci, nullptr, &shaderModule);
+		if (!CheckVk(result, "VKCreateShader: Failed to create shader module")) {
+			return ShaderHandle{};
 		}
+		RENDERX_ASSERT_MSG(shaderModule != VK_NULL_HANDLE, "VKCreateShader: created shader module is null");
 
 		// Use ResourcePool for shader management
 		VulkanShader shader{ desc.entryPoint, desc.type, shaderModule };
@@ -35,7 +47,83 @@ namespace Rx {
 	// 	RxVK::s_Shaders.erase(it);
 	// }
 
-	// ===================== GRAPHICS PIPELINE =====================
+	// Pipeline LAyout Creation
+	PipelineLayoutHandle RxVK::VKCreatePipelineLayout(const ResourceGroupLayout* playouts, uint32_t layoutcount) {
+		// Store the created layout in a local registry and return a handle
+		RENDERX_ASSERT_MSG(layoutcount > 0, "VKCreatePipelineLayout: layout count is zero");
+		RENDERX_ASSERT_MSG(playouts != nullptr, "VKCreatePipelineLayout: playouts pointer is null");
+
+		std::vector<VkDescriptorSetLayout> setLayouts;
+		for (uint32_t i = 0; i < layoutcount; ++i) {
+			RENDERX_ASSERT_MSG(playouts[i].resourcebindings.size() > 0, "VKCreatePipelineLayout: binding list is empty");
+			
+			std::vector<VkDescriptorSetLayoutBinding> bindings;
+			for (auto& item : playouts[i].resourcebindings) {
+				VkDescriptorSetLayoutBinding binding{};
+				binding.binding = item.binding;
+				binding.descriptorCount = item.count;
+				binding.stageFlags = ToVkShaderStageFlags(item.stages);
+				binding.descriptorType = ToVkDescriptorType(item.type);
+				// temp
+				binding.pImmutableSamplers = nullptr;
+				bindings.push_back(binding);
+			}
+
+			VkDescriptorSetLayoutCreateInfo ci{};
+			ci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+			ci.flags = 0;
+			ci.bindingCount = (uint32_t)playouts[i].resourcebindings.size();
+			ci.pBindings = bindings.data();
+
+			auto& ctx = GetVulkanContext();
+			RENDERX_ASSERT_MSG(ctx.device != VK_NULL_HANDLE, "VKCreatePipelineLayout: device is VK_NULL_HANDLE");
+
+			// vk desc set
+			VkDescriptorSetLayout setlayout;
+			VkResult result = vkCreateDescriptorSetLayout(ctx.device, &ci, nullptr, &setlayout);
+			if (!CheckVk(result, "VKCreatePipelineLayout: Failed to create descriptor set layout")) {
+				return PipelineLayoutHandle{};
+			}
+			RENDERX_ASSERT_MSG(setlayout != VK_NULL_HANDLE, "VKCreatePipelineLayout: created layout is null");
+			setLayouts.push_back(setlayout);
+		}
+
+		auto ctx = GetVulkanContext();
+		RENDERX_ASSERT_MSG(ctx.device != VK_NULL_HANDLE, "VKCreatePipelineLayout: device is VK_NULL_HANDLE");
+
+		// ---------- Pipeline Layout ----------
+		VkPipelineLayout pipelinelayout;
+		VkPipelineLayoutCreateInfo lci{};
+		lci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+		lci.setLayoutCount = (uint32_t)setLayouts.size();
+		lci.pSetLayouts = setLayouts.data();
+		VkResult lres = vkCreatePipelineLayout(ctx.device, &lci, nullptr, &pipelinelayout);
+		if (lres != VK_SUCCESS) {
+			RENDERX_ERROR("VKCreatePipelineLayout: Failed to create pipeline layout: {}", VkResultToString(lres));
+			return PipelineLayoutHandle{};
+		}
+		RENDERX_ASSERT_MSG(pipelinelayout != VK_NULL_HANDLE, "VKCreatePipelineLayout: created pipeline layout is null");
+
+		// // Debug naming
+		// if (desc. && desc.debugName[0] != '\0') {
+		// 	VkDebugUtilsObjectNameInfoEXT nameInfo = {};
+		// 	nameInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
+		// 	nameInfo.objectType = VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT;
+		// 	nameInfo.objectHandle = (uint64_t)pipelinelayout;
+		// 	nameInfo.pObjectName = desc.debugName;
+		// 	// vkSetDebugUtilsObjectNameEXT(m_device, &nameInfo);
+		// }
+
+		VulkanPipelineLayout rxPipelneLayout{};
+		rxPipelneLayout.layout = pipelinelayout;
+		rxPipelneLayout.setlayouts = setLayouts;
+
+		// handle
+		auto handle = g_LayoutPool.allocate(rxPipelneLayout);
+		return handle;
+	}
+
+	// ==== GRAPHICS PIPELINE ====
 	PipelineHandle RxVK::VKCreateGraphicsPipeline(PipelineDesc& desc) {
 		auto& ctx = GetVulkanContext();
 
@@ -43,24 +131,24 @@ namespace Rx {
 		std::vector<VkPipelineShaderStageCreateInfo> stages;
 		for (auto& sh : desc.shaders) {
 			// Try ResourcePool first
-			auto& shader = g_ShaderPool.get(sh);
-			if (shader.shaderModule == VK_NULL_HANDLE) {
+			auto* shader = g_ShaderPool.get(sh);
+			if (shader->shaderModule == VK_NULL_HANDLE) {
 				RENDERX_CRITICAL("Invalid shader handle");
 				return PipelineHandle{};
 			}
 
 			VkPipelineShaderStageCreateInfo stage{};
 			stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-			stage.stage = ToVkShaderStage(shader.type);
-			stage.module = shader.shaderModule;
-			stage.pName = shader.entryPoint.c_str();
+			stage.stage = ToVkShaderStage(shader->type);
+			stage.module = shader->shaderModule;
+			stage.pName = shader->entryPoint.c_str();
 			stages.push_back(stage);
 		}
 
 		// ---------- Vertex Input ----------
-		std::vector<VkVertexInputBindingDescription> bindings;
-		for (auto& b : desc.vertexInputState.bindings) {
-			bindings.push_back({ b.binding,
+		std::vector<VkVertexInputBindingDescription> vertexBindings;
+		for (auto& b : desc.vertexInputState.vertexBindings) {
+			vertexBindings.push_back({ b.binding,
 				b.stride,
 				b.instanceData ? VK_VERTEX_INPUT_RATE_INSTANCE : VK_VERTEX_INPUT_RATE_VERTEX });
 		}
@@ -75,8 +163,8 @@ namespace Rx {
 
 		VkPipelineVertexInputStateCreateInfo vertexInput{};
 		vertexInput.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-		vertexInput.vertexBindingDescriptionCount = (uint32_t)bindings.size();
-		vertexInput.pVertexBindingDescriptions = bindings.data();
+		vertexInput.vertexBindingDescriptionCount = (uint32_t)vertexBindings.size();
+		vertexInput.pVertexBindingDescriptions = vertexBindings.data();
 		vertexInput.vertexAttributeDescriptionCount = (uint32_t)attrs.size();
 		vertexInput.pVertexAttributeDescriptions = attrs.data();
 
@@ -155,16 +243,6 @@ namespace Rx {
 		cb.blendConstants[2] = b.blendFactor.b;
 		cb.blendConstants[3] = b.blendFactor.a;
 
-		// ---------- Pipeline Layout ----------
-		VkPipelineLayout layout;
-		VkPipelineLayoutCreateInfo lci{};
-		lci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-		VkResult lres = vkCreatePipelineLayout(ctx.device, &lci, nullptr, &layout);
-		if (lres != VK_SUCCESS) {
-			RENDERX_ERROR("Failed to create pipeline layout: {}", VkResultToString(lres));
-			return {};
-		}
-
 		// ---------- Create Pipeline ----------
 		VkGraphicsPipelineCreateInfo pci{};
 		pci.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -178,19 +256,26 @@ namespace Rx {
 		pci.pDepthStencilState = &depth;
 		pci.pColorBlendState = &cb;
 		pci.renderPass = GetVulkanRenderPass(desc.renderPass);
-		pci.layout = layout;
+		auto* layout = g_LayoutPool.get(desc.layout);
+		pci.layout = layout->layout;
 
 		VkPipeline pipeline;
 		if (vkCreateGraphicsPipelines(ctx.device, VK_NULL_HANDLE, 1, &pci, nullptr, &pipeline) != VK_SUCCESS) {
 			RENDERX_CRITICAL("Failed to create graphics pipeline");
 			// destroy the pipeline layout to avoid leaking it
-			if (layout != VK_NULL_HANDLE) {
-				vkDestroyPipelineLayout(ctx.device, layout, nullptr);
+			if (layout->layout != VK_NULL_HANDLE) {
+				vkDestroyPipelineLayout(ctx.device, layout->layout, nullptr);
+				layout->isBound = false;
+				g_LayoutPool.free(desc.layout);
 			}
 			return {};
 		}
 
-		auto handle = g_PipelinePool.allocate(pipeline);
+		VulkanPipeline vkpipe{};
+		vkpipe.pipeline = pipeline;
+		vkpipe.layout = desc.layout;
+
+		auto handle = g_PipelinePool.allocate(vkpipe);
 		RENDERX_INFO("Created Vulkan Graphics Pipeline with ID {}", handle.id);
 		return handle;
 	}
@@ -201,11 +286,16 @@ namespace Rx {
 		PROFILE_FUNCTION();
 
 		RENDERX_ASSERT_MSG(cmdList.IsValid(), "Invalid CommandList");
-		RENDERX_ASSERT_MSG(cmdList.isOpen, "CommandList must be open");
+		auto* vkCmdList = g_CommandListPool.get(cmdList);
+		
+		RENDERX_ASSERT_MSG(vkCmdList->isOpen, "CommandList must be open");
 
-		auto& frame = GetCurrentFrameContex(g_CurrentFrame);
-		// temp vkBindPoint
-		vkCmdBindPipeline(frame.commandBuffers[cmdList.id], VK_PIPELINE_BIND_POINT_GRAPHICS, g_PipelinePool.get(pipeline));
+		// bind pipeline and remember layout for descriptor binding
+		auto* p = g_PipelinePool.get(pipeline);
+		p->isBound = true;
+		RENDERX_ASSERT_MSG(p, "VKCmdSetPipeline: invalid pipeline handle");
+		vkCmdBindPipeline(vkCmdList->cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, p->pipeline);
+		
 	}
 
 } // namespace Rx

@@ -10,6 +10,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # ──────────────────────────────────────────────
 add_executable(HelloTriangle Test.cpp Files.cpp)
 
+target_compile_options(HelloTriangle PRIVATE
+    $<$<CXX_COMPILER_ID:MSVC>:/utf-8>
+)
+
 # ──────────────────────────────────────────────
 #  Include RenderX headers (from engine project)
 # ──────────────────────────────────────────────
@@ -19,11 +23,11 @@ target_include_directories(HelloTriangle PRIVATE
 
 # ──────────────────────────────────────────────
 #  Link with RenderX library built in /build/bin/<config>/
-# ──────────────────────────────────────────────++
+# ──────────────────────────────────────────────
 
 target_link_directories(HelloTriangle PRIVATE
     "${CMAKE_SOURCE_DIR}/../../build/bin/${CMAKE_BUILD_TYPE}"
 )
 
 target_link_libraries(HelloTriangle PRIVATE RenderX)
-
+target_link_libraries(HelloTriangle PRIVATE glfw )

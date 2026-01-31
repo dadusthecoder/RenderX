@@ -14,7 +14,8 @@ namespace Rx {
 	GraphicsAPI API = GraphicsAPI::None;
 
 	void Init(const Window& window) {
-#ifdef _DEBUG
+#ifdef RENDERX_DEBUG
+		LOG_INIT();
 		Debug::ConfigureDetailedProfiling();
 #else
 		ProLog::ProfilerConfig config;
@@ -24,11 +25,15 @@ namespace Rx {
 		config.autoFlush = true;
 		ProLog::SetConfig(config);
 #endif
-		PROFILE_START_SESSION("RenderX", "RenderX.json");
-		RENDERX_LOG_INIT();
+		// If a backend is already active, shut it down cleanly so we can switch.
+		if (API != GraphicsAPI::None && g_DispatchTable.Shutdown) {
+			RENDERX_INFO("Init: shutting down active backend before reinitializing");
+			g_DispatchTable.Shutdown();
+			// Clear function pointers so stale calls are impossible.
+			std::memset(&g_DispatchTable, 0, sizeof(g_DispatchTable));
+			API = GraphicsAPI::None;
+		}
 
-		RENDERX_INFO("Loading Graphics API...");
-		PROFILE_FUNCTION();
 		switch (window.api) {
 		case GraphicsAPI::OpenGL: {
 			RENDERX_INFO("Initializing OpenGL backend...");
@@ -43,7 +48,6 @@ namespace Rx {
 			RENDERX_INFO("OpenGL backend loaded successfully.");
 			break;
 		}
-
 
 		case GraphicsAPI::Vulkan: {
 			RENDERX_INFO("Initializing Vulkan backend...");
@@ -67,18 +71,23 @@ namespace Rx {
 			RENDERX_ERROR("Unknown Renderer API requested!");
 			break;
 		}
-
-		return;
 	}
 
-	void ShutDown() {
-		Debug::PrintProfileReport();
+	void Shutdown() {
+		// Call the active backend's shutdown if available.
+		if (g_DispatchTable.Shutdown) {
+			g_DispatchTable.Shutdown();
+		}
+		// Reset dispatch table and API so a new backend can be initialized safely.
+		std::memset(&g_DispatchTable, 0, sizeof(g_DispatchTable));
+		API = GraphicsAPI::None;
+
 		PROFILE_END_SESSION();
-		return;
+		LOG_SHUTDOWN();
 	}
 
 	// API Functions
-	uint32_t Begin() { return g_DispatchTable.Begin(); }
+	void Begin(uint32_t frameIndex) { return g_DispatchTable.Begin(frameIndex); }
 	void End(uint32_t frameIndex) { g_DispatchTable.End(frameIndex); }
 
 	ShaderHandle CreateShader(const ShaderDesc& desc) { return g_DispatchTable.CreateShader(desc); }
@@ -93,8 +102,15 @@ namespace Rx {
 
 	BufferHandle CreateBuffer(const BufferDesc& desc) { return g_DispatchTable.CreateBuffer(desc); }
 
-	CommandList CreateCommandList() { return g_DispatchTable.CreateCommandList(); }
-	void DestroyCommandList(CommandList& cmdList) { g_DispatchTable.DestroyCommandList(cmdList); }
+	BufferViewHandle CreateBufferView(const BufferViewDesc& desc) { return g_DispatchTable.CreateBufferView(desc); }
+	void DestroyBufferView(BufferViewHandle& handle) { g_DispatchTable.DestroyBufferView(handle); }
+
+	PipelineLayoutHandle CreatePipelineLayout(const ResourceGroupLayout* playouts, uint32_t layoutCount) { return g_DispatchTable.CreatePipelineLayout(playouts, layoutCount); }
+	ResourceGroupHandle CreateResourceGroup(const ResourceGroupDesc& desc) { return g_DispatchTable.CreateResourceGroup(desc); }
+	void DestroyResourceGroup(ResourceGroupHandle& handle) { g_DispatchTable.DestroyResourceGroup(handle); }
+
+	CommandList CreateCommandList(uint32_t frameIndex) { return g_DispatchTable.CreateCommandList(frameIndex); }
+	void DestroyCommandList(CommandList& cmdList, uint32_t frameIndex) { g_DispatchTable.DestroyCommandList(cmdList, frameIndex); }
 	void ExecuteCommandList(CommandList& cmdList) { g_DispatchTable.ExecuteCommandList(cmdList); }
 
 	void CommandList::open() { g_DispatchTable.CmdOpen(*this); }
@@ -102,6 +118,7 @@ namespace Rx {
 	void CommandList::setPipeline(const PipelineHandle& pipeline) { g_DispatchTable.CmdSetPipeline(*this, pipeline); }
 	void CommandList::setIndexBuffer(const BufferHandle& buffer, uint64_t offset) { g_DispatchTable.CmdSetIndexBuffer(*this, buffer, offset); }
 	void CommandList::setVertexBuffer(const BufferHandle& buffer, uint64_t offset) { g_DispatchTable.CmdSetVertexBuffer(*this, buffer, offset); }
+	void CommandList::setResourceGroup(const ResourceGroupHandle& handle){g_DispatchTable.CmdSetResourceGroup(*this , handle);}
 	void CommandList::draw(uint32_t vertexCount, uint32_t instanceCount,
 		uint32_t firstVertex, uint32_t firstInstance) { g_DispatchTable.CmdDraw(*this, vertexCount, instanceCount, firstVertex, firstInstance); }
 	void CommandList::drawIndexed(uint32_t indexCount, int32_t vertexOffset,
@@ -112,6 +129,9 @@ namespace Rx {
 		const ClearValue* clears, uint32_t clearCount) { g_DispatchTable.CmdBeginRenderPass(*this, pass, clears, clearCount); }
 	void CommandList::endRenderPass() { g_DispatchTable.CmdEndRenderPass(*this); }
 
+	void CommandList::writeBuffer(BufferHandle handle, void* data, uint32_t offset, uint32_t size) {
+		g_DispatchTable.CmdWriteBuffer(*this, handle, data, offset, size);
+	}
 
 
 

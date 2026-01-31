@@ -6,9 +6,6 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /utf-8")
-
-
 
 # ────────────────────────────────────────────────────────────────
 #   OUTPUT FOLDERS (Debug/Release separated)
@@ -67,17 +64,24 @@ find_package(Vulkan REQUIRED)
 add_library(${PROJECT_NAME} SHARED ${SOURCES})
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE RENDERX_BUILD_DLL)
+#target_compile_definitions(${PROJECT_NAME} PRIVATE RENDERX_DEBUG)
+
+
+target_compile_options(RenderX PRIVATE
+    $<$<CXX_COMPILER_ID:MSVC>:/utf-8>
+)
 
 target_include_directories(${PROJECT_NAME}
     PRIVATE "${CMAKE_SOURCE_DIR}/src"
+    PRIVATE "${CMAKE_SOURCE_DIR}/External_local/glew-2.1.0/include"
+    PRIVATE "${CMAKE_SOURCE_DIR}/External/VulkanMemoryAllocator/include"
+
     PUBLIC  "${CMAKE_SOURCE_DIR}/Include"
     PUBLIC  "${CMAKE_SOURCE_DIR}/External/glm"
     PUBLIC "${CMAKE_SOURCE_DIR}/External/spdlog/include"
     PUBLIC "${CMAKE_SOURCE_DIR}/External/glfw/include"
-    PRIVATE "${CMAKE_SOURCE_DIR}/External_local/glew-2.1.0/include"
     PUBLIC "${CMAKE_SOURCE_DIR}/External_local/ProLog/include"
 )
-
 
 target_link_directories(RenderX PUBLIC External_local/ProLog/bin)
 
@@ -90,10 +94,6 @@ target_link_libraries(${PROJECT_NAME}
     PRIVATE glew_s
 
 )
-
-# ────────────────────────────────────────────────────────────────
-#   Copy ONLY RenderX.dll → HelloTriangle
-# ────────────────────────────────────────────────────────────────
 
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different

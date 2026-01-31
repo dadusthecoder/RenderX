@@ -4,7 +4,11 @@
 #include <algorithm>
 #include <vulkan/vulkan_win32.h>
 
-#ifndef NDEBUG
+// Define VMA implementation - must be included in exactly one source file
+#define VMA_IMPLEMENTATION
+#include "vk_mem_alloc.h"
+
+#ifdef RENDERX_DEBUG
 constexpr bool enableValidationLayers = true;
 #else
 constexpr bool enableValidationLayers = false;
@@ -13,14 +17,15 @@ constexpr bool enableValidationLayers = false;
 namespace Rx {
 namespace RxVK {
 
-	static std::array<FrameContex, MAX_FRAMES_IN_FLIGHT> g_Frames;
+	uint32_t MAX_FRAMES_IN_FLIGHT;
+	static std::vector<FrameContex> g_Frames;
 
 	// ResourcePool instances for resource management
-	ResourcePool<VulkanTexture, HandleType::Texture> g_TexturePool;
-	ResourcePool<VulkanBuffer, HandleType::Buffer> g_BufferPool;
-	ResourcePool<VulkanShader, HandleType::Shader> g_ShaderPool;
-	ResourcePool<VkPipeline, HandleType::Pipeline> g_PipelinePool;
-	ResourcePool<VkRenderPass, HandleType::RenderPass> g_RenderPassPool;
+	ResourcePool<VulkanTexture, TextureHandle> g_TexturePool;
+	ResourcePool<VulkanBuffer, BufferHandle> g_BufferPool;
+	ResourcePool<VulkanShader, ShaderHandle> g_ShaderPool;
+	ResourcePool<VulkanPipeline, PipelineHandle> g_PipelinePool;
+	ResourcePool<VkRenderPass, RenderPassHandle> g_RenderPassPool;
 
 	// // Legacy unordered_map declarations (deprecated, kept for compatibility)
 	// std::unordered_map<uint64_t, VulkanBuffer> g_Buffers;
@@ -34,7 +39,7 @@ namespace RxVK {
 		return g_Context;
 	}
 
-	FrameContex& GetCurrentFrameContex(uint32_t index) {
+	FrameContex& GetFrameContex(uint32_t index) {
 		return g_Frames[index];
 	}
 
@@ -148,7 +153,7 @@ namespace RxVK {
 		return enabledExtensions;
 	}
 
-	// ===================== INSTANCE =====================
+	// ==== INSTANCE ====
 
 	bool InitInstance(uint32_t extCount, const char** extentions) {
 		PROFILE_FUNCTION();
@@ -208,7 +213,7 @@ namespace RxVK {
 		return true;
 	}
 
-	// ===================== PHYSICAL DEVICE =====================
+	// ==== PHYSICAL DEVICE ====
 
 	struct QueueFamilyIndices {
 		std::optional<uint32_t> graphicsFamily;
@@ -414,7 +419,7 @@ namespace RxVK {
 		return true;
 	}
 
-	// ===================== LOGICAL DEVICE =====================
+	// ==== LOGICAL DEVICE ====
 
 	bool InitLogicalDevice(VkPhysicalDevice physicalDevice, uint32_t graphicsQueueFamily,
 		VkDevice* outDevice, VkQueue* outGraphicsQueue) {
@@ -482,6 +487,65 @@ namespace RxVK {
 		return true;
 	}
 
+	bool InitVulkanMemoryAllocator(
+		VkInstance instance,
+		VkPhysicalDevice physicalDevice,
+		VkDevice device) {
+		PROFILE_FUNCTION();
+		RENDERX_INFO("Initializing Vulkan Memory Allocator (VMA)...");
+
+		if (instance == VK_NULL_HANDLE) {
+			RENDERX_ERROR("Invalid Vulkan instance for VMA initialization");
+			return false;
+		}
+
+		if (physicalDevice == VK_NULL_HANDLE) {
+			RENDERX_ERROR("Invalid physical device for VMA initialization");
+			return false;
+		}
+
+		if (device == VK_NULL_HANDLE) {
+			RENDERX_ERROR("Invalid logical device for VMA initialization");
+			return false;
+		}
+
+		VulkanContext& ctx = GetVulkanContext();
+
+		// Initialize device limits
+		VkPhysicalDeviceProperties props{};
+		vkGetPhysicalDeviceProperties(physicalDevice, &props);
+		ctx.deviceLimits.minUniformBufferOffsetAlignment = static_cast<uint32_t>(props.limits.minUniformBufferOffsetAlignment);
+		ctx.deviceLimits.minStorageBufferOffsetAlignment = static_cast<uint32_t>(props.limits.minStorageBufferOffsetAlignment);
+		// minDrawIndirectBufferOffsetAlignment may not be available in all Vulkan versions, use minUniformBufferOffsetAlignment as fallback
+		ctx.deviceLimits.minDrawIndirectBufferOffsetAlignment = static_cast<uint32_t>(props.limits.minUniformBufferOffsetAlignment);
+
+		RENDERX_INFO("Device limits - Uniform: {}, Storage: {}, Indirect (fallback): {}",
+			ctx.deviceLimits.minUniformBufferOffsetAlignment,
+			ctx.deviceLimits.minStorageBufferOffsetAlignment,
+			ctx.deviceLimits.minDrawIndirectBufferOffsetAlignment);
+
+		VmaAllocatorCreateInfo allocatorInfo{};
+		allocatorInfo.vulkanApiVersion = VK_API_VERSION_1_1;
+		allocatorInfo.instance = instance;
+		allocatorInfo.physicalDevice = physicalDevice;
+		allocatorInfo.device = device;
+
+		VkResult result = vmaCreateAllocator(&allocatorInfo, &ctx.allocator);
+		if (result != VK_SUCCESS) {
+			RENDERX_ERROR("Failed to create VMA allocator: {}", VkResultToString(result));
+			ctx.allocator = VK_NULL_HANDLE;
+			return false;
+		}
+
+		if (ctx.allocator == VK_NULL_HANDLE) {
+			RENDERX_ERROR("VMA allocator creation succeeded but returned VK_NULL_HANDLE");
+			return false;
+		}
+
+		RENDERX_INFO("Vulkan Memory Allocator (VMA) initialized successfully");
+		return true;
+	}
+
 	void CreateSurface(Window window) {
 		if (!window.nativeHandle) {
 			RENDERX_ERROR("Null window pointer");
@@ -528,7 +592,7 @@ namespace RxVK {
 #endif
 	}
 
-	// ===================== SWAPCHAIN =====================
+	// ==== SWAPCHAIN ====
 
 	inline SwapchainSupportDetails QuerySwapchainSupport(VkPhysicalDevice device, VkSurfaceKHR surface) {
 		PROFILE_FUNCTION();
@@ -674,7 +738,7 @@ namespace RxVK {
 			return;
 		}
 
-		const VkRenderPass vkPass = g_RenderPassPool.get(renderPass);
+		const VkRenderPass* vkPass = g_RenderPassPool.get(renderPass);
 		if (vkPass == VK_NULL_HANDLE) {
 			RENDERX_ERROR("Render pass is VK_NULL_HANDLE");
 			return;
@@ -702,7 +766,7 @@ namespace RxVK {
 
 			VkFramebufferCreateInfo framebufferInfo{};
 			framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-			framebufferInfo.renderPass = vkPass;
+			framebufferInfo.renderPass = *vkPass;
 			framebufferInfo.attachmentCount = 1;
 			framebufferInfo.pAttachments = attachments;
 			framebufferInfo.width = ctx.swapchainExtent.width;
@@ -873,8 +937,66 @@ namespace RxVK {
 		return true;
 	}
 
+	bool CreatePerFrameUploadBuffer(FrameContex& frame, uint32_t bufferSize) {
+		PROFILE_FUNCTION();
+		VulkanContext& ctx = GetVulkanContext();
+
+		if (bufferSize == 0) {
+			RENDERX_ERROR("Upload buffer size must be greater than 0");
+			return false;
+		}
+
+		if (ctx.allocator == VK_NULL_HANDLE) {
+			RENDERX_ERROR("VMA allocator not initialized");
+			return false;
+		}
+
+		VkBufferCreateInfo bufferInfo{};
+		bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+		bufferInfo.size = bufferSize;
+		bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+		bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+		VmaAllocationCreateInfo allocInfo{};
+		allocInfo.usage = VMA_MEMORY_USAGE_AUTO;
+		allocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
+						  VMA_ALLOCATION_CREATE_MAPPED_BIT;
+
+		VkResult result = vmaCreateBuffer(ctx.allocator, &bufferInfo, &allocInfo,
+			&frame.upload.buffer, &frame.upload.allocation, nullptr);
+
+		if (result != VK_SUCCESS) {
+			RENDERX_ERROR("Failed to create upload buffer: {}", VkResultToString(result));
+			return false;
+		}
+
+		if (frame.upload.buffer == VK_NULL_HANDLE) {
+			RENDERX_ERROR("Upload buffer creation succeeded but returned VK_NULL_HANDLE");
+			return false;
+		}
+
+		// Map the buffer for writing
+		VmaAllocationInfo allocInfo2{};
+		vmaGetAllocationInfo(ctx.allocator, frame.upload.allocation, &allocInfo2);
+		frame.upload.mappedPtr = static_cast<uint8_t*>(allocInfo2.pMappedData);
+
+		if (frame.upload.mappedPtr == nullptr) {
+			RENDERX_ERROR("Failed to map upload buffer");
+			vmaDestroyBuffer(ctx.allocator, frame.upload.buffer, frame.upload.allocation);
+			return false;
+		}
+
+		frame.upload.size = bufferSize;
+		frame.upload.offset = 0;
+
+		RENDERX_INFO("Created per-frame upload buffer: {} bytes", bufferSize);
+		return true;
+	}
+
+
 	void InitFrameContext() {
 		auto& ctx = GetVulkanContext();
+		g_Frames.resize(MAX_FRAMES_IN_FLIGHT);
 
 		if (ctx.device == VK_NULL_HANDLE) {
 			RENDERX_ERROR("Invalid device");
@@ -1136,25 +1258,241 @@ namespace RxVK {
 				return;
 			}
 
+			// temp
+			DescriptorPoolSizes kTransientPoolSizes;
+			kTransientPoolSizes.uniformBufferCount = 12000;
+			kTransientPoolSizes.storageBufferCount = 6000;
+			kTransientPoolSizes.sampledImageCount = 24000;
+			kTransientPoolSizes.storageImageCount = 1000;
+			kTransientPoolSizes.samplerCount = 12000;
+			kTransientPoolSizes.combinedImageSamplerCount = 6000;
+			kTransientPoolSizes.maxSets = 12000;
 
-			std::vector<VkDescriptorPoolSize> poolSizes = { { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1 } };
+			frame.DescriptorPool = CreateDescriptorPool(kTransientPoolSizes, true);
+			if (frame.DescriptorPool == VK_NULL_HANDLE) {
+				RENDERX_ERROR("perFrame Pool Creation failed {} {}", __LINE__, __FILE__);
+				VK_NULL_HANDLE;
+				return;
+			}
 
-			VkDescriptorPoolCreateInfo descCi{};
-			descCi.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-			descCi.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
-			descCi.maxSets = 3;
-			descCi.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
-			descCi.pPoolSizes = poolSizes.data();
-			VK_CHECK(vkCreateDescriptorPool(ctx.device, &descCi, nullptr, &frame.DescriptorPool));
+			// Create per-frame upload buffer (256 MB per frame)
+			constexpr uint32_t uploadBufferSize = 256 * 1024 * 1024; // 256 MB
+			if (!CreatePerFrameUploadBuffer(frame, uploadBufferSize)) {
+				RENDERX_ERROR("Failed to create upload buffer for frame {}", i);
+				return;
+			}
 		}
 
 		RENDERX_INFO("Frame contexts initialized successfully: {} frames", MAX_FRAMES_IN_FLIGHT);
 	}
 
-	// ===================== VULKAN HELPERS =====================
+	// ==== VULKAN HELPERS ====
 
 	VkRenderPass GetVulkanRenderPass(RenderPassHandle handle) {
-		return g_RenderPassPool.get(handle);
+		return *g_RenderPassPool.get(handle);
+	}
+
+	void freeAllVulkanResources() {
+		auto g_Device = GetVulkanContext().device;
+		auto ctx = GetVulkanContext();
+		vkDeviceWaitIdle(ctx.device);
+
+
+		// Resource Groups (Descriptor Sets)
+		g_TransientResourceGroupPool.ForEach([](VulkanResourceGroup& group) {
+			group.set = VK_NULL_HANDLE;
+		});
+
+		// Buffer Views
+		g_BufferViewPool.ForEach([](VulkanBufferView& view) {
+			view.isValid = false;
+		});
+
+		// Buffers
+		g_BufferPool.ForEach([&](VulkanBuffer& buffer) {
+			if (buffer.buffer != VK_NULL_HANDLE) {
+				vmaDestroyBuffer(ctx.allocator, buffer.buffer, buffer.allocation);
+				buffer.buffer = VK_NULL_HANDLE;
+				buffer.allocation = VK_NULL_HANDLE;
+			}
+
+			buffer.bindingCount = 0;
+			buffer.allocInfo = {};
+		});
+
+		// Textures
+		g_TexturePool.ForEach([&](VulkanTexture& texture) {
+			if (texture.view != VK_NULL_HANDLE) {
+				vkDestroyImageView(g_Device, texture.view, nullptr);
+				texture.view = VK_NULL_HANDLE;
+			}
+
+			if (texture.image != VK_NULL_HANDLE) {
+				vkDestroyImage(g_Device, texture.image, nullptr);
+				texture.image = VK_NULL_HANDLE;
+			}
+
+			if (texture.memory != VK_NULL_HANDLE) {
+				vkFreeMemory(g_Device, texture.memory, nullptr);
+				texture.memory = VK_NULL_HANDLE;
+			}
+
+			texture.format = VK_FORMAT_UNDEFINED;
+			texture.width = 0;
+			texture.height = 0;
+			texture.mipLevels = 1;
+			texture.isValid = false;
+		});
+
+		// Shaders
+		g_ShaderPool.ForEach([&](VulkanShader& shader) {
+			if (shader.shaderModule != VK_NULL_HANDLE) {
+				vkDestroyShaderModule(g_Device, shader.shaderModule, nullptr);
+				shader.shaderModule = VK_NULL_HANDLE;
+			}
+
+			shader.entryPoint.clear();
+		});
+
+		// Pipeline Layouts
+		g_LayoutPool.ForEach([&](VulkanPipelineLayout& layout) {
+			if (layout.layout != VK_NULL_HANDLE && layout.setlayouts.size() != 0) {
+				for (auto setlayout : layout.setlayouts)
+					vkDestroyDescriptorSetLayout(g_Device, setlayout, nullptr);
+
+				vkDestroyPipelineLayout(g_Device, layout.layout, nullptr);
+				layout.layout = VK_NULL_HANDLE;
+			}
+		});
+
+		// Pipelines
+		g_PipelinePool.ForEach([&](VulkanPipeline& pipeline) {
+			if (pipeline.pipeline != VK_NULL_HANDLE) {
+				vkDestroyPipeline(g_Device, pipeline.pipeline, nullptr);
+				pipeline.pipeline = VK_NULL_HANDLE;
+			}
+		});
+
+		// Render Passes
+		g_RenderPassPool.ForEach([&](VkRenderPass& rp) {
+			if (rp != VK_NULL_HANDLE) {
+				vkDestroyRenderPass(g_Device, rp, nullptr);
+				rp = VK_NULL_HANDLE;
+			}
+		});
+
+		// Clear pools last
+		g_CommandListPool.clear();
+		g_TransientResourceGroupPool.clear();
+		g_BufferViewPool.clear();
+		g_BufferPool.clear();
+		g_TexturePool.clear();
+		g_ShaderPool.clear();
+		g_LayoutPool.clear();
+		g_PipelinePool.clear();
+		g_RenderPassPool.clear();
+
+		// clear all caches
+		g_BufferViewCache.clear();
+
+		freeResourceGroups();
+	}
+
+	void VKShutdownCommon() {
+		auto& ctx = GetVulkanContext();
+		if (ctx.device == VK_NULL_HANDLE) return;
+		// Ensure device is idle before destroying resources
+		vkDeviceWaitIdle(ctx.device);
+
+		// Destroy per-frame upload buffers BEFORE destroying the allocator
+		// This is critical - VMA will assert if allocator is destroyed with unfreed allocations
+		for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
+			auto& frame = GetFrameContex(i);
+
+			// Destroy upload buffer
+			if (frame.upload.buffer != VK_NULL_HANDLE) {
+				vmaDestroyBuffer(ctx.allocator, frame.upload.buffer, frame.upload.allocation);
+				frame.upload.buffer = VK_NULL_HANDLE;
+				frame.upload.allocation = VK_NULL_HANDLE;
+				frame.upload.mappedPtr = nullptr;
+			}
+
+			// Destroy per-frame synchronization primitives
+			if (frame.fence != VK_NULL_HANDLE) {
+				vkDestroyFence(ctx.device, frame.fence, nullptr);
+				frame.fence = VK_NULL_HANDLE;
+			}
+			if (frame.presentSemaphore != VK_NULL_HANDLE) {
+				vkDestroySemaphore(ctx.device, frame.presentSemaphore, nullptr);
+				frame.presentSemaphore = VK_NULL_HANDLE;
+			}
+			if (frame.renderSemaphore != VK_NULL_HANDLE) {
+				vkDestroySemaphore(ctx.device, frame.renderSemaphore, nullptr);
+				frame.renderSemaphore = VK_NULL_HANDLE;
+			}
+			if (frame.commandPool != VK_NULL_HANDLE) {
+				vkDestroyCommandPool(ctx.device, frame.commandPool, nullptr);
+				frame.commandPool = VK_NULL_HANDLE;
+			}
+		}
+
+		// Destroy swapchain image semaphores
+		for (auto& s : ctx.swapchainImageSync) {
+			if (s.imageAvailableSemaphore != VK_NULL_HANDLE)
+				vkDestroySemaphore(ctx.device, s.imageAvailableSemaphore, nullptr);
+			if (s.renderFinishedSemaphore != VK_NULL_HANDLE)
+				vkDestroySemaphore(ctx.device, s.renderFinishedSemaphore, nullptr);
+			s.imageAvailableSemaphore = VK_NULL_HANDLE;
+			s.renderFinishedSemaphore = VK_NULL_HANDLE;
+		}
+
+		// Now destroy VMA allocator (all VMA-managed resources must be freed first)
+		if (ctx.allocator != VK_NULL_HANDLE) {
+			// Log VMA allocation info before destroying allocator
+			RENDERX_INFO("=== VMA Cleanup ===");
+			RENDERX_INFO("Destroying VMA allocator and all managed resources");
+			RENDERX_INFO("===================");
+
+			vmaDestroyAllocator(ctx.allocator);
+			ctx.allocator = VK_NULL_HANDLE;
+			RENDERX_INFO("VMA allocator destroyed successfully");
+		}
+
+		// Destroy swapchain framebuffers
+		for (auto fb : ctx.swapchainFramebuffers) {
+			if (fb != VK_NULL_HANDLE) vkDestroyFramebuffer(ctx.device, fb, nullptr);
+		}
+		ctx.swapchainFramebuffers.clear();
+
+		// Destroy image views
+		for (auto iv : ctx.swapchainImageviews) {
+			if (iv != VK_NULL_HANDLE) vkDestroyImageView(ctx.device, iv, nullptr);
+		}
+		ctx.swapchainImageviews.clear();
+
+		// Destroy swapchain
+		if (ctx.swapchain != VK_NULL_HANDLE) {
+			vkDestroySwapchainKHR(ctx.device, ctx.swapchain, nullptr);
+			ctx.swapchain = VK_NULL_HANDLE;
+		}
+
+		// Destroy surface
+		if (ctx.surface != VK_NULL_HANDLE && ctx.instance != VK_NULL_HANDLE) {
+			vkDestroySurfaceKHR(ctx.instance, ctx.surface, nullptr);
+			ctx.surface = VK_NULL_HANDLE;
+		}
+
+		// Finally destroy logical device
+		if (ctx.device != VK_NULL_HANDLE) {
+			vkDestroyDevice(ctx.device, nullptr);
+			ctx.device = VK_NULL_HANDLE;
+		}
+
+		// Destroy instance
+		if (ctx.instance != VK_NULL_HANDLE) {
+			vkDestroyInstance(ctx.instance, nullptr);
+			ctx.instance = VK_NULL_HANDLE;
+		}
 	}
 
 } // namespace RxVK
