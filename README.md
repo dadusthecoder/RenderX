@@ -1,6 +1,6 @@
 # RenderX
 
-A cross‑API **Render Hardware Interface (RHI)** written in modern C++ that provides a clean, engine‑friendly abstraction over multiple graphics backends.
+A cross‑API **Rendering Hardware Interface (RHI)** written in modern C++ that provides a clean, engine‑friendly abstraction over multiple graphics backends.
 
 Current status:
 - ✅ OpenGL backend (primary, stable)
