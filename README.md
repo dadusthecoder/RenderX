@@ -15,25 +15,7 @@ Current status:
   - Buffers (vertex / index / uniform)
   - Textures, samplers, shaders, pipelines, swapchains
 - Clear separation between API‑agnostic interfaces and backend implementations
-- RAII‑managed GPU resources
-- Uses **GLM** for math and **spdlog** for logging
-
 ---
-
-## Repository layout
-
-- `src/RenderX/` – core RHI interfaces and common code
-- `src/Backend/OpenGL/` – OpenGL implementation of the RHI
-- `src/Backend/Vulkan/` – Vulkan implementation (WIP)
-- `src/OpenGL/` – OpenGL implementation (moved/flattened)
-- `src/Vulkan/` – Vulkan implementation (moved/flattened)
-- `Include/` – public headers for consumers of the RenderX library
-- `External/` – third‑party libraries as git submodules
-- `External_local/` – locally vendored libraries (e.g. GLEW, ProLog)
-- `Test/HelloTriangle/` – example / test application using RenderX
-
----
-
 ## Dependencies
 
 Most third‑party dependencies are included as submodules or vendored in the repo:
@@ -144,51 +126,7 @@ cd Build/test/HelloTriangle/Release
 ./HelloTriangle   # or HelloTriangle.exe on Windows
 ```
 
-You should see a simple triangle rendered using the RenderX RHI.
-
----
-
-## 🔍 Debug Profiling (NEW)
-
-RenderX includes **detailed debug profiling** to help you identify bottlenecks:
-
-### Features
-- ✅ **Automatic in Debug builds** – zero config needed
-- ✅ **Chrome DevTools timeline** – microsecond-precision visualization  
-- ✅ **Categorized events** – GPU, Sync, Swapchain, Memory, CommandBuffer, Descriptor
-- ✅ **Aggregated statistics** – function call counts, min/max/avg times, % of session
-- ✅ **Zero Release overhead** – all profiling macros expand to no-op in Release
-
-### Quick Start
-```cpp
-#include "RenderX/RenderX.h"
-
-int main() {
-    RenderX::Init(window);  // Profiling enabled automatically in Debug
-    
-    for (int frame = 0; frame < 100; ++frame) {
-        PROFILE_FRAME_BEGIN(frame);
-        RenderX::Begin();
-        // ... render ...
-        RenderX::End();
-        PROFILE_FRAME_END(frame);
-    }
-    
-    RenderX::ShutDown();  // Writes RenderX.json and profile_statistics.txt
-}
-```
-
-Then view results:
-```bash
-# Timeline (Chrome DevTools)
-open chrome://tracing
-# Load RenderX.json
-
-# Statistics (text)
-cat profile_statistics.txt
-```
-
-**See [PROFILING_QUICKSTART.md](PROFILING_QUICKSTART.md) for complete guide.**
+You should see a simple cube rendered using the RenderX RHI.
 
 ---
 
