@@ -211,7 +211,7 @@ namespace Rx {
 	RENDERX_DEFINE_HANDLE(QueryPool)
 
 
-	// GLM type aliases for consistency Temp (only using them for the testing/debug)
+	// GLM type aliases for consistency Temp (only using them for testing/debug)
 	using Vec2 = glm::vec2;
 	using Vec3 = glm::vec3;
 	using Vec4 = glm::vec4;
@@ -229,7 +229,7 @@ namespace Rx {
 
 	// Enums and structs for various RenderX configurations and description
 	// this are the options provided by the renderX to configure the backend
-	// .... TODO write a better comments for this api desine exlpain all the structs and hoe do they map to the backends
+	// .... TODO write better comments for this api desine exlpain all the structs and how do they map to the backends
 	//
 	enum class GraphicsAPI {
 		None,
@@ -836,8 +836,8 @@ namespace Rx {
 
 		ResourceGroupDesc() = default;
 
-		ResourceGroupDesc(PipelineLayoutHandle layoutHandle, const std::vector<ResourceGroupItem>& items)
-			: layout(layoutHandle), Resources(items) {}
+		ResourceGroupDesc(uint32_t setindex, ResourceGroupLifetime lifetime, PipelineLayoutHandle layoutHandle, const std::vector<ResourceGroupItem>& items)
+			: layout(layoutHandle), Resources(items), flags(lifetime), setIndex(setindex) {}
 	};
 
 
