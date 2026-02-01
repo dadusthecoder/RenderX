@@ -37,9 +37,9 @@ namespace Rx {
 		switch (window.api) {
 		case GraphicsAPI::OpenGL: {
 			RENDERX_INFO("Initializing OpenGL backend...");
-#define RENDERER_FUNC(_ret, _name, ...) g_DispatchTable._name = RxGL::GL##_name;
-#include "RenderX/RenderXAPI.def"
-#undef RENDERER_FUNC
+#define X(_ret, _name, ...) g_DispatchTable._name = RxGL::GL##_name;
+			RENDERX_API(X)
+#undef X
 
 			if (g_DispatchTable.Init)
 				g_DispatchTable.Init(window);
@@ -51,9 +51,9 @@ namespace Rx {
 
 		case GraphicsAPI::Vulkan: {
 			RENDERX_INFO("Initializing Vulkan backend...");
-#define RENDERER_FUNC(_ret, _name, ...) g_DispatchTable._name = RxVK::VK##_name;
-#include "RenderX/RenderXAPI.def"
-#undef RENDERER_FUNC
+#define X(_ret, _name, ...) g_DispatchTable._name = RxVK::VK##_name;
+			RENDERX_API(X)
+#undef X
 
 			if (g_DispatchTable.Init)
 				g_DispatchTable.Init(window);
@@ -118,7 +118,7 @@ namespace Rx {
 	void CommandList::setPipeline(const PipelineHandle& pipeline) { g_DispatchTable.CmdSetPipeline(*this, pipeline); }
 	void CommandList::setIndexBuffer(const BufferHandle& buffer, uint64_t offset) { g_DispatchTable.CmdSetIndexBuffer(*this, buffer, offset); }
 	void CommandList::setVertexBuffer(const BufferHandle& buffer, uint64_t offset) { g_DispatchTable.CmdSetVertexBuffer(*this, buffer, offset); }
-	void CommandList::setResourceGroup(const ResourceGroupHandle& handle){g_DispatchTable.CmdSetResourceGroup(*this , handle);}
+	void CommandList::setResourceGroup(const ResourceGroupHandle& handle) { g_DispatchTable.CmdSetResourceGroup(*this, handle); }
 	void CommandList::draw(uint32_t vertexCount, uint32_t instanceCount,
 		uint32_t firstVertex, uint32_t firstInstance) { g_DispatchTable.CmdDraw(*this, vertexCount, instanceCount, firstVertex, firstInstance); }
 	void CommandList::drawIndexed(uint32_t indexCount, int32_t vertexOffset,

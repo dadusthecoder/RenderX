@@ -72,11 +72,10 @@ target_compile_options(RenderX PRIVATE
 )
 
 target_include_directories(${PROJECT_NAME}
-    PRIVATE "${CMAKE_SOURCE_DIR}/src"
     PRIVATE "${CMAKE_SOURCE_DIR}/External_local/glew-2.1.0/include"
     PRIVATE "${CMAKE_SOURCE_DIR}/External/VulkanMemoryAllocator/include"
 
-    PUBLIC  "${CMAKE_SOURCE_DIR}/Include"
+    PUBLIC "${CMAKE_SOURCE_DIR}/src"
     PUBLIC  "${CMAKE_SOURCE_DIR}/External/glm"
     PUBLIC "${CMAKE_SOURCE_DIR}/External/spdlog/include"
     PUBLIC "${CMAKE_SOURCE_DIR}/External/glfw/include"

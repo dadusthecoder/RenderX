@@ -37,7 +37,7 @@ namespace RxGL {
 		// Note: Input polling is now the responsibility of the application
 	}
 
-	const CommandList GLCreateCommandList(uint32_t frameIndex ) {
+	 CommandList GLCreateCommandList(uint32_t frameIndex ) {
 		PROFILE_FUNCTION();
 		CommandList cmd;
 		cmd.id = s_NextGLCmdId++;

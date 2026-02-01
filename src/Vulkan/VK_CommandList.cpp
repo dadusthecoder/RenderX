@@ -170,7 +170,7 @@ namespace RxVK {
 		vkCmdDrawIndexed(vkCmdList->cmdBuffer, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
 	}
 
-	const CommandList VKCreateCommandList(uint32_t frameIndex) {
+	 CommandList VKCreateCommandList(uint32_t frameIndex) {
 		PROFILE_COMMAND_BUFFER("VKCreateCommandList");
 		RENDERX_ASSERT_MSG(frameIndex < MAX_FRAMES_IN_FLIGHT, "VKCreateCommandList: frameIndex out of bounds");
 

@@ -15,7 +15,7 @@ namespace Rx {
 		RENDERX_ASSERT_MSG(desc.bytecode.size() > 0, "VKCreateShader: bytecode is empty");
 		RENDERX_ASSERT_MSG(desc.bytecode.size() % sizeof(uint32_t) == 0, "VKCreateShader: bytecode size not aligned to uint32_t");
 		RENDERX_ASSERT_MSG(!desc.entryPoint.empty(), "VKCreateShader: entryPoint is empty");
-		
+
 		VkShaderModuleCreateInfo ci{};
 		ci.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
 		ci.codeSize = desc.bytecode.size();
@@ -56,7 +56,7 @@ namespace Rx {
 		std::vector<VkDescriptorSetLayout> setLayouts;
 		for (uint32_t i = 0; i < layoutcount; ++i) {
 			RENDERX_ASSERT_MSG(playouts[i].resourcebindings.size() > 0, "VKCreatePipelineLayout: binding list is empty");
-			
+
 			std::vector<VkDescriptorSetLayoutBinding> bindings;
 			for (auto& item : playouts[i].resourcebindings) {
 				VkDescriptorSetLayoutBinding binding{};
@@ -132,7 +132,7 @@ namespace Rx {
 		for (auto& sh : desc.shaders) {
 			// Try ResourcePool first
 			auto* shader = g_ShaderPool.get(sh);
-			if (shader->shaderModule == VK_NULL_HANDLE) {
+			if (!shader || shader->shaderModule == VK_NULL_HANDLE) {
 				RENDERX_CRITICAL("Invalid shader handle");
 				return PipelineHandle{};
 			}
@@ -213,6 +213,7 @@ namespace Rx {
 		depth.depthWriteEnable = desc.depthStencil.depthWriteEnable;
 		depth.depthCompareOp = ToVkCompareOp(desc.depthStencil.depthFunc);
 
+
 		auto& b = desc.blend;
 		VkPipelineColorBlendAttachmentState blend{};
 		blend.colorWriteMask =
@@ -287,7 +288,7 @@ namespace Rx {
 
 		RENDERX_ASSERT_MSG(cmdList.IsValid(), "Invalid CommandList");
 		auto* vkCmdList = g_CommandListPool.get(cmdList);
-		
+
 		RENDERX_ASSERT_MSG(vkCmdList->isOpen, "CommandList must be open");
 
 		// bind pipeline and remember layout for descriptor binding
@@ -295,7 +296,6 @@ namespace Rx {
 		p->isBound = true;
 		RENDERX_ASSERT_MSG(p, "VKCmdSetPipeline: invalid pipeline handle");
 		vkCmdBindPipeline(vkCmdList->cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, p->pipeline);
-		
 	}
 
 } // namespace Rx

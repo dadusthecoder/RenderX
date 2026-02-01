@@ -53,18 +53,18 @@
 
 // EXPORT / IMPORT MACROS
 #if defined(RENDERX_STATIC)
-#define RENDERX_API
+#define RENDERX_EXPORT
 #else
 #if defined(RENDERX_PLATFORM_WINDOWS)
 #if defined(RENDERX_BUILD_DLL)
-#define RENDERX_API __declspec(dllexport)
+#define RENDERX_EXPORT __declspec(dllexport)
 #else
-#define RENDERX_API __declspec(dllimport)
+#define RENDERX_EXPORT __declspec(dllimport)
 #endif
 #elif defined(__GNUC__) || defined(__clang__)
-#define RENDERX_API __attribute__((visibility("default")))
+#define RENDERX_EXPORT __attribute__((visibility("default")))
 #else
-#define RENDERX_API
+#define RENDERX_EXPORT
 #pragma warning Unknown dynamic link import / export semantics.
 #endif
 #endif
@@ -78,6 +78,98 @@
 
 
 namespace Rx {
+
+	// RenderX API X-Macro
+#define RENDERX_API(X)                                                       \
+                                                                             \
+	/* RenderX Lifetime */                                                   \
+	X(void, Init, const Window&)                                             \
+	X(void, Shutdown)                                                        \
+                                                                             \
+	/* Frame Lifetime */                                                     \
+	X(void, Begin, uint32_t frameIndex)                                      \
+	X(void, End, uint32_t)                                                   \
+                                                                             \
+	/* Pipeline Layout */                                                    \
+	X(PipelineLayoutHandle, CreatePipelineLayout,                            \
+		const ResourceGroupLayout* layout, uint32_t layoutcount)             \
+                                                                             \
+	/* Pipeline Graphics */                                                  \
+	X(PipelineHandle, CreateGraphicsPipeline, PipelineDesc& desc)            \
+	X(ShaderHandle, CreateShader, const ShaderDesc& desc)                    \
+                                                                             \
+	/* Resource Creation */                                                  \
+	/* Buffers */                                                            \
+	X(BufferHandle, CreateBuffer, const BufferDesc& desc)                    \
+                                                                             \
+	/* Buffer Views */                                                       \
+	X(BufferViewHandle, CreateBufferView, const BufferViewDesc& desc)        \
+	X(void, DestroyBufferView, BufferViewHandle& handle)                     \
+                                                                             \
+	/* Render Pass */                                                        \
+	X(RenderPassHandle, CreateRenderPass, const RenderPassDesc&)             \
+	X(void, DestroyRenderPass, RenderPassHandle&)                            \
+	X(RenderPassHandle, GetDefaultRenderPass)                                \
+                                                                             \
+	/* Framebuffer */                                                        \
+	X(FramebufferHandle, CreateFramebuffer, const FramebufferDesc&)          \
+	X(void, DestroyFramebuffer, FramebufferHandle&)                          \
+                                                                             \
+	/* Resource Groups */                                                    \
+	X(ResourceGroupHandle, CreateResourceGroup, const ResourceGroupDesc&)    \
+	X(void, DestroyResourceGroup, ResourceGroupHandle&)                      \
+                                                                             \
+	/* Command List Creation & Management */                                 \
+	X(CommandList, CreateCommandList, uint32_t)                              \
+	X(void, ExecuteCommandList, CommandList&)                                \
+	X(void, DestroyCommandList, CommandList&, uint32_t)                      \
+                                                                             \
+	/* Command List Recording */                                             \
+	X(void, CmdOpen, CommandList& cmd)                                       \
+	X(void, CmdClose, CommandList& cmd)                                      \
+                                                                             \
+	/* Binding */                                                            \
+	X(void, CmdSetPipeline, CommandList& cmd, const PipelineHandle pipeline) \
+	X(void, CmdSetVertexBuffer, CommandList& cmd,                            \
+		const BufferHandle buffer, uint64_t offset)                          \
+	X(void, CmdSetIndexBuffer, CommandList& cmd,                             \
+		const BufferHandle buffer, uint64_t offset)                          \
+                                                                             \
+	/* Draw Calls */                                                         \
+	X(void, CmdDraw,                                                         \
+		CommandList& cmd,                                                    \
+		uint32_t vertexCount, uint32_t instanceCount,                        \
+		uint32_t firstVertex, uint32_t firstInstance)                        \
+                                                                             \
+	X(void, CmdDrawIndexed,                                                  \
+		CommandList& cmd,                                                    \
+		uint32_t indexCount, int32_t vertexOffset,                           \
+		uint32_t instanceCount,                                              \
+		uint32_t firstIndex, uint32_t firstInstance)                         \
+                                                                             \
+	/* Render Pass Commands */                                               \
+	X(void, CmdBeginRenderPass,                                              \
+		CommandList& cmd,                                                    \
+		RenderPassHandle pass,                                               \
+		const ClearValue* clears,                                            \
+		uint32_t clearCount)                                                 \
+                                                                             \
+	X(void, CmdEndRenderPass, CommandList&)                                  \
+                                                                             \
+	/* Resource Updates */                                                   \
+	X(void, CmdWriteBuffer,                                                  \
+		const CommandList& cmdList,                                          \
+		BufferHandle handle,                                                 \
+		void* data,                                                          \
+		uint32_t offset,                                                     \
+		uint32_t size)                                                       \
+                                                                             \
+	X(void, CmdSetResourceGroup,                                             \
+		const CommandList& cmdList,                                          \
+		const ResourceGroupHandle& handle)
+
+
+
 	// Base Handle Template
 	template <typename Tag>
 	struct Handle {
@@ -87,6 +179,13 @@ namespace Rx {
 
 		Handle(ValueType key) : id(key) {}
 		Handle() = default;
+
+		uint32_t generation() const {
+			return static_cast<uint32_t>(id >> 32);
+		}
+		uint32_t index() const {
+			return static_cast<uint32_t>(id & 0xFFFFFFFFu);
+		}
 		bool IsValid() const { return id != INVALID; }
 
 		// operators
@@ -112,7 +211,7 @@ namespace Rx {
 	RENDERX_DEFINE_HANDLE(QueryPool)
 
 
-	// GLM type aliases for consistency
+	// GLM type aliases for consistency Temp (only using them for the testing/debug)
 	using Vec2 = glm::vec2;
 	using Vec3 = glm::vec3;
 	using Vec4 = glm::vec4;
@@ -129,6 +228,9 @@ namespace Rx {
 
 
 	// Enums and structs for various RenderX configurations and description
+	// this are the options provided by the renderX to configure the backend
+	// .... TODO write a better comments for this api desine exlpain all the structs and hoe do they map to the backends
+	//
 	enum class GraphicsAPI {
 		None,
 		OpenGL,
@@ -152,22 +254,6 @@ namespace Rx {
 		const char** instanceExtensions;
 		uint32_t extensionCount;
 		uint32_t maxFramesInFlight = 3;
-	};
-
-
-	//
-	enum class BufferType : uint8_t {
-		Vertex,
-		Index,
-		Uniform,
-		Storage,
-		Indirect
-	};
-
-	enum class BufferUsage : uint8_t {
-		Static,	 // CPU upload once, GPU reads
-		Dynamic, // CPU updates often
-		Stream	 // CPU updates every frame
 	};
 
 
@@ -278,14 +364,18 @@ namespace Rx {
 		Min,
 		Max };
 
-	enum class CullMode { None,
+	enum class CullMode {
+		None,
 		Front,
 		Back,
-		FrontAndBack };
+		FrontAndBack
+	};
 
-	enum class FillMode { Solid,
+	enum class FillMode {
+		Solid,
 		Wireframe,
-		Point };
+		Point
+	};
 
 
 
@@ -308,7 +398,8 @@ namespace Rx {
 	ENABLE_BITMASK_OPERATORS(ShaderStage)
 
 
-	// === Resource State Tracking ===
+	//  Resource State Tracking
+	//  not supported yet
 	enum class ResourceState : uint16_t {
 		Undefined = 0,
 		Common = 1 << 0,
@@ -322,7 +413,6 @@ namespace Rx {
 		CopyDst = 1 << 8,
 		IndirectArgument = 1 << 9
 	};
-
 	ENABLE_BITMASK_OPERATORS(ResourceState)
 
 	enum class ResourceGroupLifetime : uint8_t {
@@ -353,7 +443,6 @@ namespace Rx {
 
 	};
 
-	// Core structures
 	struct Viewport {
 		int x, y;
 		int width, height;
@@ -467,7 +556,7 @@ namespace Rx {
 
 	struct BufferDesc {
 		BufferFlags flags;
-		MemoryType momory;
+		MemoryType memoryType;
 		size_t size;
 		uint32_t bindingCount;
 		const void* initialData;
@@ -597,8 +686,7 @@ namespace Rx {
 
 
 
-	// === Sahder Resource Groups (NEW) ===
-	// here ResourceGroup stands for Shader Resource Group
+	// Sahder Resource Groups
 	/// Describes a single binding slot in a ResourceGroupLayout
 	struct ResourceGroupLayoutItem {
 		// Binding index (e.g., layout(binding = 0))
@@ -858,7 +946,7 @@ namespace Rx {
 	};
 
 
-	struct RENDERX_API CommandList {
+	struct RENDERX_EXPORT CommandList {
 		void open();
 		void close();
 		bool isOpen = false; // deprected

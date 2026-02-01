@@ -2,10 +2,7 @@
 #include "RenderX.h"
 
 namespace Rx {
-	//------------------------------------------------------------------------------
 	// RENDER DISPATCH TABLE
-	//------------------------------------------------------------------------------
-
 	/**
 	 * @struct RenderDispatchTable
 	 * @brief Function table holding the active backend�s GPU entry points.
@@ -15,10 +12,10 @@ namespace Rx {
 	 */
 
 	struct RenderDispatchTable {
-#define RENDERER_FUNC(_ret, _name, ...)           \
+#define X(_ret, _name, ...)                       \
 	using _name##_func_t = _ret (*)(__VA_ARGS__); \
 	_name##_func_t _name;
-#include "RenderXAPI.def"
+		RENDERX_API(X)
 #undef RENDERER_FUNC
 	};
 
@@ -27,8 +24,8 @@ namespace Rx {
 	//------------------------------------------------------------------------------
 
 	/// @brief Global dispatch table instance bound to the active backend.
-	extern RenderDispatchTable RENDERX_API g_DispatchTable;
+	extern RENDERX_EXPORT RenderDispatchTable g_DispatchTable;
 
 	/// @brief Enum representing the currently active rendering backend.
-	extern GraphicsAPI RENDERX_API API;
+	extern RENDERX_EXPORT GraphicsAPI API;
 }

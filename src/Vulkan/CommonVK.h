@@ -245,6 +245,12 @@ namespace RxVK {
 		VkExtent2D swapchainExtent{ 0, 0 };
 		std::vector<VkImage> swapchainImages;
 		std::vector<VkImageView> swapchainImageviews;
+
+		// Depth-stencil resources for the swapchain (one per swapchain image)
+		VkFormat depthFormat = VK_FORMAT_UNDEFINED;
+		std::vector<VkImage> depthImages;
+		std::vector<VmaAllocation> depthAllocations;
+		std::vector<VkImageView> depthImageViews;
 	};
 
 	template <typename ResourceType, typename Tag>
@@ -313,7 +319,7 @@ namespace RxVK {
 			auto gen = static_cast<ValueType>(raw >> 32);
 
 			if (!(index < _My_resource.size() && _My_generation[index] == gen)){
-                RENDERX_WARN("ResourcePool::get : Stale or foreign handle detected")
+                RENDERX_WARN("ResourcePool::get : Stale or foreign handle detected");
 				return nullptr;
 			}
 

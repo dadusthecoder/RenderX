@@ -6,15 +6,15 @@ namespace Rx {
 namespace RxGL {
 
 // Declare backend functions matching RenderXAPI.def
-#undef RENDERER_FUNC
-#define RENDERER_FUNC(_ret, _name, ...) _ret GL##_name(__VA_ARGS__);
-#include "RenderX/RenderXAPI.def"
-#undef RENDERER_FUNC
+#undef X
+#define X(_ret, _name, ...) _ret GL##_name(__VA_ARGS__);
+	RENDERX_API(X)
+#undef X
 
-void GLBindPipeline(const PipelineHandle pipeline);
-const PipelineDesc* GLGetPipelineDesc(const PipelineHandle pipeline);
-void GLClearPipelineCache();
-void GLClearVAOCache();
+	void GLBindPipeline(const PipelineHandle pipeline);
+	const PipelineDesc* GLGetPipelineDesc(const PipelineHandle pipeline);
+	void GLClearPipelineCache();
+	void GLClearVAOCache();
 
 } // namespace RxGL
 

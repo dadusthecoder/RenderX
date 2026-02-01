@@ -249,7 +249,6 @@
 
 
 #include "RenderX/RenderX.h"
-#include "RenderX/Log.h"
 #include "Files.h"
 
 #include <GLFW/glfw3.h>
@@ -262,12 +261,10 @@
 
 using namespace Rx;
 
-// Config
 #define MAX_FRAMES_IN_FLIGHT 3
 
 static GraphicsAPI g_CurrentAPI = GraphicsAPI::Vulkan;
 
-// Data
 struct Vertex {
 	glm::vec3 position;
 	glm::vec3 color;
@@ -277,7 +274,6 @@ struct UBO {
 	glm::mat4 mvp;
 };
 
-// Cube geometry
 static const Vertex kCubeVertices[] = {
 	{ { -0.5f, -0.5f, -0.5f }, { 1, 0, 0 } },
 	{ { 0.5f, -0.5f, -0.5f }, { 0, 1, 0 } },
@@ -298,7 +294,6 @@ static const uint32_t kCubeIndices[] = {
 	0, 1, 5, 5, 4, 0
 };
 
-// Render resources
 struct CubeResources {
 	ShaderHandle vs;
 	ShaderHandle fs;
@@ -313,7 +308,6 @@ struct CubeResources {
 	PipelineHandle pipeline;
 };
 
-// Resource creation
 CubeResources CreateCubeResources() {
 	CubeResources r{};
 
@@ -370,19 +364,17 @@ CubeResources CreateCubeResources() {
 	pso.renderPass = GetDefaultRenderPass();
 	pso.vertexInputState = vi;
 	pso.shaders = { r.vs, r.fs };
-	pso.rasterizer.cullMode = CullMode::Back;
+	pso.rasterizer.cullMode = CullMode::None;
 	pso.rasterizer.fillMode = FillMode::Solid;
+	pso.depthStencil = DepthStencilState();
 
 	r.pipeline = CreateGraphicsPipeline(pso);
 
 	return r;
 }
 
-
-
 // Main
 int main() {
-	// --- Window ---
 	glfwInit();
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 
@@ -397,7 +389,6 @@ int main() {
 		glfwPollEvents();
 	}
 
-	// --- Init RenderX ---
 	Window rxWindow{};
 	rxWindow.api = g_CurrentAPI;
 	rxWindow.platform = Platform::Windows;
@@ -425,7 +416,6 @@ int main() {
 
 	while (!glfwWindowShouldClose(window)) {
 		Begin(currentframe);
-
 		angle += 0.01f;
 
 		glm::mat4 model = glm::rotate(glm::mat4(1.0f), angle, { 0, 1, 0 });
@@ -439,16 +429,11 @@ int main() {
 			float(width) / float(height),
 			0.1f, 100.0f);
 
-		// Vulkan NDC fix
+		// Vulkan NDC fix (the ndc's in vulkan are reversed , that's why we need to multiply them by -1 )
 		proj[1][1] *= -1.0f;
 
 		UBO ubo{};
 		ubo.mvp = proj * view * model;
-
-		CommandList cmd = commandLists[currentframe];
-		cmd.open();
-
-		cmd.writeBuffer(cube.ubo[currentframe], &ubo, 0, sizeof(UBO));
 
 		ResourceGroupDesc rg{};
 		rg.flags = ResourceGroupLifetime::PerFrame;
@@ -458,11 +443,22 @@ int main() {
 			ResourceGroupItem::ConstantBuffer(0, cube.uboView[currentframe])
 		};
 
+		// this resource group is created with the PerFrame flag so it will
+		// only be alive till the frame is alive, hence we need to create new every frame
+		// the creation is just some Sub allocation form the already allocated resourcegroup pool
 		auto group = CreateResourceGroup(rg);
+		// so it is not that expensive( at least i hope so )
+
+		CommandList cmd = commandLists[currentframe];
+		cmd.open();
+
+		//@note : you cannot write buffer during a renderpass
+		cmd.writeBuffer(cube.ubo[currentframe], &ubo, 0, sizeof(UBO));
+		// TODO Add more api functionality for interacting direct with the gpu memory
+		// like mapbuffer and copy buffer etc.....
 
 		cmd.beginRenderPass(GetDefaultRenderPass(), clearValues.data(),
 			(uint32_t)clearValues.size());
-
 		cmd.setPipeline(cube.pipeline);
 		cmd.setVertexBuffer(cube.vbo);
 		cmd.setIndexBuffer(cube.ibo);
@@ -472,11 +468,11 @@ int main() {
 
 		cmd.close();
 		ExecuteCommandList(cmd);
-
 		End(currentframe);
 		glfwPollEvents();
 		currentframe = (currentframe + 1) % MAX_FRAMES_IN_FLIGHT;
 	}
+
 	Shutdown();
 	glfwDestroyWindow(window);
 	glfwTerminate();

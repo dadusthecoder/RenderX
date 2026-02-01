@@ -178,7 +178,7 @@ namespace RxGL {
 		glCreateBuffers(1, &buffer); // DSA (GL 4.5+)
 		// or: glGenBuffers(1, &buffer);
 
-		GLBufferInfo info = ToGLBufferInfo(desc.flags, desc.momory);
+		GLBufferInfo info = ToGLBufferInfo(desc.flags, desc.memoryType);
 
 		if (info.hints.useBufferStorage) {
 			// Modern path: immutable storage (GL 4.4+)

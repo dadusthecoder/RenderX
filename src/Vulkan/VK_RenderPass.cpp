@@ -11,7 +11,7 @@ namespace RxVK {
 	RenderPassHandle VKCreateRenderPass(const RenderPassDesc& desc) {
 		auto& ctx = GetVulkanContext();
 		RENDERX_ASSERT_MSG(ctx.device != VK_NULL_HANDLE, "VKCreateRenderPass: device is VK_NULL_HANDLE");
-		RENDERX_ASSERT_MSG(desc.colorAttachments.size() > 0 || desc.hasDepthStencil, 
+		RENDERX_ASSERT_MSG(desc.colorAttachments.size() > 0 || desc.hasDepthStencil,
 			"VKCreateRenderPass: at least one attachment is required");
 
 		std::vector<VkAttachmentDescription> attachments;
@@ -122,11 +122,11 @@ namespace RxVK {
 		RENDERX_ASSERT_MSG(vkCmdList->isOpen, "VKCmdBeginRenderPass: CommandList must be open");
 		RENDERX_ASSERT_MSG(vkCmdList->cmdBuffer != VK_NULL_HANDLE, "VKCmdBeginRenderPass: command buffer is null");
 		RENDERX_ASSERT_MSG(pass.IsValid(), "VKCmdBeginRenderPass: Invalid render pass handle");
-		
+
 		if (clears && clearCount > 0) {
 			RENDERX_ASSERT_MSG(clears != nullptr, "VKCmdBeginRenderPass: clears pointer is null but clearCount > 0");
 		}
-		
+
 		// Try ResourcePool first
 		auto* rp = g_RenderPassPool.get(pass);
 		if (rp == nullptr || *rp == VK_NULL_HANDLE) {
@@ -136,7 +136,7 @@ namespace RxVK {
 
 		RENDERX_ASSERT_MSG(frame.swapchainImageIndex < ctx.swapchainFramebuffers.size(),
 			"VKCmdBeginRenderPass: swapchain image index out of bounds");
-		
+
 		VkFramebuffer framebuffer = ctx.swapchainFramebuffers[frame.swapchainImageIndex];
 		RENDERX_ASSERT_MSG(framebuffer != VK_NULL_HANDLE, "VKCmdBeginRenderPass: framebuffer is null");
 
@@ -147,6 +147,16 @@ namespace RxVK {
 			v.color = { c.color.color.r, c.color.color.g,
 				c.color.color.b, c.color.color.a };
 			vkClears.push_back(v);
+		}
+
+		// If this is the swapchain render pass and we have a depth attachment,
+		// append a depth-stencil clear value using the first ClearValue's depth/stencil.
+		VulkanContext& ctx2 = GetVulkanContext();
+		if (ctx2.swapchainRenderPassHandle.id == pass.id && !ctx2.depthImageViews.empty() && clearCount > 0) {
+			VkClearValue depthClear{};
+			depthClear.depthStencil.depth = clears[0].depth;
+			depthClear.depthStencil.stencil = clears[0].stencil;
+			vkClears.push_back(depthClear);
 		}
 
 		VkRenderPassBeginInfo bi{};
@@ -171,8 +181,6 @@ namespace RxVK {
 		RENDERX_ASSERT_MSG(vkCmdList != nullptr, "VKCmdEndRenderPass: retrieved null command list");
 		RENDERX_ASSERT_MSG(vkCmdList->isOpen, "VKCmdEndRenderPass: CommandList must be open");
 		RENDERX_ASSERT_MSG(vkCmdList->cmdBuffer != VK_NULL_HANDLE, "VKCmdEndRenderPass: command buffer is null");
-
-		auto& frame = GetFrameContex(g_CurrentFrame);
 		vkCmdEndRenderPass(vkCmdList->cmdBuffer);
 	}
 

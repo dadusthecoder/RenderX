@@ -1,3 +1,4 @@
+
 #include "CommonVK.h"
 #include "RenderXVK.h"
 #include "Windows.h"
@@ -754,6 +755,14 @@ namespace RxVK {
 			return;
 		}
 
+		// Depth images are optional, but if present we require one per swapchain image.
+		bool hasDepth = !ctx.depthImageViews.empty();
+		if (hasDepth && ctx.depthImageViews.size() != ctx.swapchainImageviews.size()) {
+			RENDERX_ERROR("Depth image view count ({}) does not match swapchain image view count ({})",
+				ctx.depthImageViews.size(), ctx.swapchainImageviews.size());
+			return;
+		}
+
 		ctx.swapchainFramebuffers.resize(ctx.swapchainImageviews.size());
 
 		for (size_t i = 0; i < ctx.swapchainImageviews.size(); i++) {
@@ -762,12 +771,21 @@ namespace RxVK {
 				return;
 			}
 
-			const VkImageView attachments[] = { ctx.swapchainImageviews[i] };
+			VkImageView attachments[2] = { ctx.swapchainImageviews[i], VK_NULL_HANDLE };
+			uint32_t attachmentCount = 1;
+			if (hasDepth) {
+				attachments[1] = ctx.depthImageViews[i];
+				if (attachments[1] == VK_NULL_HANDLE) {
+					RENDERX_ERROR("Depth image view {} is VK_NULL_HANDLE", i);
+					return;
+				}
+				attachmentCount = 2;
+			}
 
 			VkFramebufferCreateInfo framebufferInfo{};
 			framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
 			framebufferInfo.renderPass = *vkPass;
-			framebufferInfo.attachmentCount = 1;
+			framebufferInfo.attachmentCount = attachmentCount;
 			framebufferInfo.pAttachments = attachments;
 			framebufferInfo.width = ctx.swapchainExtent.width;
 			framebufferInfo.height = ctx.swapchainExtent.height;
@@ -785,8 +803,8 @@ namespace RxVK {
 			}
 		}
 
-		RENDERX_INFO("Created {} framebuffers ({}x{})", ctx.swapchainFramebuffers.size(),
-			ctx.swapchainExtent.width, ctx.swapchainExtent.height);
+		RENDERX_INFO("Created {} framebuffers ({}x{}, depth={})", ctx.swapchainFramebuffers.size(),
+			ctx.swapchainExtent.width, ctx.swapchainExtent.height, hasDepth ? "yes" : "no");
 	}
 
 	bool CreateSwapchain(VulkanContext& ctx, Window window) {
@@ -921,13 +939,64 @@ namespace RxVK {
 
 		RENDERX_INFO("Swapchain created: {}x{}, {} images", extent.width, extent.height, swapchainImageCount);
 
+		// Create depth-stencil images (one per swapchain image)
+		ctx.depthFormat = VK_FORMAT_D24_UNORM_S8_UINT;
+		ctx.depthImages.resize(swapchainImageCount);
+		ctx.depthAllocations.resize(swapchainImageCount);
+		ctx.depthImageViews.resize(swapchainImageCount);
+
+		for (uint32_t i = 0; i < swapchainImageCount; ++i) {
+			VkImageCreateInfo imageInfo{};
+			imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+			imageInfo.imageType = VK_IMAGE_TYPE_2D;
+			imageInfo.extent.width = ctx.swapchainExtent.width;
+			imageInfo.extent.height = ctx.swapchainExtent.height;
+			imageInfo.extent.depth = 1;
+			imageInfo.mipLevels = 1;
+			imageInfo.arrayLayers = 1;
+			imageInfo.format = ctx.depthFormat;
+			imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+			imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+			imageInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+			imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+			imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+			VmaAllocationCreateInfo allocInfo{};
+			allocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
+
+			VkResult depthResult = vmaCreateImage(ctx.allocator, &imageInfo, &allocInfo,
+				&ctx.depthImages[i], &ctx.depthAllocations[i], nullptr);
+			if (depthResult != VK_SUCCESS) {
+				RENDERX_ERROR("Failed to create depth image {}: {}", i, VkResultToString(depthResult));
+				return false;
+			}
+
+			VkImageViewCreateInfo depthViewInfo{};
+			depthViewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+			depthViewInfo.image = ctx.depthImages[i];
+			depthViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+			depthViewInfo.format = ctx.depthFormat;
+			depthViewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+			depthViewInfo.subresourceRange.baseMipLevel = 0;
+			depthViewInfo.subresourceRange.levelCount = 1;
+			depthViewInfo.subresourceRange.baseArrayLayer = 0;
+			depthViewInfo.subresourceRange.layerCount = 1;
+
+			VkResult depthViewResult = vkCreateImageView(ctx.device, &depthViewInfo, nullptr, &ctx.depthImageViews[i]);
+			if (depthViewResult != VK_SUCCESS || ctx.depthImageViews[i] == VK_NULL_HANDLE) {
+				RENDERX_ERROR("Failed to create depth image view {}: {}", i, VkResultToString(depthViewResult));
+				return false;
+			}
+		}
+
+		// Create a render pass that uses a color + depth-stencil attachment compatible with the swapchain
 		Rx::RenderPassDesc renderPassDesc{};
 		Rx::AttachmentDesc colorAttach;
 		colorAttach.format = Rx::TextureFormat::BGRA8_SRGB;
 		colorAttach.finalState = Rx::ResourceState::Present;
 		renderPassDesc.colorAttachments.push_back(colorAttach);
-		// temp
-		//  renderPassDesc.hasDepthStencil = true;
+		renderPassDesc.hasDepthStencil = true;
+		renderPassDesc.depthStencilAttachment = Rx::DepthStencilAttachmentDesc(Rx::TextureFormat::Depth24Stencil8);
 
 		auto renderPass = VKCreateRenderPass(renderPassDesc);
 		CreateSwapchainFramebuffers(renderPass);
@@ -1286,8 +1355,7 @@ namespace RxVK {
 		RENDERX_INFO("Frame contexts initialized successfully: {} frames", MAX_FRAMES_IN_FLIGHT);
 	}
 
-	// ==== VULKAN HELPERS ====
-
+	// VULKAN HELPERS
 	VkRenderPass GetVulkanRenderPass(RenderPassHandle handle) {
 		return *g_RenderPassPool.get(handle);
 	}
@@ -1298,17 +1366,14 @@ namespace RxVK {
 		vkDeviceWaitIdle(ctx.device);
 
 
-		// Resource Groups (Descriptor Sets)
 		g_TransientResourceGroupPool.ForEach([](VulkanResourceGroup& group) {
 			group.set = VK_NULL_HANDLE;
 		});
 
-		// Buffer Views
 		g_BufferViewPool.ForEach([](VulkanBufferView& view) {
 			view.isValid = false;
 		});
 
-		// Buffers
 		g_BufferPool.ForEach([&](VulkanBuffer& buffer) {
 			if (buffer.buffer != VK_NULL_HANDLE) {
 				vmaDestroyBuffer(ctx.allocator, buffer.buffer, buffer.allocation);
@@ -1320,7 +1385,6 @@ namespace RxVK {
 			buffer.allocInfo = {};
 		});
 
-		// Textures
 		g_TexturePool.ForEach([&](VulkanTexture& texture) {
 			if (texture.view != VK_NULL_HANDLE) {
 				vkDestroyImageView(g_Device, texture.view, nullptr);
@@ -1344,7 +1408,6 @@ namespace RxVK {
 			texture.isValid = false;
 		});
 
-		// Shaders
 		g_ShaderPool.ForEach([&](VulkanShader& shader) {
 			if (shader.shaderModule != VK_NULL_HANDLE) {
 				vkDestroyShaderModule(g_Device, shader.shaderModule, nullptr);
@@ -1354,7 +1417,6 @@ namespace RxVK {
 			shader.entryPoint.clear();
 		});
 
-		// Pipeline Layouts
 		g_LayoutPool.ForEach([&](VulkanPipelineLayout& layout) {
 			if (layout.layout != VK_NULL_HANDLE && layout.setlayouts.size() != 0) {
 				for (auto setlayout : layout.setlayouts)
@@ -1365,7 +1427,6 @@ namespace RxVK {
 			}
 		});
 
-		// Pipelines
 		g_PipelinePool.ForEach([&](VulkanPipeline& pipeline) {
 			if (pipeline.pipeline != VK_NULL_HANDLE) {
 				vkDestroyPipeline(g_Device, pipeline.pipeline, nullptr);
@@ -1373,7 +1434,6 @@ namespace RxVK {
 			}
 		});
 
-		// Render Passes
 		g_RenderPassPool.ForEach([&](VkRenderPass& rp) {
 			if (rp != VK_NULL_HANDLE) {
 				vkDestroyRenderPass(g_Device, rp, nullptr);
@@ -1381,7 +1441,6 @@ namespace RxVK {
 			}
 		});
 
-		// Clear pools last
 		g_CommandListPool.clear();
 		g_TransientResourceGroupPool.clear();
 		g_BufferViewPool.clear();
@@ -1392,7 +1451,6 @@ namespace RxVK {
 		g_PipelinePool.clear();
 		g_RenderPassPool.clear();
 
-		// clear all caches
 		g_BufferViewCache.clear();
 
 		freeResourceGroups();
@@ -1404,12 +1462,10 @@ namespace RxVK {
 		// Ensure device is idle before destroying resources
 		vkDeviceWaitIdle(ctx.device);
 
-		// Destroy per-frame upload buffers BEFORE destroying the allocator
-		// This is critical - VMA will assert if allocator is destroyed with unfreed allocations
+		//  VMA will assert if allocator is destroyed with unfreed allocations
 		for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
 			auto& frame = GetFrameContex(i);
 
-			// Destroy upload buffer
 			if (frame.upload.buffer != VK_NULL_HANDLE) {
 				vmaDestroyBuffer(ctx.allocator, frame.upload.buffer, frame.upload.allocation);
 				frame.upload.buffer = VK_NULL_HANDLE;
@@ -1417,7 +1473,6 @@ namespace RxVK {
 				frame.upload.mappedPtr = nullptr;
 			}
 
-			// Destroy per-frame synchronization primitives
 			if (frame.fence != VK_NULL_HANDLE) {
 				vkDestroyFence(ctx.device, frame.fence, nullptr);
 				frame.fence = VK_NULL_HANDLE;
@@ -1436,7 +1491,6 @@ namespace RxVK {
 			}
 		}
 
-		// Destroy swapchain image semaphores
 		for (auto& s : ctx.swapchainImageSync) {
 			if (s.imageAvailableSemaphore != VK_NULL_HANDLE)
 				vkDestroySemaphore(ctx.device, s.imageAvailableSemaphore, nullptr);
@@ -1446,49 +1500,50 @@ namespace RxVK {
 			s.renderFinishedSemaphore = VK_NULL_HANDLE;
 		}
 
-		// Now destroy VMA allocator (all VMA-managed resources must be freed first)
-		if (ctx.allocator != VK_NULL_HANDLE) {
-			// Log VMA allocation info before destroying allocator
-			RENDERX_INFO("=== VMA Cleanup ===");
-			RENDERX_INFO("Destroying VMA allocator and all managed resources");
-			RENDERX_INFO("===================");
-
-			vmaDestroyAllocator(ctx.allocator);
-			ctx.allocator = VK_NULL_HANDLE;
-			RENDERX_INFO("VMA allocator destroyed successfully");
-		}
-
-		// Destroy swapchain framebuffers
 		for (auto fb : ctx.swapchainFramebuffers) {
 			if (fb != VK_NULL_HANDLE) vkDestroyFramebuffer(ctx.device, fb, nullptr);
 		}
 		ctx.swapchainFramebuffers.clear();
 
-		// Destroy image views
+		for (auto dv : ctx.depthImageViews) {
+			if (dv != VK_NULL_HANDLE) vkDestroyImageView(ctx.device, dv, nullptr);
+		}
+		ctx.depthImageViews.clear();
+
+		for (size_t i = 0; i < ctx.depthImages.size(); ++i) {
+			if (ctx.depthImages[i] != VK_NULL_HANDLE) {
+				vmaDestroyImage(ctx.allocator, ctx.depthImages[i], ctx.depthAllocations[i]);
+			}
+		}
+		ctx.depthImages.clear();
+		ctx.depthAllocations.clear();
+
 		for (auto iv : ctx.swapchainImageviews) {
 			if (iv != VK_NULL_HANDLE) vkDestroyImageView(ctx.device, iv, nullptr);
 		}
 		ctx.swapchainImageviews.clear();
 
-		// Destroy swapchain
+		if (ctx.allocator != VK_NULL_HANDLE) {
+			vmaDestroyAllocator(ctx.allocator);
+			ctx.allocator = VK_NULL_HANDLE;
+			RENDERX_INFO("VMA allocator destroyed successfully");
+		}
+
 		if (ctx.swapchain != VK_NULL_HANDLE) {
 			vkDestroySwapchainKHR(ctx.device, ctx.swapchain, nullptr);
 			ctx.swapchain = VK_NULL_HANDLE;
 		}
 
-		// Destroy surface
 		if (ctx.surface != VK_NULL_HANDLE && ctx.instance != VK_NULL_HANDLE) {
 			vkDestroySurfaceKHR(ctx.instance, ctx.surface, nullptr);
 			ctx.surface = VK_NULL_HANDLE;
 		}
 
-		// Finally destroy logical device
 		if (ctx.device != VK_NULL_HANDLE) {
 			vkDestroyDevice(ctx.device, nullptr);
 			ctx.device = VK_NULL_HANDLE;
 		}
 
-		// Destroy instance
 		if (ctx.instance != VK_NULL_HANDLE) {
 			vkDestroyInstance(ctx.instance, nullptr);
 			ctx.instance = VK_NULL_HANDLE;

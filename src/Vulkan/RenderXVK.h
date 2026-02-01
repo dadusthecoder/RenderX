@@ -6,9 +6,9 @@ namespace Rx {
 namespace RxVK {
 
 #undef RENDERER_FUNC
-#define RENDERER_FUNC(_ret, _name, ...) _ret VK##_name(__VA_ARGS__);
-#include "RenderX/RenderXAPI.def"
-#undef RENDERER_FUNC
+#define X(_ret, _name, ...) _ret VK##_name(__VA_ARGS__);
+	RENDERX_API(X)
+#undef X
 
 } // namespace RxVK
 

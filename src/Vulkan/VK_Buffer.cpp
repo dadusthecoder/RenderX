@@ -28,7 +28,7 @@ namespace RxVK {
 
 	void UploadViaStagingBufferVK(VulkanBuffer& destBuffer, const void* data, size_t size, size_t offset = 0) {
 		PROFILE_FUNCTION();
-		
+
 		// Safety validation
 		if (!data) {
 			RENDERX_ERROR("UploadViaStagingBufferVK: data pointer is null");
@@ -43,11 +43,11 @@ namespace RxVK {
 			return;
 		}
 		if (offset + size > destBuffer.size) {
-			RENDERX_ERROR("UploadViaStagingBufferVK: offset ({}) + size ({}) exceeds buffer size ({})", 
+			RENDERX_ERROR("UploadViaStagingBufferVK: offset ({}) + size ({}) exceeds buffer size ({})",
 				offset, size, destBuffer.size);
 			return;
 		}
-		
+
 		VulkanContext& ctx = GetVulkanContext();
 
 		// Create staging buffer with VMA
@@ -88,13 +88,13 @@ namespace RxVK {
 		allocInfoCmd.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 		allocInfoCmd.commandPool = GetFrameContex(g_CurrentFrame).commandPool;
 		allocInfoCmd.commandBufferCount = 1;
-		
+
 		if (allocInfoCmd.commandPool == VK_NULL_HANDLE) {
 			RENDERX_ERROR("UploadViaStagingBufferVK: command pool is VK_NULL_HANDLE");
 			vmaDestroyBuffer(ctx.allocator, stagingBuffer, stagingAllocation);
 			return;
 		}
-		
+
 		result = vkAllocateCommandBuffers(ctx.device, &allocInfoCmd, &commandBuffer);
 		if (!CheckVk(result, "Failed to allocate command buffer for staging copy")) {
 			vmaDestroyBuffer(ctx.allocator, stagingBuffer, stagingAllocation);
@@ -131,7 +131,7 @@ namespace RxVK {
 			vmaDestroyBuffer(ctx.allocator, stagingBuffer, stagingAllocation);
 			return;
 		}
-		
+
 		VkSubmitInfo submitinfo{};
 		submitinfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 		submitinfo.commandBufferCount = 1;
@@ -142,7 +142,7 @@ namespace RxVK {
 			vmaDestroyBuffer(ctx.allocator, stagingBuffer, stagingAllocation);
 			return;
 		}
-		
+
 		result = vkQueueWaitIdle(ctx.graphicsQueue);
 		if (!CheckVk(result, "Failed to wait for queue idle")) {
 			RENDERX_WARN("Queue wait idle failed, but continuing cleanup");
@@ -156,19 +156,19 @@ namespace RxVK {
 	// ==== BUFFER ====
 	BufferHandle VKCreateBuffer(const BufferDesc& desc) {
 		PROFILE_FUNCTION();
-		
+
 		// Safety validation
 		if (desc.size == 0) {
 			RENDERX_ERROR("VKCreateBuffer: buffer size is zero");
 			return BufferHandle{};
 		}
-		
+
 		VulkanContext& ctx = GetVulkanContext();
 		if (ctx.allocator == VK_NULL_HANDLE) {
 			RENDERX_ERROR("VKCreateBuffer: VMA allocator is VK_NULL_HANDLE");
 			return BufferHandle{};
 		}
-		
+
 		// Create buffer
 		VulkanBuffer vulkanBuffer{};
 		vulkanBuffer.size = desc.size;
@@ -180,7 +180,7 @@ namespace RxVK {
 		bufferInfo.usage = ToVkBufferFlags(desc.flags);
 		bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-		auto memFlags = ToVmaMomoryType(desc.momory, desc.flags);
+		auto memFlags = ToVmaMomoryType(desc.memoryType, desc.flags);
 		VkResult result = vmaCreateBuffer(ctx.allocator, &bufferInfo, &memFlags,
 			&vulkanBuffer.buffer, &vulkanBuffer.allocation, &vulkanBuffer.allocInfo);
 		if (!CheckVk(result, "Failed to create Vulkan buffer")) {
@@ -230,17 +230,17 @@ namespace RxVK {
 
 	void VKDestroyBuffer(BufferHandle& handle) {
 		PROFILE_FUNCTION();
-		
+
 		if (!handle.IsValid()) {
 			RENDERX_WARN("VKDestroyBuffer: invalid buffer handle");
 			return;
 		}
-		
+
 		if (!g_BufferPool.IsAlive(handle)) {
 			RENDERX_WARN("VKDestroyBuffer: buffer handle is stale");
 			return;
 		}
-		
+
 		RxVK::VulkanContext& ctx = RxVK::GetVulkanContext();
 		if (ctx.allocator == VK_NULL_HANDLE) {
 			RENDERX_ERROR("VKDestroyBuffer: allocator is VK_NULL_HANDLE");
@@ -252,7 +252,7 @@ namespace RxVK {
 			RENDERX_ERROR("VKDestroyBuffer: failed to retrieve buffer from pool");
 			return;
 		}
-		
+
 		if (buffer->buffer != VK_NULL_HANDLE) {
 			vmaDestroyBuffer(ctx.allocator, buffer->buffer, buffer->allocation);
 			g_BufferPool.free(handle);
@@ -292,24 +292,24 @@ namespace RxVK {
 		auto& ctx = GetVulkanContext();
 		auto* cmd = g_CommandListPool.get(cmdList);
 		auto* buf = g_BufferPool.get(handle);
-		
+
 		if (!cmd || !buf) {
 			RENDERX_ERROR("VKCmdWriteBuffer: failed to retrieve command list or buffer from pool");
 			return;
 		}
-		
+
 		auto flags = buf->flags;
 		// Determine which upload path to use based on buffer flags
 
 		uint32_t alignment = Has(flags, BufferFlags::Uniform)
-			? ctx.deviceLimits.minUniformBufferOffsetAlignment
-			: ctx.deviceLimits.minStorageBufferOffsetAlignment;
-		
+								 ? ctx.deviceLimits.minUniformBufferOffsetAlignment
+								 : ctx.deviceLimits.minStorageBufferOffsetAlignment;
+
 		if (alignment == 0) {
 			RENDERX_ERROR("VKCmdWriteBuffer: invalid buffer alignment (0)");
 			return;
 		}
-		
+
 		uint32_t uploadOffset;
 		void* ptr = AllocateUpload(frame.upload, size, alignment, uploadOffset);
 		if (!ptr) {
@@ -331,18 +331,18 @@ namespace RxVK {
 			RENDERX_ERROR("VKCreateBufferView: invalid buffer handle");
 			return BufferViewHandle{};
 		}
-		
+
 		if (!g_BufferPool.IsAlive(desc.buffer)) {
 			RENDERX_ERROR("VKCreateBufferView: buffer handle is stale");
 			return BufferViewHandle{};
 		}
-		
+
 		VulkanBuffer* buffer = g_BufferPool.get(desc.buffer);
 		if (!buffer || buffer->buffer == VK_NULL_HANDLE) {
 			RENDERX_ERROR("VKCreateBufferView: buffer is VK_NULL_HANDLE");
 			return BufferViewHandle{};
 		}
-		
+
 		if (desc.offset + desc.range > buffer->size) {
 			RENDERX_ERROR("VKCreateBufferView: view range exceeds buffer size (offset: {}, range: {}, buffer size: {})",
 				desc.offset, desc.range, buffer->size);
