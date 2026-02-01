@@ -2,7 +2,7 @@
 
 #include "RenderX/Log.h"
 #include "ProLog/ProLog.h"
-#include "RenderX/RenderXCommon.h"
+#include "RenderX/Common.h"
 
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan.hpp>
@@ -318,8 +318,8 @@ namespace RxVK {
 			auto index = static_cast<ValueType>(raw & 0xFFFFFFFF);
 			auto gen = static_cast<ValueType>(raw >> 32);
 
-			if (!(index < _My_resource.size() && _My_generation[index] == gen)){
-                RENDERX_WARN("ResourcePool::get : Stale or foreign handle detected");
+			if (!(index < _My_resource.size() && _My_generation[index] == gen)) {
+				RENDERX_WARN("ResourcePool::get : Stale or foreign handle detected");
 				return nullptr;
 			}
 
@@ -357,7 +357,7 @@ namespace RxVK {
 			_My_generation.emplace_back(1);
 		}
 	private:
-		//Encryption 
+		// Encryption
 		static uint64_t RotateLeft(uint64_t x, int r) {
 			return (x << r) | (x >> (64 - r));
 		}

@@ -1,10 +1,10 @@
-#include "CommonGL.h"
+#include "GL_Common.h"
 
 #include <string>
 #include <unordered_map>
 #include <vector>
 
-#include "RenderXGL.h"
+#include "GL_RenderX.h"
 #include "RenderX/Log.h"
 #include "ProLog/ProLog.h"
 

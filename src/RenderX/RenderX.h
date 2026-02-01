@@ -1,5 +1,5 @@
 #pragma once
-#include "RenderXCommon.h"
+#include "Common.h"
 
 
 //------------------------------------------------------------------------------
@@ -79,10 +79,10 @@ namespace Rx {
 
 	RENDERX_EXPORT RenderPassHandle CreateRenderPass(const RenderPassDesc& desc);
 	RENDERX_EXPORT void DestroyRenderPass(RenderPassHandle& handle);
-    RENDERX_EXPORT RenderPassHandle GetDefaultRenderPass();
+	RENDERX_EXPORT RenderPassHandle GetDefaultRenderPass();
 
 	RENDERX_EXPORT CommandList CreateCommandList(uint32_t frameIndex);
-	RENDERX_EXPORT void DestroyCommandList(CommandList& cmdList , uint32_t frameIndex );
+	RENDERX_EXPORT void DestroyCommandList(CommandList& cmdList, uint32_t frameIndex);
 	RENDERX_EXPORT void ExecuteCommandList(CommandList& cmdList);
 
 	RENDERX_EXPORT void Init(const Window& info);
@@ -90,5 +90,5 @@ namespace Rx {
 
 	// frame Lifecycle
 	RENDERX_EXPORT void Begin(uint32_t frameIndex);
-	RENDERX_EXPORT void End(uint32_t frameIndex);	
+	RENDERX_EXPORT void End(uint32_t frameIndex);
 } // namespace Rx

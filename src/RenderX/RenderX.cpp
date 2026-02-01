@@ -1,8 +1,8 @@
 #include "RenderX/RenderX.h"
-#include "RenderX/RenderXCore.h"
+#include "RenderX/Core.h"
 #include "RenderX/DebugProfiler.h"
-#include "OpenGL/RenderXGL.h"
-#include "Vulkan/RenderXVK.h"
+#include "OpenGL/GL_RenderX.h"
+#include "Vulkan/VK_RenderX.h"
 #include "Log.h"
 #include "ProLog/ProLog.h"
 #include <cstring>

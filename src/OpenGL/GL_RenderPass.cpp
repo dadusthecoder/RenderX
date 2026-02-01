@@ -1,5 +1,5 @@
 
-#include "CommonGL.h"
+#include "GL_Common.h"
 #include <atomic>
 
 namespace Rx {
@@ -41,8 +41,8 @@ namespace RxGL {
 		// Apply the clear immediately
 		if (!s_PendingClearValues.empty()) {
 			const auto& clearColor = s_PendingClearValues[0].color.color;
-				clearColor.x, clearColor.y, clearColor.z, clearColor.w;
-				glClearColor(clearColor.x, clearColor.y, clearColor.z, clearColor.w);
+			clearColor.x, clearColor.y, clearColor.z, clearColor.w;
+			glClearColor(clearColor.x, clearColor.y, clearColor.z, clearColor.w);
 		}
 		else {
 			// Default clear color if no clear value provided

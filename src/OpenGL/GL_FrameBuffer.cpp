@@ -1,4 +1,4 @@
-#include "CommonGL.h"
+#include "GL_Common.h"
 
 namespace Rx {
 namespace RxGL {

@@ -1,6 +1,6 @@
 #include "RenderX/Log.h"
-#include "RenderXVK.h"
-#include "CommonVK.h"
+#include "VK_RenderX.h"
+#include "VK_Common.h"
 
 
 namespace Rx {

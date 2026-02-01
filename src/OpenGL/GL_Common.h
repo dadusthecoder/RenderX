@@ -1,7 +1,7 @@
 #pragma once
 #include "RenderX/Log.h"
 #include "ProLog/ProLog.h"
-#include "RenderXGL.h"
+#include "GL_RenderX.h"
 
 #include <GL/glew.h>
 #include <windows.h>
@@ -36,7 +36,7 @@ namespace RxGL {
 		int32_t vertexOffsetIdx = 0;
 		uint32_t firstIndex = 0;
 	};
-    	
+
 	extern HWND s_WindowHandle;
 	extern int s_WindowWidth;
 	extern int s_WindowHeight;

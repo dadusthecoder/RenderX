@@ -1,7 +1,7 @@
 #include "RenderX/Log.h"
 #include "RenderX/DebugProfiler.h"
-#include "RenderXVK.h"
-#include "CommonVK.h"
+#include "VK_RenderX.h"
+#include "VK_Common.h"
 
 namespace Rx {
 
@@ -170,7 +170,7 @@ namespace RxVK {
 		vkCmdDrawIndexed(vkCmdList->cmdBuffer, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
 	}
 
-	 CommandList VKCreateCommandList(uint32_t frameIndex) {
+	CommandList VKCreateCommandList(uint32_t frameIndex) {
 		PROFILE_COMMAND_BUFFER("VKCreateCommandList");
 		RENDERX_ASSERT_MSG(frameIndex < MAX_FRAMES_IN_FLIGHT, "VKCreateCommandList: frameIndex out of bounds");
 
