@@ -80,94 +80,52 @@
 namespace Rx {
 
 	// RenderX API X-Macro
-#define RENDERX_API(X)                                                       \
-                                                                             \
-	/* RenderX Lifetime */                                                   \
-	X(void, Init, const Window&)                                             \
-	X(void, Shutdown)                                                        \
-                                                                             \
-	/* Frame Lifetime */                                                     \
-	X(void, Begin, uint32_t frameIndex)                                      \
-	X(void, End, uint32_t)                                                   \
-                                                                             \
-	/* Pipeline Layout */                                                    \
-	X(PipelineLayoutHandle, CreatePipelineLayout,                            \
-		const ResourceGroupLayout* layout, uint32_t layoutcount)             \
-                                                                             \
-	/* Pipeline Graphics */                                                  \
-	X(PipelineHandle, CreateGraphicsPipeline, PipelineDesc& desc)            \
-	X(ShaderHandle, CreateShader, const ShaderDesc& desc)                    \
-                                                                             \
-	/* Resource Creation */                                                  \
-	/* Buffers */                                                            \
-	X(BufferHandle, CreateBuffer, const BufferDesc& desc)                    \
-                                                                             \
-	/* Buffer Views */                                                       \
-	X(BufferViewHandle, CreateBufferView, const BufferViewDesc& desc)        \
-	X(void, DestroyBufferView, BufferViewHandle& handle)                     \
-                                                                             \
-	/* Render Pass */                                                        \
-	X(RenderPassHandle, CreateRenderPass, const RenderPassDesc&)             \
-	X(void, DestroyRenderPass, RenderPassHandle&)                            \
-	X(RenderPassHandle, GetDefaultRenderPass)                                \
-                                                                             \
-	/* Framebuffer */                                                        \
-	X(FramebufferHandle, CreateFramebuffer, const FramebufferDesc&)          \
-	X(void, DestroyFramebuffer, FramebufferHandle&)                          \
-                                                                             \
-	/* Resource Groups */                                                    \
-	X(ResourceGroupHandle, CreateResourceGroup, const ResourceGroupDesc&)    \
-	X(void, DestroyResourceGroup, ResourceGroupHandle&)                      \
-                                                                             \
-	/* Command List Creation & Management */                                 \
-	X(CommandList, CreateCommandList, uint32_t)                              \
-	X(void, ExecuteCommandList, CommandList&)                                \
-	X(void, DestroyCommandList, CommandList&, uint32_t)                      \
-                                                                             \
-	/* Command List Recording */                                             \
-	X(void, CmdOpen, CommandList& cmd)                                       \
-	X(void, CmdClose, CommandList& cmd)                                      \
-                                                                             \
-	/* Binding */                                                            \
-	X(void, CmdSetPipeline, CommandList& cmd, const PipelineHandle pipeline) \
-	X(void, CmdSetVertexBuffer, CommandList& cmd,                            \
-		const BufferHandle buffer, uint64_t offset)                          \
-	X(void, CmdSetIndexBuffer, CommandList& cmd,                             \
-		const BufferHandle buffer, uint64_t offset)                          \
-                                                                             \
-	/* Draw Calls */                                                         \
-	X(void, CmdDraw,                                                         \
-		CommandList& cmd,                                                    \
-		uint32_t vertexCount, uint32_t instanceCount,                        \
-		uint32_t firstVertex, uint32_t firstInstance)                        \
-                                                                             \
-	X(void, CmdDrawIndexed,                                                  \
-		CommandList& cmd,                                                    \
-		uint32_t indexCount, int32_t vertexOffset,                           \
-		uint32_t instanceCount,                                              \
-		uint32_t firstIndex, uint32_t firstInstance)                         \
-                                                                             \
-	/* Render Pass Commands */                                               \
-	X(void, CmdBeginRenderPass,                                              \
-		CommandList& cmd,                                                    \
-		RenderPassHandle pass,                                               \
-		const ClearValue* clears,                                            \
-		uint32_t clearCount)                                                 \
-                                                                             \
-	X(void, CmdEndRenderPass, CommandList&)                                  \
-                                                                             \
-	/* Resource Updates */                                                   \
-	X(void, CmdWriteBuffer,                                                  \
-		const CommandList& cmdList,                                          \
-		BufferHandle handle,                                                 \
-		void* data,                                                          \
-		uint32_t offset,                                                     \
-		uint32_t size)                                                       \
-                                                                             \
-	X(void, CmdSetResourceGroup,                                             \
-		const CommandList& cmdList,                                          \
-		const ResourceGroupHandle& handle)
-
+#define RENDERX_API(X)                                                    \
+                                                                          \
+	/* RenderX Lifetime */                                                \
+	X(void, Init, const Window&)                                          \
+	X(void, Shutdown)                                                     \
+                                                                          \
+	/* Frame Lifetime */                                                  \
+	X(void, Begin, uint32_t frameIndex)                                   \
+	X(void, End, uint32_t)                                                \
+                                                                          \
+	/* Pipeline Layout */                                                 \
+	X(PipelineLayoutHandle, CreatePipelineLayout,                         \
+		const ResourceGroupLayoutHandle* layout, uint32_t layoutcount)    \
+                                                                          \
+	/* Pipeline Graphics */                                               \
+	X(PipelineHandle, CreateGraphicsPipeline, PipelineDesc& desc)         \
+	X(ShaderHandle, CreateShader, const ShaderDesc& desc)                 \
+                                                                          \
+	/* Resource Creation */                                               \
+	/* Buffers */                                                         \
+	X(BufferHandle, CreateBuffer, const BufferDesc& desc)                 \
+                                                                          \
+	/* Buffer Views */                                                    \
+	X(BufferViewHandle, CreateBufferView, const BufferViewDesc& desc)     \
+	X(void, DestroyBufferView, BufferViewHandle& handle)                  \
+                                                                          \
+	/* Render Pass */                                                     \
+	X(RenderPassHandle, CreateRenderPass, const RenderPassDesc&)          \
+	X(void, DestroyRenderPass, RenderPassHandle&)                         \
+	X(RenderPassHandle, GetDefaultRenderPass)                             \
+                                                                          \
+	/* Framebuffer */                                                     \
+	X(FramebufferHandle, CreateFramebuffer, const FramebufferDesc&)       \
+	X(void, DestroyFramebuffer, FramebufferHandle&)                       \
+                                                                          \
+	/* Resource Groups */                                                 \
+	X(ResourceGroupHandle, CreateResourceGroup, const ResourceGroupDesc&) \
+	X(void, DestroyResourceGroup, ResourceGroupHandle&)                   \
+                                                                          \
+	/* Command List Creation & Management */                              \
+	X(CommandList, CreateCommandList, uint32_t)                           \
+	X(void, ExecuteCommandList, CommandList&)                             \
+	X(void, DestroyCommandList, CommandList&, uint32_t)                   \
+                                                                          \
+	X(ResourceGroupLayoutHandle, CreateResourceGroupLayout,               \
+		const ResourceGroupLayout&)
 
 
 	// Base Handle Template
@@ -209,6 +167,8 @@ namespace Rx {
 	RENDERX_DEFINE_HANDLE(RenderPass)
 	RENDERX_DEFINE_HANDLE(ResourceGroup)
 	RENDERX_DEFINE_HANDLE(QueryPool)
+	RENDERX_DEFINE_HANDLE(ResourceGroupLayout)
+
 
 
 	// GLM type aliases for consistency Temp (only using them for the testing/debug)
@@ -225,223 +185,200 @@ namespace Rx {
 	using UVec4 = glm::uvec4;
 	using Quat = glm::quat;
 
-
-
-	// Enums and structs for various RenderX configurations and description
-	// this are the options provided by the renderX to configure the backend
-	// .... TODO write a better comments for this api desine exlpain all the structs and hoe do they map to the backends
-	//
 	enum class GraphicsAPI {
-		None,
-		OpenGL,
-		Vulkan
+		NONE,
+		OPENGL,
+		VULKAN
 	};
 
 	enum class Platform : uint8_t {
-		Windows,
-		Linux,
-		MacOS
+		WINDOWS,
+		LINUX,
+		MACOS
 	};
 
 	struct Window {
 		Platform platform;
 		GraphicsAPI api;
-
 		void* displayHandle;
 		void* nativeHandle;
-		uint32_t width, height;
-
+		uint32_t width;
+		uint32_t height;
 		const char** instanceExtensions;
 		uint32_t extensionCount;
 		uint32_t maxFramesInFlight = 3;
 	};
 
-
 	enum class TextureType {
-		Texture2D,
-		Texture3D,
-		TextureCube,
-		Texture2DArray
+		TEXTURE_2D,
+		TEXTURE_3D,
+		TEXTURE_CUBE,
+		TEXTURE_2D_ARRAY
 	};
 
 	enum class LoadOp {
-		Load,
-		Clear,
-		DontCare
+		LOAD,
+		CLEAR,
+		DONT_CARE
 	};
 
 	enum class StoreOp {
-		Store,
-		DontCare
+		STORE,
+		DONT_CARE
 	};
 
-	enum class DataFormat {
-		R8,
-		RG8,
-		RGB8,
-		RGBA8,
-		R16F,
-		RG16F,
-		RGB16F,
-		RGBA16F,
-		R32F,
-		RG32F,
-		RGB32F,
-		RGBA32F,
-	};
-
-	enum class TextureFormat {
-		RGBA8,
+	enum class Format : uint16_t {
+		UNDEFINED = 0,
+		R8_UNORM,
+		RG8_UNORM,
+		RGBA8_UNORM,
 		RGBA8_SRGB,
-		BGRA8,
+		BGRA8_UNORM,
 		BGRA8_SRGB,
-		RGBA16F,
-		RGBA32F,
-		R8,
-		R16F,
-		R32F,
-		Depth24Stencil8,
-		Depth32F,
-		BC1,
-		BC1_SRGB,
-		BC3,
+		R16_SFLOAT,
+		RG16_SFLOAT,
+		RGBA16_SFLOAT,
+		R32_SFLOAT,
+		RG32_SFLOAT,
+		RGB32_SFLOAT,
+		RGBA32_SFLOAT,
+		D24_UNORM_S8_UINT,
+		D32_SFLOAT,
+		BC1_RGBA_UNORM,
+		BC1_RGBA_SRGB,
+		BC3_UNORM,
 		BC3_SRGB
 	};
 
-
-	enum class TextureFilter {
-		Nearest,
-		Linear,
-		NearestMipmapNearest,
-		NearestMipmapLinear,
-		LinearMipmapNearest,
-		LinearMipmapLinear
+	enum class Filter {
+		NEAREST,
+		LINEAR,
+		NEAREST_MIPMAP_NEAREST,
+		NEAREST_MIPMAP_LINEAR,
+		LINEAR_MIPMAP_NEAREST,
+		LINEAR_MIPMAP_LINEAR
 	};
 
-	enum class TextureWrap { Repeat,
-		MirroredRepeat,
-		ClampToEdge,
-		ClampToBorder };
+	enum class TextureWrap {
+		REPEAT,
+		MIRRORED_REPEAT,
+		CLAMP_TO_EDGE,
+		CLAMP_TO_BORDER
+	};
 
-	enum class PrimitiveType {
-		Points,
-		Lines,
-		LineStrip,
-		Triangles,
-		TriangleStrip,
-		TriangleFan
+	enum class Topology {
+		POINTS,
+		LINES,
+		LINE_STRIP,
+		TRIANGLES,
+		TRIANGLE_STRIP,
+		TRIANGLE_FAN
 	};
 
 	enum class CompareFunc {
-		Never,
-		Less,
-		Equal,
-		LessEqual,
-		Greater,
-		NotEqual,
-		GreaterEqual,
-		Always
+		NEVER,
+		LESS,
+		EQUAL,
+		LESS_EQUAL,
+		GREATER,
+		NOT_EQUAL,
+		GREATER_EQUAL,
+		ALWAYS
 	};
 
 	enum class BlendFunc {
-		Zero,
-		One,
-		SrcColor,
-		OneMinusSrcColor,
-		DstColor,
-		OneMinusDstColor,
-		SrcAlpha,
-		OneMinusSrcAlpha,
-		DstAlpha,
-		OneMinusDstAlpha,
-		ConstantColor,
-		OneMinusConstantColor
+		ZERO,
+		ONE,
+		SRC_COLOR,
+		ONE_MINUS_SRC_COLOR,
+		DST_COLOR,
+		ONE_MINUS_DST_COLOR,
+		SRC_ALPHA,
+		ONE_MINUS_SRC_ALPHA,
+		DST_ALPHA,
+		ONE_MINUS_DST_ALPHA,
+		CONSTANT_COLOR,
+		ONE_MINUS_CONSTANT_COLOR
 	};
 
-	enum class BlendOp { Add,
-		Subtract,
-		ReverseSubtract,
-		Min,
-		Max };
+	enum class BlendOp {
+		ADD,
+		SUBTRACT,
+		REVERSE_SUBTRACT,
+		MIN,
+		MAX
+	};
 
 	enum class CullMode {
-		None,
-		Front,
-		Back,
-		FrontAndBack
+		NONE,
+		FRONT,
+		BACK,
+		FRONT_AND_BACK
 	};
 
 	enum class FillMode {
-		Solid,
-		Wireframe,
-		Point
+		SOLID,
+		WIREFRAME,
+		POINT
 	};
 
-
-
-	// Pipeline Type
-	enum class PipelineType {
-		Graphics,
-		Compute
+	enum class MemoryType : uint8_t {
+		GPU_ONLY = 1 << 0,	 // Device-local, no CPU access
+		CPU_TO_GPU = 1 << 1, // Host-visible, optimized for CPU writes
+		GPU_TO_CPU = 1 << 2, // Host-visible, optimized for CPU reads (cached)
+		CPU_ONLY = 1 << 3,	 // Host memory, rarely accessed by GPU
+		AUTO = 1 << 4		 // Prefer device-local but allow fallback
 	};
+
+	enum class ResourceType : uint8_t {
+		CONSTANT_BUFFER,		  // Uniform / Constant buffer
+		STORAGE_BUFFER,			  // Read-only SSBO
+		RW_STORAGE_BUFFER,		  // Read-write
+		TEXTURE_SRV,			  // Read-only texture (sampled image)
+		TEXTURE_UAV,			  // Read-write texture (storage image)
+		SAMPLER,				  // Sampler state object
+		COMBINED_TEXTURE_SAMPLER, // Combined (GL-style / convenience)
+		ACCELERATION_STRUCTURE	  // Ray tracing TLAS / BLAS
+	};
+
 
 	enum class ShaderStage : uint8_t {
-		None = 0,
-		Vertex = 1 << 0,
-		Fragment = 1 << 1,
-		Geometry = 1 << 2,
-		TessControl = 1 << 3,
-		TessEvaluation = 1 << 4,
-		Compute = 1 << 5,
-		All = Vertex | Fragment | Compute
+		NONE = 0,
+		VERTEX = 1 << 0,
+		FRAGMENT = 1 << 1,
+		GEOMETRY = 1 << 2,
+		TESS_CONTROL = 1 << 3,
+		TESS_EVALUATION = 1 << 4,
+		COMPUTE = 1 << 5,
+		ALL = VERTEX | FRAGMENT | COMPUTE
 	};
 	ENABLE_BITMASK_OPERATORS(ShaderStage)
 
 
-	//  Resource State Tracking
-	//  not supported yet
-	enum class ResourceState : uint16_t {
-		Undefined = 0,
-		Common = 1 << 0,
-		RenderTarget = 1 << 1,
-		DepthWrite = 1 << 2,
-		DepthRead = 1 << 3,
-		ShaderRead = 1 << 4,
-		ShaderWrite = 1 << 5,
-		Present = 1 << 6,
-		CopySrc = 1 << 7,
-		CopyDst = 1 << 8,
-		IndirectArgument = 1 << 9
+	enum class ResourceGroupFlags : uint8_t {
+		NONE = 0,				  // No special flags
+		STATIC = 1 << 0,		  // Long-lived (per-scene / per-material)
+		DYNAMIC = 1 << 1,		  // Frequently updated (per-frame / per-draw)
+		DYNAMIC_UNIFORM = 1 << 2, // Dynamic uniform buffers (Vulkan dynamic offsets)
+		BINDLESS = 1 << 3,		  // Bindless descriptors
+		BUFFER = 1 << 4			  // Descriptor-buffer based APIs (e.g. VK_EXT_descriptor_buffer)
 	};
-	ENABLE_BITMASK_OPERATORS(ResourceState)
+	ENABLE_BITMASK_OPERATORS(ResourceGroupFlags)
 
-	enum class ResourceGroupLifetime : uint8_t {
-		Persistent,
-		PerFrame
+	enum class BufferFlags : uint16_t {
+		VERTEX = 1 << 0,
+		INDEX = 1 << 1,
+		UNIFORM = 1 << 2,
+		STORAGE = 1 << 3,
+		INDIRECT = 1 << 4,
+		TRANSFER_SRC = 1 << 5,
+		TRANSFER_DST = 1 << 6,
+		STATIC = 1 << 8,
+		DYNAMIC = 1 << 9,
+		STREAMING = 1 << 10
 	};
+	ENABLE_BITMASK_OPERATORS(BufferFlags)
 
-	enum class ResourceType : uint8_t {
-
-		// Uniform buffer / Constant buffer
-		ConstantBuffer,
-		// SSBO / Structured buffer (read-only)
-		StorageBuffer,
-		// RW Structured buffer
-		RWStorageBuffer,
-		// Shader resource view (read-only texture)
-		Texture_SRV,
-		// Unordered access view (read-write texture)
-		Texture_UAV,
-
-		Sampler,
-
-		// Combined (OpenGL style)
-		CombinedTextureSampler,
-
-		// for future me
-		AccelerationStructure // For raytracing
-
-	};
 
 	struct Viewport {
 		int x, y;
@@ -449,15 +386,20 @@ namespace Rx {
 		float minDepth, maxDepth;
 
 		Viewport(int x = 0, int y = 0, int w = 0, int h = 0, float minD = 0.0f,
-			float maxD = 1.0f)
-			: x(x), y(y), width(w), height(h), minDepth(minD), maxDepth(maxD) {
-		}
+			float maxD = 1.0f) : x(x),
+								 y(y),
+								 width(w),
+								 height(h),
+								 minDepth(minD),
+								 maxDepth(maxD) {}
 
 		Viewport(const IVec2& pos, const IVec2& size, float minD = 0.0f,
-			float maxD = 1.0f)
-			: x(pos.x), y(pos.y), width(size.x), height(size.y), minDepth(minD),
-			  maxDepth(maxD) {
-		}
+			float maxD = 1.0f) : x(pos.x),
+								 y(pos.y),
+								 width(size.x),
+								 height(size.y),
+								 minDepth(minD),
+								 maxDepth(maxD) {}
 	};
 
 	struct Scissor {
@@ -486,11 +428,11 @@ namespace Rx {
 	struct VertexAttribute {
 		uint32_t location;
 		uint32_t binding;
-		DataFormat datatype;
+		Format format;
 		uint32_t offset;
 
-		VertexAttribute(uint32_t loc, uint32_t binding, DataFormat datatype, uint32_t off)
-			: location(loc), binding(binding), datatype(datatype), offset(off) {
+		VertexAttribute(uint32_t loc, uint32_t binding, Format format, uint32_t off)
+			: location(loc), binding(binding), format(format), offset(off) {
 		}
 	};
 
@@ -509,35 +451,21 @@ namespace Rx {
 		std::vector<VertexBinding> vertexBindings;
 	};
 
-	// Resource descriptions for craeation
-	enum class BufferFlags : uint32_t {
-		Vertex = 1 << 0,
-		Index = 1 << 1,
-		Uniform = 1 << 2,
-		Storage = 1 << 3,
-		Indirect = 1 << 4,
-		TransferSrc = 1 << 5,
-		TransferDst = 1 << 6,
-		Static = 1 << 8,
-		Dynamic = 1 << 9,
-		Streaming = 1 << 10,
-	};
-	ENABLE_BITMASK_OPERATORS(BufferFlags)
 
 	inline bool IsValidBufferFlags(BufferFlags flags) {
 		// Can't be both static and dynamic
-		bool hasStatic = Has(flags, BufferFlags::Static);
-		bool hasDynamic = Has(flags, BufferFlags::Dynamic);
+		bool hasStatic = Has(flags, BufferFlags::STATIC);
+		bool hasDynamic = Has(flags, BufferFlags::DYNAMIC);
 
 		if (hasStatic && hasDynamic) {
 			return false; // Invalid combination
 		}
 
 		// Must have at least one usage flag (not just Static/Dynamic)
-		BufferFlags usageMask = BufferFlags::Vertex | BufferFlags::Index |
-								BufferFlags::Uniform | BufferFlags::Storage |
-								BufferFlags::Indirect | BufferFlags::TransferSrc |
-								BufferFlags::TransferDst;
+		BufferFlags usageMask = BufferFlags::VERTEX | BufferFlags::INDEX |
+								BufferFlags::UNIFORM | BufferFlags::STORAGE |
+								BufferFlags::INDIRECT | BufferFlags::TRANSFER_SRC |
+								BufferFlags::TRANSFER_DST;
 
 		if (Has(flags, usageMask)) {
 			return false; // Must have at least one usage
@@ -545,14 +473,6 @@ namespace Rx {
 
 		return true;
 	}
-
-	enum class MemoryType : uint8_t {
-		GpuOnly = 1 << 0,  // Device-local, no CPU access
-		CpuToGpu = 1 << 1, // Host-visible, optimized for CPU writes
-		GpuToCpu = 1 << 2, // Host-visible, optimized for CPU reads (cached)
-		CpuOnly = 1 << 3,  // Host memory, rarely accessed by GPU
-		Auto = 1 << 4,	   // Prefer device-local but allow fallback
-	};
 
 	struct BufferDesc {
 		BufferFlags flags;
@@ -569,8 +489,8 @@ namespace Rx {
 	};
 
 	struct SamplerDesc {
-		TextureFilter minFilter;
-		TextureFilter magFilter;
+		Filter minFilter;
+		Filter magFilter;
 		TextureWrap wrapU;
 		TextureWrap wrapV;
 		TextureWrap wrapW;
@@ -580,10 +500,10 @@ namespace Rx {
 		Vec4 borderColor;
 
 		SamplerDesc()
-			: minFilter(TextureFilter::Linear), magFilter(TextureFilter::Linear),
-			  wrapU(TextureWrap::Repeat), wrapV(TextureWrap::Repeat),
-			  wrapW(TextureWrap::Repeat), maxAnisotropy(1.0f), enableCompare(false),
-			  compareFunc(CompareFunc::Never), borderColor(0.0f, 0.0f, 0.0f, 1.0f) {
+			: minFilter(Filter::LINEAR), magFilter(Filter::LINEAR),
+			  wrapU(TextureWrap::REPEAT), wrapV(TextureWrap::REPEAT),
+			  wrapW(TextureWrap::REPEAT), maxAnisotropy(1.0f), enableCompare(false),
+			  compareFunc(CompareFunc::NEVER), borderColor(0.0f, 0.0f, 0.0f, 1.0f) {
 		}
 	};
 
@@ -591,19 +511,19 @@ namespace Rx {
 		TextureType type;
 		int width, height, depth;
 		int mipLevels;
-		TextureFormat format;
+		Format format;
 		const void* initialData;
 		size_t dataSize;
 		bool generateMips;
 
-		TextureDesc(int w, int h, TextureFormat fmt,
-			TextureType t = TextureType::Texture2D)
+		TextureDesc(int w, int h, Format fmt,
+			TextureType t = TextureType::TEXTURE_2D)
 			: type(t), width(w), height(h), depth(1), mipLevels(1), format(fmt),
 			  initialData(nullptr), dataSize(0), generateMips(false) {
 		}
 
-		TextureDesc(const IVec2& size, TextureFormat fmt,
-			TextureType t = TextureType::Texture2D)
+		TextureDesc(const IVec2& size, Format fmt,
+			TextureType t = TextureType::TEXTURE_2D)
 			: type(t), width(size.x), height(size.y), depth(1), mipLevels(1),
 			  format(fmt), initialData(nullptr), dataSize(0), generateMips(false) {
 		}
@@ -638,7 +558,7 @@ namespace Rx {
 		bool multisampleEnable;
 
 		RasterizerState()
-			: fillMode(FillMode::Solid), cullMode(CullMode::None),
+			: fillMode(FillMode::SOLID), cullMode(CullMode::NONE),
 			  frontCounterClockwise(false), depthBias(0.0f), depthBiasClamp(0.0f),
 			  slopeScaledDepthBias(0.0f), depthClipEnable(true), scissorEnable(false),
 			  multisampleEnable(false) {
@@ -655,7 +575,7 @@ namespace Rx {
 		// Stencil operations would go here...
 
 		DepthStencilState()
-			: depthEnable(true), depthWriteEnable(true), depthFunc(CompareFunc::Less),
+			: depthEnable(true), depthWriteEnable(true), depthFunc(CompareFunc::LESS),
 			  stencilEnable(false), stencilReadMask(0xFF), stencilWriteMask(0xFF) {
 		}
 	};
@@ -675,19 +595,16 @@ namespace Rx {
 
 		BlendState()
 			: enable(false),
-			  srcColor(BlendFunc::SrcAlpha),
-			  dstColor(BlendFunc::OneMinusSrcAlpha),
-			  srcAlpha(BlendFunc::One),
-			  dstAlpha(BlendFunc::Zero),
-			  colorOp(BlendOp::Add),
-			  alphaOp(BlendOp::Add),
+			  srcColor(BlendFunc::SRC_ALPHA),
+			  dstColor(BlendFunc::ONE_MINUS_SRC_ALPHA),
+			  srcAlpha(BlendFunc::ONE),
+			  dstAlpha(BlendFunc::ZERO),
+			  colorOp(BlendOp::ADD),
+			  alphaOp(BlendOp::ADD),
 			  blendFactor(1.0f) {}
 	};
 
-
-
-	// Sahder Resource Groups
-	/// Describes a single binding slot in a ResourceGroupLayout
+	// Describes a single binding slot in a ResourceGroupLayout
 	struct ResourceGroupLayoutItem {
 		// Binding index (e.g., layout(binding = 0))
 		uint32_t binding;
@@ -695,50 +612,49 @@ namespace Rx {
 		ResourceType type;
 		// Which shader stages can access this
 		ShaderStage stages;
-		// Array size (1 for non-arrays, >1 for arrays)
+		// Array size (1 for non-arrays, >1 for arrays) For Bindless indexing
 		uint32_t count;
 
 		ResourceGroupLayoutItem()
-			: binding(0), type(ResourceType::ConstantBuffer),
+			: binding(0), type(ResourceType::CONSTANT_BUFFER),
 			  stages(ShaderStage::All), count(1) {}
 
-		ResourceGroupLayoutItem(uint32_t bind, ResourceType t, ShaderStage s = ShaderStage::All, uint32_t cnt = 1)
+		ResourceGroupLayoutItem(uint32_t bind, ResourceType t, ShaderStage s = ShaderStage::ALL, uint32_t cnt = 1)
 			: binding(bind), type(t), stages(s), count(cnt) {}
 
 		// Convenience factory methods
-		static ResourceGroupLayoutItem ConstantBuffer(uint32_t binding, ShaderStage stages = ShaderStage::All) {
-			return ResourceGroupLayoutItem(binding, ResourceType::ConstantBuffer, stages, 1);
+		static ResourceGroupLayoutItem ConstantBuffer(uint32_t binding, ShaderStage stages = ShaderStage::ALL) {
+			return ResourceGroupLayoutItem(binding, ResourceType::CONSTANT_BUFFER, stages, 1);
 		}
 
-		static ResourceGroupLayoutItem StorageBuffer(uint32_t binding, ShaderStage stages = ShaderStage::All, bool writable = false) {
+		static ResourceGroupLayoutItem StorageBuffer(uint32_t binding, ShaderStage stages = ShaderStage::ALL, bool writable = false) {
 			return ResourceGroupLayoutItem(binding,
-				writable ? ResourceType::RWStorageBuffer : ResourceType::StorageBuffer,
+				writable ? ResourceType::RW_STORAGE_BUFFER : ResourceType::STORAGE_BUFFER,
 				stages, 1);
 		}
 
-		static ResourceGroupLayoutItem Texture_SRV(uint32_t binding, ShaderStage stages = ShaderStage::All, uint32_t count = 1) {
-			return ResourceGroupLayoutItem(binding, ResourceType::Texture_SRV, stages, count);
+		static ResourceGroupLayoutItem Texture_SRV(uint32_t binding, ShaderStage stages = ShaderStage::ALL, uint32_t count = 1) {
+			return ResourceGroupLayoutItem(binding, ResourceType::TEXTURE_SRV, stages, count);
 		}
 
-		static ResourceGroupLayoutItem Texture_UAV(uint32_t binding, ShaderStage stages = ShaderStage::All, uint32_t count = 1) {
-			return ResourceGroupLayoutItem(binding, ResourceType::Texture_UAV, stages, count);
+		static ResourceGroupLayoutItem Texture_UAV(uint32_t binding, ShaderStage stages = ShaderStage::ALL, uint32_t count = 1) {
+			return ResourceGroupLayoutItem(binding, ResourceType::TEXTURE_UAV, stages, count);
 		}
 
-		static ResourceGroupLayoutItem Sampler(uint32_t binding, ShaderStage stages = ShaderStage::All) {
-			return ResourceGroupLayoutItem(binding, ResourceType::Sampler, stages, 1);
+		static ResourceGroupLayoutItem Sampler(uint32_t binding, ShaderStage stages = ShaderStage::ALL) {
+			return ResourceGroupLayoutItem(binding, ResourceType::SAMPLER, stages, 1);
 		}
 
-		static ResourceGroupLayoutItem CombinedTextureSampler(uint32_t binding, ShaderStage stages = ShaderStage::All) {
-			return ResourceGroupLayoutItem(binding, ResourceType::CombinedTextureSampler, stages, 1);
+		static ResourceGroupLayoutItem CombinedTextureSampler(uint32_t binding, ShaderStage stages = ShaderStage::ALL) {
+			return ResourceGroupLayoutItem(binding, ResourceType::COMBINED_TEXTURE_SAMPLER, stages, 1);
 		}
 	};
 
 	/// Describes the layout/structure of a pipeline inputs
 	struct ResourceGroupLayout {
 		std::vector<ResourceGroupLayoutItem> resourcebindings;
-		uint32_t setIndex = 0;
+		ResourceGroupFlags flags = ResourceGroupFlags::STATIC;
 		const char* debugName = nullptr;
-
 		ResourceGroupLayout() = default;
 
 		ResourceGroupLayout(const std::vector<ResourceGroupLayoutItem>& items)
@@ -749,10 +665,8 @@ namespace Rx {
 	struct ResourceGroupItem {
 		uint32_t binding;
 		ResourceType type;
+		uint32_t arrayIndex = 0; // For Bindless Resource to arrays of descriptors
 
-		// Union for different resource types. CombinedTextureSampler needs both
-		// texture and sampler stored simultaneously; place those into a small
-		// struct inside the union to avoid overwriting when both are used.
 		struct CombinedHandles {
 			TextureViewHandle texture;
 			SamplerHandle sampler;
@@ -767,16 +681,15 @@ namespace Rx {
 		};
 
 
-		uint32_t arrayIndex = 0; // For Resource to arrays of descriptors
 
 		ResourceGroupItem()
-			: binding(0), type(ResourceType::ConstantBuffer), rawHandle(0) {}
+			: binding(0), type(ResourceType::CONSTANT_BUFFER), rawHandle(0) {}
 
 		// Convenience factory methods
 		static ResourceGroupItem ConstantBuffer(uint32_t binding, BufferViewHandle buf) {
 			ResourceGroupItem item;
 			item.binding = binding;
-			item.type = ResourceType::ConstantBuffer;
+			item.type = ResourceType::CONSTANT_BUFFER;
 			item.bufferView = buf;
 			return item;
 		}
@@ -784,7 +697,7 @@ namespace Rx {
 		static ResourceGroupItem StorageBuffer(uint32_t binding, BufferViewHandle buf, bool writable = false) {
 			ResourceGroupItem item;
 			item.binding = binding;
-			item.type = writable ? ResourceType::RWStorageBuffer : ResourceType::StorageBuffer;
+			item.type = writable ? ResourceType::RW_STORAGE_BUFFER : ResourceType::STORAGE_BUFFER;
 			item.bufferView = buf;
 			return item;
 		}
@@ -792,7 +705,7 @@ namespace Rx {
 		static ResourceGroupItem Texture_SRV(uint32_t binding, TextureViewHandle tex, uint32_t arrayIndex = 0) {
 			ResourceGroupItem item;
 			item.binding = binding;
-			item.type = ResourceType::Texture_SRV;
+			item.type = ResourceType::TEXTURE_SRV;
 			item.textureView = tex;
 			item.arrayIndex = arrayIndex;
 			return item;
@@ -801,7 +714,7 @@ namespace Rx {
 		static ResourceGroupItem Texture_UAV(uint32_t binding, TextureViewHandle tex, uint32_t mipLevel = 0) {
 			ResourceGroupItem item;
 			item.binding = binding;
-			item.type = ResourceType::Texture_UAV;
+			item.type = ResourceType::TEXTURE_UAV;
 			item.textureView = tex;
 			return item;
 		}
@@ -809,7 +722,7 @@ namespace Rx {
 		static ResourceGroupItem Sampler(uint32_t binding, SamplerHandle samp) {
 			ResourceGroupItem item;
 			item.binding = binding;
-			item.type = ResourceType::Sampler;
+			item.type = ResourceType::SAMPLER;
 			item.sampler = samp;
 			return item;
 		}
@@ -817,7 +730,7 @@ namespace Rx {
 		static ResourceGroupItem CombinedTextureSampler(uint32_t binding, TextureViewHandle tex, SamplerHandle samp) {
 			ResourceGroupItem item;
 			item.binding = binding;
-			item.type = ResourceType::CombinedTextureSampler;
+			item.type = ResourceType::COMBINED_TEXTURE_SAMPLER;
 			// Store both handles into the combined struct so the union doesn't
 			// overwrite one with the other.
 			item.combinedHandles.texture = tex;
@@ -828,25 +741,22 @@ namespace Rx {
 
 	/// Describes a ResourceGroup instance
 	struct ResourceGroupDesc {
-		PipelineLayoutHandle layout;			  // Must match layout used in pipeline
+		PipelineLayoutHandle pipelinelayout;	  // Must match layout used in pipeline
+		ResourceGroupLayoutHandle layout;		  //
 		std::vector<ResourceGroupItem> Resources; // Actual resources to bind
-		ResourceGroupLifetime flags = ResourceGroupLifetime::Persistent;
-		uint32_t setIndex = 0;
+		uint64_t dynamicOffset = 0;
 		const char* debugName = nullptr;
-
 		ResourceGroupDesc() = default;
-
 		ResourceGroupDesc(PipelineLayoutHandle layoutHandle, const std::vector<ResourceGroupItem>& items)
-			: layout(layoutHandle), Resources(items) {}
+			: pipelinelayout(layoutHandle), Resources(items) {}
 	};
 
 
 	// Pipeline description
 	struct PipelineDesc {
-		PipelineType type;
 		std::vector<ShaderHandle> shaders;
 		VertexInputState vertexInputState;
-		PrimitiveType primitiveType;
+		Topology primitiveType;
 		RasterizerState rasterizer;
 		DepthStencilState depthStencil;
 		BlendState blend;
@@ -854,7 +764,7 @@ namespace Rx {
 		PipelineLayoutHandle layout;
 
 		PipelineDesc()
-			: primitiveType(PrimitiveType::Triangles), renderPass(0) {}
+			: primitiveType(Topology::TRIANGLES), renderPass(0) {}
 	};
 
 	struct ClearValue {
@@ -866,29 +776,19 @@ namespace Rx {
 
 	// Render pass description
 	struct AttachmentDesc {
-		TextureFormat format;
-		LoadOp loadOp = LoadOp::Clear;
-		StoreOp storeOp = StoreOp::Store;
-
-		ResourceState initialState = ResourceState::Undefined;
-		ResourceState finalState = ResourceState::RenderTarget;
-
-		AttachmentDesc(TextureFormat format = TextureFormat::RGBA8) : format(format) {}
+		Format format;
+		LoadOp loadOp = LoadOp::CLEAR;
+		StoreOp storeOp = StoreOp::STORE;
+		AttachmentDesc(Format format = Format::RGBA8_SRGB) : format(format) {}
 	};
 
 	struct DepthStencilAttachmentDesc {
-		TextureFormat format = TextureFormat::Depth24Stencil8;
-
-		LoadOp depthLoadOp = LoadOp::Clear;
-		StoreOp depthStoreOp = StoreOp::Store;
-
-		LoadOp stencilLoadOp = LoadOp::DontCare;
-		StoreOp stencilStoreOp = StoreOp::DontCare;
-
-		ResourceState initialState = ResourceState::Undefined;
-		ResourceState finalState = ResourceState::DepthWrite;
-
-		DepthStencilAttachmentDesc(TextureFormat format) : format(format) {}
+		Format format = Format::D24_UNORM_S8_UINT;
+		LoadOp depthLoadOp = LoadOp::CLEAR;
+		StoreOp depthStoreOp = StoreOp::STORE;
+		LoadOp stencilLoadOp = LoadOp::DONT_CARE;
+		StoreOp stencilStoreOp = StoreOp::DONT_CARE;
+		DepthStencilAttachmentDesc(Format format) : format(format) {}
 	};
 
 	struct RenderPassDesc {
@@ -897,7 +797,7 @@ namespace Rx {
 		bool hasDepthStencil;
 
 		RenderPassDesc()
-			: depthStencilAttachment(TextureFormat::Depth24Stencil8),
+			: depthStencilAttachment(Format::D24_UNORM_S8_UINT),
 			  hasDepthStencil(false) {
 		}
 	};
@@ -946,25 +846,52 @@ namespace Rx {
 	};
 
 
-	struct RENDERX_EXPORT CommandList {
-		void open();
-		void close();
-		bool isOpen = false; // deprected
-		uint64_t id;
-		bool IsValid() const { return id != 0; };
-		void setPipeline(const PipelineHandle& pipeline);
-		void setVertexBuffer(const BufferHandle& buffer, uint64_t offset = 0);
-		void setIndexBuffer(const BufferHandle& buffer, uint64_t offset = 0);
-		void draw(uint32_t vertexCount, uint32_t instanceCount = 1,
-			uint32_t firstVertex = 0, uint32_t firstInstance = 0);
-		void drawIndexed(uint32_t indexCount, int32_t vertexOffset = 0,
-			uint32_t instanceCount = 1, uint32_t firstIndex = 0, uint32_t firstInstance = 0);
-		void beginRenderPass(
+	// class RENDERX_EXPORT CommandQueue {
+	// public:
+	//	virtual CommandList* createCommandList() = 0;
+	//	virtual uint64_t submit(CommandList* const* lists, uint32_t count) = 0;
+	//	virtual void wait(uint64_t submissionID) = 0;
+	// };
+
+	class RENDERX_EXPORT CommandList {
+	public:
+		virtual ~CommandList() = default;
+
+		virtual void open() = 0;
+		virtual void close() = 0;
+
+		virtual void setPipeline(const PipelineHandle& pipeline) = 0;
+		virtual void setVertexBuffer(const BufferHandle& buffer, uint64_t offset = 0) = 0;
+		virtual void setIndexBuffer(const BufferHandle& buffer, uint64_t offset = 0) = 0;
+
+		virtual void draw(
+			uint32_t vertexCount,
+			uint32_t instanceCount = 1,
+			uint32_t firstVertex = 0,
+			uint32_t firstInstance = 0) = 0;
+
+		virtual void drawIndexed(
+			uint32_t indexCount,
+			int32_t vertexOffset = 0,
+			uint32_t instanceCount = 1,
+			uint32_t firstIndex = 0,
+			uint32_t firstInstance = 0) = 0;
+
+		virtual void beginRenderPass(
 			RenderPassHandle pass,
-			const ClearValue*, uint32_t);
-		void endRenderPass();
-		void writeBuffer(BufferHandle handle, void* data, uint32_t offset, uint32_t size);
-		void setResourceGroup(const ResourceGroupHandle& handle);
+			const void* clearValues,
+			uint32_t clearCount) = 0;
+
+		virtual void endRenderPass() = 0;
+
+		virtual void writeBuffer(
+			BufferHandle handle,
+			const void* data,
+			uint32_t offset,
+			uint32_t size) = 0;
+
+		virtual void setResourceGroup(
+			const ResourceGroupHandle& handle) = 0;
 	};
 
 } // namespace  RenderX
