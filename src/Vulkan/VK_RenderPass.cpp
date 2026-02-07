@@ -22,12 +22,11 @@ namespace RxVK {
 			const auto& a = desc.colorAttachments[i];
 
 			VkAttachmentDescription att{};
-			att.format = ToVkTextureFormat(a.format);
+			att.format = ToVulkanFormat(a.format);
 			att.samples = VK_SAMPLE_COUNT_1_BIT;
-			att.loadOp = ToVkAttachmentLoadOp(a.loadOp);
-			att.storeOp = ToVkAttachmentStoreOp(a.storeOp);
-			att.initialLayout = ToVkLayout(a.initialState);
-			att.finalLayout = ToVkLayout(a.finalState);
+			att.loadOp = ToVulkanLoadOp(a.loadOp);
+			att.storeOp = ToVulkanStoreOp(a.storeOp);
+
 
 			attachments.push_back(att);
 
@@ -43,14 +42,12 @@ namespace RxVK {
 
 			VkAttachmentDescription depth{};
 			// temp
-			depth.format = ToVkTextureFormat(d.format);
+			depth.format = ToVulkanFormat(d.format);
 			depth.samples = VK_SAMPLE_COUNT_1_BIT;
-			depth.loadOp = ToVkAttachmentLoadOp(d.depthLoadOp);
-			depth.storeOp = ToVkAttachmentStoreOp(d.depthStoreOp);
-			depth.stencilLoadOp = ToVkAttachmentLoadOp(d.stencilLoadOp);
-			depth.stencilStoreOp = ToVkAttachmentStoreOp(d.stencilStoreOp);
-			depth.initialLayout = ToVkLayout(d.initialState);
-			depth.finalLayout = ToVkLayout(d.finalState);
+			depth.loadOp = ToVulkanLoadOp(d.depthLoadOp);
+			depth.storeOp = ToVulkanStoreOp(d.depthStoreOp);
+			depth.stencilLoadOp = ToVulkanLoadOp(d.stencilLoadOp);
+			depth.stencilStoreOp = ToVulkanStoreOp(d.stencilStoreOp);
 
 			depthRef.attachment = (uint32_t)attachments.size();
 			depthRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
@@ -75,7 +72,7 @@ namespace RxVK {
 		ci.pSubpasses = &subpass;
 
 		VkRenderPass rp;
-		VkResult result = vkCreateRenderPass(ctx.device, &ci, nullptr, &rp);
+		VkResult result = vkCreateRenderPass(ctx.device->logical(), &ci, nullptr, &rp);
 		if (!CheckVk(result, "VKCreateRenderPass: Failed to create render pass")) {
 			return RenderPassHandle{};
 		}
@@ -99,93 +96,12 @@ namespace RxVK {
 		// Try ResourcePool first
 		auto* rp = g_RenderPassPool.get(handle);
 		if (rp != nullptr && *rp != VK_NULL_HANDLE) {
-			vkDestroyRenderPass(ctx.device, *rp, nullptr);
+			vkDestroyRenderPass(ctx.device->logical(), *rp, nullptr);
 			g_RenderPassPool.free(handle);
 		}
 		else {
 			RENDERX_WARN("VKDestroyRenderPass: render pass already null or invalid");
 		}
-	}
-
-	void VKCmdBeginRenderPass(
-		CommandList& cmdList,
-		RenderPassHandle pass,
-		const ClearValue* clears,
-		uint32_t clearCount) {
-		PROFILE_FUNCTION();
-
-		RENDERX_ASSERT_MSG(cmdList.IsValid(), "VKCmdBeginRenderPass: Invalid CommandList");
-		auto& frame = GetFrameContex(g_CurrentFrame);
-		auto& ctx = GetVulkanContext();
-		auto* vkCmdList = g_CommandListPool.get(cmdList);
-		RENDERX_ASSERT_MSG(vkCmdList != nullptr, "VKCmdBeginRenderPass: retrieved null command list");
-		RENDERX_ASSERT_MSG(vkCmdList->isOpen, "VKCmdBeginRenderPass: CommandList must be open");
-		RENDERX_ASSERT_MSG(vkCmdList->cmdBuffer != VK_NULL_HANDLE, "VKCmdBeginRenderPass: command buffer is null");
-		RENDERX_ASSERT_MSG(pass.IsValid(), "VKCmdBeginRenderPass: Invalid render pass handle");
-
-		if (clears && clearCount > 0) {
-			RENDERX_ASSERT_MSG(clears != nullptr, "VKCmdBeginRenderPass: clears pointer is null but clearCount > 0");
-		}
-
-		// Try ResourcePool first
-		auto* rp = g_RenderPassPool.get(pass);
-		if (rp == nullptr || *rp == VK_NULL_HANDLE) {
-			RENDERX_ERROR("VKCmdBeginRenderPass: Invalid render pass handle: {}", pass.id);
-			return;
-		}
-
-		RENDERX_ASSERT_MSG(frame.swapchainImageIndex < ctx.swapchainFramebuffers.size(),
-			"VKCmdBeginRenderPass: swapchain image index out of bounds");
-
-		VkFramebuffer framebuffer = ctx.swapchainFramebuffers[frame.swapchainImageIndex];
-		RENDERX_ASSERT_MSG(framebuffer != VK_NULL_HANDLE, "VKCmdBeginRenderPass: framebuffer is null");
-
-		std::vector<VkClearValue> vkClears;
-		for (uint32_t i = 0; i < clearCount; ++i) {
-			VkClearValue v{};
-			auto c = clears[i];
-			v.color = { c.color.color.r, c.color.color.g,
-				c.color.color.b, c.color.color.a };
-			vkClears.push_back(v);
-		}
-
-		// If this is the swapchain render pass and we have a depth attachment,
-		// append a depth-stencil clear value using the first ClearValue's depth/stencil.
-		VulkanContext& ctx2 = GetVulkanContext();
-		if (ctx2.swapchainRenderPassHandle.id == pass.id && !ctx2.depthImageViews.empty() && clearCount > 0) {
-			VkClearValue depthClear{};
-			depthClear.depthStencil.depth = clears[0].depth;
-			depthClear.depthStencil.stencil = clears[0].stencil;
-			vkClears.push_back(depthClear);
-		}
-
-		VkRenderPassBeginInfo bi{};
-		bi.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-		bi.renderPass = *rp;
-		bi.framebuffer = framebuffer;
-		bi.renderArea.extent = ctx.swapchainExtent;
-		bi.clearValueCount = (uint32_t)vkClears.size();
-		bi.pClearValues = vkClears.data();
-
-		vkCmdBeginRenderPass(
-			vkCmdList->cmdBuffer,
-			&bi,
-			VK_SUBPASS_CONTENTS_INLINE);
-	}
-
-	void VKCmdEndRenderPass(CommandList& cmdList) {
-		PROFILE_FUNCTION();
-
-		RENDERX_ASSERT_MSG(cmdList.IsValid(), "VKCmdEndRenderPass: Invalid CommandList");
-		auto* vkCmdList = g_CommandListPool.get(cmdList);
-		RENDERX_ASSERT_MSG(vkCmdList != nullptr, "VKCmdEndRenderPass: retrieved null command list");
-		RENDERX_ASSERT_MSG(vkCmdList->isOpen, "VKCmdEndRenderPass: CommandList must be open");
-		RENDERX_ASSERT_MSG(vkCmdList->cmdBuffer != VK_NULL_HANDLE, "VKCmdEndRenderPass: command buffer is null");
-		vkCmdEndRenderPass(vkCmdList->cmdBuffer);
-	}
-
-	RenderPassHandle VKGetDefaultRenderPass() {
-		return GetVulkanContext().swapchainRenderPassHandle;
 	}
 
 } // namespace  RxVK

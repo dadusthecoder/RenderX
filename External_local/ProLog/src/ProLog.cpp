@@ -6,9 +6,9 @@
 
 namespace ProLog {
 
-	// ============================================================================
+
 	// ProfilerSession Implementation
-	// ============================================================================
+
 
 	ProfilerSession& ProfilerSession::Get() {
 		static ProfilerSession instance;
@@ -225,9 +225,9 @@ namespace ProLog {
 		statsFile.close();
 	}
 
-	// ============================================================================
+
 	// Timer Implementation
-	// ============================================================================
+
 	static thread_local size_t s_CurrentDepth = 0;
 
 	Timer::Timer(const char* name, const char* category)
@@ -267,9 +267,9 @@ namespace ProLog {
 		m_Metadata[key] = value;
 	}
 
-	// ============================================================================
+
 	// Logger Implementation
-	// ============================================================================
+
 
 	Logger& Logger::Get() {
 		static Logger instance;
@@ -317,9 +317,9 @@ namespace ProLog {
 		}
 	}
 
-	// ============================================================================
+
 	// PerformanceMarker Implementation
-	// ============================================================================
+
 
 	std::unordered_map<std::string, std::unique_ptr<Timer>> PerformanceMarker::s_ActiveMarkers;
 	std::mutex PerformanceMarker::s_Mutex;

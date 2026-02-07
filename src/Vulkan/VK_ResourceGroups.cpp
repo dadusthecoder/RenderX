@@ -1,5 +1,5 @@
 #include "VK_Common.h"
-
+#include "VK_RenderX.h"
 namespace Rx {
 namespace RxVK {
 
@@ -10,39 +10,13 @@ namespace RxVK {
 
 	// cache
 	std::unordered_map<Hash64, ResourceGroupHandle> g_ResourceGroupCache;
+
 	// resource pools
-	ResourcePool<VulkanResourceGroup, ResourceGroupHandle> g_TransientResourceGroupPool;
-	ResourcePool<VulkanResourceGroup, ResourceGroupHandle> g_PersistentResourceGroupPool;
-
-
-	static VkDescriptorPool g_PersistentDescriptorPool;
-
-	bool CreatePersistentDescriptorPool() {
-		// Predefined pool sizes based on lifetime
-		static DescriptorPoolSizes kPersistentPoolSizes;
-		kPersistentPoolSizes.uniformBufferCount = 10000;
-		kPersistentPoolSizes.storageBufferCount = 5000;
-		kPersistentPoolSizes.sampledImageCount = 40000;
-		kPersistentPoolSizes.storageImageCount = 2000;
-		kPersistentPoolSizes.samplerCount = 20000;
-		kPersistentPoolSizes.combinedImageSamplerCount = 10000;
-		kPersistentPoolSizes.maxSets = 10000;
-
-		g_PersistentDescriptorPool = CreateDescriptorPool(kPersistentPoolSizes, false);
-
-		if (g_PersistentDescriptorPool == VK_NULL_HANDLE) {
-			RENDERX_ERROR("CreatePersistentDescriptorPool: Failed to create descriptor pool");
-			return false;
-		}
-		RENDERX_ASSERT_MSG(g_PersistentDescriptorPool != VK_NULL_HANDLE, "CreatePersistentDescriptorPool: pool is null");
-		return true;
-	}
+	ResourcePool<VulkanResourceGroup, ResourceGroupHandle> g_ResourceGroupPool;
+	ResourcePool<VulkanResourceGroupLayout, ResourceGroupLayoutHandle> g_ResourceGroupLayoutPool;
 
 	inline Hash64 ComputeResourceGroupHash(const ResourceGroupDesc& desc) {
 		Hash64 hash = 0xcbf29ce484222325;
-
-		hash ^= desc.layout.id;
-		hash *= 0x100000001b3;
 
 		for (const auto& binding : desc.Resources) {
 			hash ^= binding.binding;
@@ -52,18 +26,18 @@ namespace RxVK {
 			hash *= 0x100000001b3;
 
 			switch (binding.type) {
-			case ResourceType::ConstantBuffer:
-			case ResourceType::StorageBuffer:
-			case ResourceType::RWStorageBuffer:
+			case ResourceType::CONSTANT_BUFFER:
+			case ResourceType::STORAGE_BUFFER:
+			case ResourceType::RW_STORAGE_BUFFER:
 				hash ^= binding.bufferView.id;
 				break;
 
-			case ResourceType::Texture_SRV:
-			case ResourceType::Texture_UAV:
+			case ResourceType::TEXTURE_SRV:
+			case ResourceType::TEXTURE_UAV:
 				hash ^= binding.textureView.id;
 				break;
 
-			case ResourceType::Sampler:
+			case ResourceType::Samp:
 				hash ^= binding.sampler.id;
 				break;
 			}
@@ -74,333 +48,604 @@ namespace RxVK {
 		return hash;
 	}
 
-	inline void WriteDescriptorSet(VkDescriptorSet& set, const ResourceGroupDesc& desc) {
-		auto ctx = GetVulkanContext();
-		RENDERX_ASSERT_MSG(ctx.device != VK_NULL_HANDLE, "WriteDescriptorSet: device is VK_NULL_HANDLE");
-		RENDERX_ASSERT_MSG(set != VK_NULL_HANDLE, "WriteDescriptorSet: descriptor set is VK_NULL_HANDLE");
-		RENDERX_ASSERT_MSG(desc.Resources.size() > 0, "WriteDescriptorSet: resources list is empty");
+	VulkanDescriptorPoolManager::VulkanDescriptorPoolManager(VulkanContext& ctx)
+		: m_Ctx(ctx) {
+		// Persistent pool for things that never get deleted
+		m_Persistent = createPool(8192, true, false);
 
+		// Bindless pool with UpdateAfterBind flags
+		m_Bindless = createPool(16384, false, true);
+
+		// Gets Recycled every frame
+		m_CurrentTransient.pool = createPool(1000, true, false);
+	}
+
+	VulkanDescriptorPoolManager::~VulkanDescriptorPoolManager() {
+		// TODO
+	}
+
+	VkDescriptorPool VulkanDescriptorPoolManager::createPool(
+		uint32_t maxSets,
+		bool allowFree,
+		bool updateAfterBind) {
+		std::array<VkDescriptorPoolSize, 6> sizes = { {
+			{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, maxSets },
+			{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, maxSets },
+			{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, maxSets },
+			{ VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, maxSets },
+			{ VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, maxSets },
+			{ VK_DESCRIPTOR_TYPE_SAMPLER, maxSets },
+		} };
+
+		VkDescriptorPoolCreateInfo ci{ VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO };
+		ci.maxSets = maxSets;
+		ci.poolSizeCount = static_cast<uint32_t>(sizes.size());
+		ci.pPoolSizes = sizes.data();
+		ci.flags = (allowFree ? VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT : 0) |
+				   (updateAfterBind ? VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT : 0);
+
+		VkDescriptorPool pool;
+		VK_CHECK(vkCreateDescriptorPool(m_Ctx.device->logical(), &ci, nullptr, &pool));
+		return pool;
+	}
+
+	VkDescriptorPool VulkanDescriptorPoolManager::acquire(bool allowFree, bool updateAfterBind, uint64_t timelineValue) {
+		if (updateAfterBind) return m_Bindless;
+		if (!allowFree) return m_Persistent;
+
+		// If we have an active transient pool, use it
+		if (m_CurrentTransient.pool != VK_NULL_HANDLE) {
+			return m_CurrentTransient.pool;
+		}
+
+		if (!m_freePools.empty()) {
+			m_CurrentTransient.pool = m_freePools.back();
+			m_freePools.pop_back();
+			return m_CurrentTransient.pool;
+		}
+
+		// Nothing to reuse? Create a fresh one
+		m_CurrentTransient.pool = createPool(1000, true, false);
+		return m_CurrentTransient.pool;
+	}
+
+	// Call this when you submit the command buffer to the queue
+	void VulkanDescriptorPoolManager::submit(uint64_t timelineValue) {
+		if (m_CurrentTransient.pool == VK_NULL_HANDLE)
+			return;
+
+		m_CurrentTransient.submissionID = timelineValue;
+		m_usedPools.push_back(m_CurrentTransient);
+		m_CurrentTransient = {};
+	}
+
+	void VulkanDescriptorPoolManager::retire(uint64_t timelineValue) {
+		for (auto it = m_usedPools.begin(); it != m_usedPools.end();) {
+			if (timelineValue >= it->submissionID) {
+				// this pool is done on a Queue now you can reset it
+				// you cannot reset a pool if it is being used by the gpu queue
+				// you cannot use this befor all the queues that are using this pool are Done
+				// Hence Right now this can only scale to the one queue
+
+				// TODO -- PROBLEM : This cannot be used by the multiple queues
+				// SOLUTION -- HACK: Wait on all the queues that are using this pool before reseting
+
+				vkResetDescriptorPool(m_Ctx.device->logical(), it->pool, 0);
+				m_freePools.push_back(it->pool);
+				it = m_usedPools.erase(it); // SAFE erase
+			}
+			else {
+				++it;
+			}
+		}
+	}
+
+	void VulkanDescriptorPoolManager::resetPersistent() {
+		vkResetDescriptorPool(m_Ctx.device->logical(), m_Persistent, 0);
+	}
+
+	void VulkanDescriptorPoolManager::resetBindless() {
+		vkResetDescriptorPool(m_Ctx.device->logical(), m_Bindless, 0);
+	}
+
+	static DescriptorBindingModel ChooseModel(ResourceGroupFlags flags) {
+		if (Has(flags, ResourceGroupFlags::Bindless))
+			return DescriptorBindingModel::Bindless;
+		if (Has(flags, ResourceGroupFlags::Buffer))
+			return DescriptorBindingModel::DescriptorBuffer;
+		if (Has(flags, ResourceGroupFlags::DynamicUniform))
+			return DescriptorBindingModel::DynamicUniform;
+		if (Has(flags, ResourceGroupFlags::Dynamic))
+			return DescriptorBindingModel::Dynamic;
+		return DescriptorBindingModel::Static;
+	}
+
+	VulkanDescriptorManager::VulkanDescriptorManager(VulkanContext& ctx)
+		: m_Ctx(ctx) {}
+
+	VulkanDescriptorManager::~VulkanDescriptorManager() {}
+
+	VulkanResourceGroupLayout VulkanDescriptorManager::createLayout(const ResourceGroupLayout& layout) {
+		VulkanResourceGroupLayout out{};
+		out.model = ChooseModel(layout.flags);
+
+		std::vector<VkDescriptorSetLayoutBinding> bindings;
+		std::vector<VkDescriptorBindingFlags> flags;
+
+		for (auto& b : layout.resourcebindings) {
+			VkDescriptorSetLayoutBinding vk{};
+			vk.binding = b.binding;
+			vk.descriptorCount = b.count;
+			vk.descriptorType = ToVulkanDescriptorType(b.type);
+			vk.stageFlags = ToVulkanShaderStageFlags(b.stages);
+			bindings.push_back(vk);
+
+			VkDescriptorBindingFlags f = 0;
+			if (out.model == DescriptorBindingModel::Bindless) {
+				f |= VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
+				f |= VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT;
+			}
+			flags.push_back(f);
+		}
+
+		VkDescriptorSetLayoutBindingFlagsCreateInfo flagsInfo{
+			VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO
+		};
+		flagsInfo.bindingCount = (uint32_t)flags.size();
+		flagsInfo.pBindingFlags = flags.data();
+
+		VkDescriptorSetLayoutCreateInfo ci{
+			VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO
+		};
+		ci.bindingCount = (uint32_t)bindings.size();
+		ci.pBindings = bindings.data();
+
+		if (out.model == DescriptorBindingModel::Bindless) {
+			ci.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
+			ci.pNext = &flagsInfo;
+		}
+
+		VK_CHECK(vkCreateDescriptorSetLayout(
+			m_Ctx.device->logical(), &ci, nullptr, &out.layout));
+
+		return out;
+	}
+
+	VulkanResourceGroup VulkanDescriptorManager::createGroup(
+		const ResourceGroupLayoutHandle& handle,
+		const ResourceGroupDesc& desc,
+		uint64_t timelineValue) {
+		VulkanResourceGroup group{};
+		auto* layout = g_ResourceGroupLayoutPool.get(handle);
+		group.model = layout->model;
+
+		// Collect all descriptor infos upfront to keep pointers valid
+		std::vector<VkDescriptorImageInfo> imageInfos;
+		std::vector<VkDescriptorBufferInfo> bufferInfos;
 		std::vector<VkWriteDescriptorSet> writes;
+
+		imageInfos.reserve(desc.Resources.size());
+		bufferInfos.reserve(desc.Resources.size());
 		writes.reserve(desc.Resources.size());
 
-		// Storage for descriptor infos (must outlive vkUpdateDescriptorSets)
-		std::vector<VkDescriptorBufferInfo> bufferInfos;
-		std::vector<VkDescriptorImageInfo> imageInfos;
+		if (group.model == DescriptorBindingModel::Dynamic) {
+			VkDescriptorSetAllocateInfo ai{
+				VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO
+			};
+			ai.descriptorPool = m_Ctx.descriptorPoolManager->acquire(true, false, timelineValue);
+			ai.descriptorSetCount = 1;
+			ai.pSetLayouts = &layout->layout;
 
-		bufferInfos.reserve(desc.Resources.size());
-		imageInfos.reserve(desc.Resources.size());
+			VK_CHECK(vkAllocateDescriptorSets(
+				m_Ctx.device->logical(), &ai, &group.set));
 
-		for (const auto& binding : desc.Resources) {
-			VkWriteDescriptorSet write{};
-			write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-			write.dstSet = set;
-			write.dstBinding = binding.binding;
-			write.dstArrayElement = binding.arrayIndex;
-			write.descriptorCount = 1;
-			write.descriptorType = ToVkDescriptorType(binding.type);
+			for (auto& r : desc.Resources) {
+				VkWriteDescriptorSet w{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
+				w.dstSet = group.set;
+				w.dstBinding = r.binding;
+				w.dstArrayElement = r.arrayIndex; // Support array indexing
+				w.descriptorType = ToVulkanDescriptorType(r.type);
+				w.descriptorCount = 1;
 
-			switch (binding.type) {
-			//  Buffers
-			case ResourceType::ConstantBuffer:
-			case ResourceType::StorageBuffer:
-			case ResourceType::RWStorageBuffer: {
-				auto* view = g_BufferViewPool.get(binding.bufferView);
-				RENDERX_ASSERT_MSG(view != nullptr, "WriteDescriptorSet: retrieved null buffer view");
-				RENDERX_ASSERT_MSG(view && view->isValid,
-					"WriteDescriptorSet: Invalid BufferView");
+				switch (r.type) {
+					// case ResourceType::Texture_SRV:
+					// case ResourceType::Texture_UAV: {
+					//	auto* texView = g_TextureViewPool.get(r.textureView);
 
-				auto* buffer = g_BufferPool.get(view->buffer);
-				RENDERX_ASSERT_MSG(buffer != nullptr, "WriteDescriptorSet: retrieved null buffer");
-				RENDERX_ASSERT_MSG(buffer,
-					"WriteDescriptorSet: Invalid Buffer");
-				RENDERX_ASSERT_MSG(buffer->buffer != VK_NULL_HANDLE, "WriteDescriptorSet: buffer is null");
+					//	VkDescriptorImageInfo& ii = imageInfos.emplace_back();
+					//	ii.imageView = texView->view;
+					//	ii.imageLayout = (r.type == ResourceType::Texture_SRV)
+					//						 ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+					//						 : VK_IMAGE_LAYOUT_GENERAL;
+					//	ii.sampler = VK_NULL_HANDLE;
 
-				VkDescriptorBufferInfo info{};
-				info.buffer = buffer->buffer;
-				info.offset = view->offset;
-				info.range = view->range;
+					//	w.pImageInfo = &ii;
+					//	break;
+					//}
 
-				bufferInfos.push_back(info);
-				write.pBufferInfo = &bufferInfos.back();
-				break;
+					// case ResourceType::Sampler: {
+					//	auto* sampler = g_SamplerPool.get(r.sampler);
+
+					//	VkDescriptorImageInfo& ii = imageInfos.emplace_back();
+					//	ii.sampler = sampler->sampler;
+					//	ii.imageView = VK_NULL_HANDLE;
+					//	ii.imageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+					//	w.pImageInfo = &ii;
+					//	break;
+					//}
+
+					// case ResourceType::CombinedTextureSampler: {
+					//	auto* texView = g_TextureViewPool.get(r.combinedHandles.texture);
+					//	auto* sampler = g_SamplerPool.get(r.combinedHandles.sampler);
+
+					//	VkDescriptorImageInfo& ii = imageInfos.emplace_back();
+					//	ii.imageView = texView->view;
+					//	ii.sampler = sampler->sampler;
+					//	ii.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+					//	w.pImageInfo = &ii;
+					//	break;
+					//}
+
+				case ResourceType::ConstantBuffer:
+				case ResourceType::StorageBuffer:
+				case ResourceType::RWStorageBuffer: {
+					auto* bufView = g_BufferViewPool.get(r.bufferView);
+					auto* buf = g_BufferPool.get(bufView->buffer);
+
+					VkDescriptorBufferInfo& bi = bufferInfos.emplace_back();
+					bi.buffer = buf->buffer;
+					bi.offset = bufView->offset;
+					bi.range = (bufView->range == 0) ? VK_WHOLE_SIZE : bufView->range;
+
+					w.pBufferInfo = &bi;
+					break;
+				}
+				}
+
+				writes.push_back(w);
 			}
 
-			////  Textures
-			// case ResourceType::Texture_SRV:
-			// case ResourceType::Texture_UAV: {
-			//	auto* view = g_TextureViewPool.get(binding.textureView);
-			//	RENDERX_ASSERT_MSG(view && view->isValid,
-			//		"WriteDescriptorSet: Invalid TextureView");
-
-			//	VkDescriptorImageInfo info{};
-			//	info.imageView = view->view;
-			//	info.imageLayout =
-			//		(binding.type == ResourceType::Texture_UAV)
-			//			? VK_IMAGE_LAYOUT_GENERAL
-			//			: VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-			//	imageInfos.push_back(info);
-			//	write.pImageInfo = &imageInfos.back();
-			//	break;
-			//}
-
-			//  Samplers
-			case ResourceType::Sampler: {
-				/*auto* sampler = g_SamplerPool.get(binding.sampler);
-				RENDERX_ASSERT_MSG(sampler && sampler->isValid,
-					"WriteDescriptorSet: Invalid Sampler");
-
-				VkDescriptorImageInfo info{};
-				info.sampler = sampler->sampler;
-
-				imageInfos.push_back(info);
-				write.pImageInfo = &imageInfos.back();
-				break;*/
+			if (!writes.empty()) {
+				vkUpdateDescriptorSets(
+					m_Ctx.device->logical(),
+					(uint32_t)writes.size(), writes.data(), 0, nullptr);
 			}
-
-			//  Combined
-			case ResourceType::CombinedTextureSampler: {
-				/*auto* view = g_TextureViewPool.get(binding.textureView);
-				auto* sampler = g_SamplerPool.get(binding.sampler);
-
-				RENDERX_ASSERT_MSG(view && view->isValid,
-					"WriteDescriptorSet: Invalid TextureView");
-				RENDERX_ASSERT_MSG(sampler && sampler->isValid,
-					"WriteDescriptorSet: Invalid Sampler");
-
-				VkDescriptorImageInfo info{};
-				info.imageView = view->view;
-				info.sampler = sampler->sampler;
-				info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-				imageInfos.push_back(info);
-				write.pImageInfo = &imageInfos.back();
-				break;*/
-			}
-
-			default:
-				RENDERX_ASSERT_MSG(false, "WriteDescriptorSet: Unsupported ResourceType");
-				continue;
-			}
-
-			writes.push_back(write);
 		}
 
-		if (!writes.empty()) {
-			vkUpdateDescriptorSets(
-				ctx.device,
-				static_cast<uint32_t>(writes.size()),
-				writes.data(),
-				0,
-				nullptr);
+		// BINDLESS PATH
+		if (group.model == DescriptorBindingModel::Bindless) {
+			VkDescriptorSetAllocateInfo ai{
+				VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO
+			};
+			ai.descriptorPool = m_Ctx.descriptorPoolManager->acquire(false, true, timelineValue);
+			ai.descriptorSetCount = 1;
+			ai.pSetLayouts = &layout->layout;
+
+			VK_CHECK(vkAllocateDescriptorSets(
+				m_Ctx.device->logical(), &ai, &group.set));
+
+			for (auto& r : desc.Resources) {
+				VkWriteDescriptorSet w{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
+				w.dstSet = group.set;
+				w.dstBinding = r.binding;
+				w.dstArrayElement = r.arrayIndex; // Support array indexing
+				w.descriptorType = ToVulkanDescriptorType(r.type);
+				w.descriptorCount = 1;
+
+				switch (r.type) {
+					// case ResourceType::Texture_SRV:
+					// case ResourceType::Texture_UAV: {
+					//	auto* texView = g_TextureViewPool.get(r.textureView);
+
+					//	VkDescriptorImageInfo& ii = imageInfos.emplace_back();
+					//	ii.imageView = texView->view;
+					//	ii.imageLayout = (r.type == ResourceType::Texture_SRV)
+					//						 ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+					//						 : VK_IMAGE_LAYOUT_GENERAL;
+					//	ii.sampler = VK_NULL_HANDLE;
+
+					//	w.pImageInfo = &ii;
+					//	break;
+					//}
+
+					// case ResourceType::Sampler: {
+					//	auto* sampler = g_SamplerPool.get(r.sampler);
+
+					//	VkDescriptorImageInfo& ii = imageInfos.emplace_back();
+					//	ii.sampler = sampler->sampler;
+					//	ii.imageView = VK_NULL_HANDLE;
+					//	ii.imageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+					//	w.pImageInfo = &ii;
+					//	break;
+					//}
+
+					// case ResourceType::CombinedTextureSampler: {
+					//	auto* texView = g_TextureViewPool.get(r.combinedHandles.texture);
+					//	auto* sampler = g_SamplerPool.get(r.combinedHandles.sampler);
+
+					//	VkDescriptorImageInfo& ii = imageInfos.emplace_back();
+					//	ii.imageView = texView->view;
+					//	ii.sampler = sampler->sampler;
+					//	ii.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+					//	w.pImageInfo = &ii;
+					//	break;
+					//}
+
+				case ResourceType::ConstantBuffer:
+				case ResourceType::StorageBuffer:
+				case ResourceType::RWStorageBuffer: {
+					auto* bufView = g_BufferViewPool.get(r.bufferView);
+					auto* buf = g_BufferPool.get(bufView->buffer);
+
+					VkDescriptorBufferInfo& bi = bufferInfos.emplace_back();
+					bi.buffer = buf->buffer;
+					bi.offset = bufView->offset;
+					bi.range = (bufView->range == 0) ? VK_WHOLE_SIZE : bufView->range;
+
+					w.pBufferInfo = &bi;
+					break;
+				}
+				}
+
+				writes.push_back(w);
+			}
+
+			if (!writes.empty()) {
+				vkUpdateDescriptorSets(
+					m_Ctx.device->logical(),
+					(uint32_t)writes.size(), writes.data(), 0, nullptr);
+			}
+		}
+
+		// DYNAMIC UNIFORM PATH
+		else if (group.model == DescriptorBindingModel::DynamicUniform) {
+			VkDescriptorSetAllocateInfo ai{
+				VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO
+			};
+			ai.descriptorPool = m_Ctx.descriptorPoolManager->acquire(true, false, timelineValue);
+			ai.descriptorSetCount = 1;
+			ai.pSetLayouts = &layout->layout;
+
+			VK_CHECK(vkAllocateDescriptorSets(
+				m_Ctx.device->logical(), &ai, &group.set));
+
+			for (auto& r : desc.Resources) {
+				auto* bufView = g_BufferViewPool.get(r.bufferView);
+				auto* buf = g_BufferPool.get(bufView->buffer);
+
+				VkDescriptorBufferInfo& bi = bufferInfos.emplace_back();
+				bi.buffer = buf->buffer;
+				bi.offset = 0; // Offset provided at bind time
+				bi.range = VK_WHOLE_SIZE;
+
+				VkWriteDescriptorSet w{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
+				w.dstSet = group.set;
+				w.dstBinding = r.binding;
+				w.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+				w.descriptorCount = 1;
+				w.pBufferInfo = &bi;
+
+				writes.push_back(w);
+			}
+
+			if (!writes.empty()) {
+				vkUpdateDescriptorSets(
+					m_Ctx.device->logical(),
+					(uint32_t)writes.size(), writes.data(), 0, nullptr);
+			}
+
+			// Store dynamic offset from desc
+			group.dynamicOffset = desc.dynamicOffset;
+		}
+
+		// DESCRIPTOR BUFFER PATH
+		else if (group.model == DescriptorBindingModel::DescriptorBuffer) {
+			// Calculate required size based on layout
+			size_t descriptorSize = 256; // Query from device properties
+			size_t totalSize = descriptorSize * desc.Resources.size();
+
+			VkBufferCreateInfo bi{ VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
+			bi.size = totalSize;
+			bi.usage = VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT |
+					   VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+
+			VmaAllocationCreateInfo ai{};
+			ai.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
+
+			VK_CHECK(vmaCreateBuffer(
+				m_Ctx.allocator->handle(),
+				&bi, &ai,
+				&group.descriptorBuffer.buffer,
+				&group.descriptorBuffer.allocation,
+				nullptr));
+
+			VkBufferDeviceAddressInfo addrInfo{
+				VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO
+			};
+			addrInfo.buffer = group.descriptorBuffer.buffer;
+			group.descriptorBuffer.address =
+				vkGetBufferDeviceAddress(m_Ctx.device->logical(), &addrInfo);
+
+			group.descriptorBuffer.stride = 0; // Set index for binding
+		}
+
+		// STATIC PATH
+		else {
+			// Similar to bindless but from static pool
+			VkDescriptorSetAllocateInfo ai{
+				VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO
+			};
+			ai.descriptorPool = m_Ctx.descriptorPoolManager->acquire(false, false, timelineValue);
+			ai.descriptorSetCount = 1;
+			ai.pSetLayouts = &layout->layout;
+
+			VK_CHECK(vkAllocateDescriptorSets(
+				m_Ctx.device->logical(), &ai, &group.set));
+
+			// Same write logic as bindless
+			for (auto& r : desc.Resources) {
+				VkWriteDescriptorSet w{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
+				w.dstSet = group.set;
+				w.dstBinding = r.binding;
+				w.descriptorType = ToVulkanDescriptorType(r.type);
+				w.descriptorCount = 1;
+
+				switch (r.type) {
+					/*case ResourceType::Texture_SRV:
+					case ResourceType::Texture_UAV: {
+						auto* texView = g_TextureViewPool.get(r.textureView);
+
+						VkDescriptorImageInfo& ii = imageInfos.emplace_back();
+						ii.imageView = texView->view;
+						ii.imageLayout = (r.type == ResourceType::Texture_SRV)
+											 ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+											 : VK_IMAGE_LAYOUT_GENERAL;
+						ii.sampler = VK_NULL_HANDLE;
+
+						w.pImageInfo = &ii;
+						break;
+					}*/
+
+				case ResourceType::CONSTANT_BUFFER:
+				case ResourceType::STORAGE_BUFFER:
+				case ResourceType::RW_STORAGE_BUFFER: {
+					auto* bufView = g_BufferViewPool.get(r.bufferView);
+					auto* buf = g_BufferPool.get(bufView->buffer);
+
+					VkDescriptorBufferInfo& bi = bufferInfos.emplace_back();
+					bi.buffer = buf->buffer;
+					bi.offset = bufView->offset;
+					bi.range = (bufView->range == 0) ? VK_WHOLE_SIZE : bufView->range;
+
+					w.pBufferInfo = &bi;
+					break;
+				}
+				}
+
+				writes.push_back(w);
+			}
+
+			if (!writes.empty()) {
+				vkUpdateDescriptorSets(
+					m_Ctx.device->logical(),
+					(uint32_t)writes.size(), writes.data(), 0, nullptr);
+			}
+		}
+
+		return group;
+	}
+	void VulkanDescriptorManager::bind(
+		VkCommandBuffer cmd,
+		VkPipelineLayout layout,
+		uint32_t setIndex,
+		const VulkanResourceGroup& group) {
+		switch (group.model) {
+		case DescriptorBindingModel::Static:
+		case DescriptorBindingModel::Bindless:
+		case DescriptorBindingModel::Dynamic:
+			vkCmdBindDescriptorSets(
+				cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+				layout, setIndex, 1, &group.set, 0, nullptr);
+			break;
+
+		case DescriptorBindingModel::DynamicUniform:
+			vkCmdBindDescriptorSets(
+				cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+				layout, setIndex, 1, &group.set,
+				1, &group.dynamicOffset);
+			break;
+
+		case DescriptorBindingModel::DescriptorBuffer: {
+			VkDescriptorBufferBindingInfoEXT bindingInfo{};
+			bindingInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT;
+			bindingInfo.address = group.descriptorBuffer.address;
+			bindingInfo.usage = VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT;
+
+			vkCmdBindDescriptorBuffersEXT(cmd, 1, &bindingInfo);
+
+			uint32_t bufferIndex = 0;
+			VkDeviceSize offset = 0;
+			vkCmdSetDescriptorBufferOffsetsEXT(
+				cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+				layout, setIndex, 1, &bufferIndex, &offset);
+			break;
+		}
 		}
 	}
 
-	inline ResourceGroupHandle CreatePersistentDescriptorSet(const ResourceGroupDesc& desc) {
-		auto& frame = GetFrameContex(g_CurrentFrame);
-		auto ctx = GetVulkanContext();
-
-
-		VulkanPipelineLayout* layout = g_LayoutPool.get(desc.layout);
-		RENDERX_ASSERT_MSG((layout->layout != VK_NULL_HANDLE), "ResourceGroup Layout is not valid");
-
-		Hash64 hash = ComputeResourceGroupHash(desc);
-
-		auto it = g_ResourceGroupCache.find(hash);
-		if (it != g_ResourceGroupCache.end()) return it->second;
-
-		VkDescriptorSetAllocateInfo allocInfo{};
-		allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-		allocInfo.descriptorSetCount = 1;
-		allocInfo.pSetLayouts = &layout->setlayouts[desc.setIndex];
-		allocInfo.descriptorPool = g_PersistentDescriptorPool;
-
-		VkDescriptorSet set;
-		auto res = vkAllocateDescriptorSets(ctx.device, &allocInfo, &set);
-
-		// Pool exhausted - grow chain
-		if (res == VK_ERROR_OUT_OF_POOL_MEMORY || res == VK_ERROR_FRAGMENTED_POOL) {
-			// GrowPersistentPool();
-			// pool = m_persistentPools[m_currentPersistentPoolIndex];
-			// allocInfo.descriptorPool = pool;
-			// result = vkAllocateDescriptorSets(m_device, &allocInfo, &set);
-			RENDERX_CRITICAL("CreatePersistentDescriptorSet : descriptorPool Overflow");
-		}
-
-		if (res != VK_SUCCESS) {
-			RENDERX_CRITICAL("CreatePersistentDescriptorSet: Cannot create Descriptor Set");
-			return ResourceGroupHandle{};
-		}
-
-		WriteDescriptorSet(set, desc);
-
-		VulkanResourceGroup resourceGroup{};
-		resourceGroup.set = set;
-		resourceGroup.setIndex = desc.setIndex;
-		resourceGroup.pipelineLayout = desc.layout;
-		resourceGroup.hash = hash;
-		resourceGroup.isPersistent = true;
-		auto handle = g_PersistentResourceGroupPool.allocate(resourceGroup);
-
-		// Debug naming
-		if (desc.debugName && desc.debugName[0] != '\0') {
-			VkDebugUtilsObjectNameInfoEXT nameInfo = {};
-			nameInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
-			nameInfo.objectType = VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT;
-			nameInfo.objectHandle = (uint64_t)set;
-			nameInfo.pObjectName = desc.debugName;
-			// vkSetDebugUtilsObjectNameEXT(m_device, &nameInfo);
-		}
-
-		return handle;
-	}
-
-	inline ResourceGroupHandle CreateTransientDscriptorSet(const ResourceGroupDesc& desc) {
-		auto& frame = GetFrameContex(g_CurrentFrame);
-		auto ctx = GetVulkanContext();
-
-
-		VulkanPipelineLayout* layout = g_LayoutPool.get(desc.layout);
-		RENDERX_ASSERT_MSG((layout->layout != VK_NULL_HANDLE), "ResourceGroup Layout is not valid");
-
-		VkDescriptorSetAllocateInfo allocInfo{};
-		allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-		allocInfo.descriptorSetCount = 1;
-		allocInfo.pSetLayouts = &layout->setlayouts[desc.setIndex];
-		allocInfo.descriptorPool = frame.DescriptorPool;
-
-		VkDescriptorSet set;
-		auto res = vkAllocateDescriptorSets(ctx.device, &allocInfo, &set);
-
-		// Pool exhausted - grow chain
-		if (res == VK_ERROR_OUT_OF_POOL_MEMORY || res == VK_ERROR_FRAGMENTED_POOL) {
-			RENDERX_CRITICAL("CreateTransientDscriptorSet: Pool OverFlow");
-			// GrowTransientPool();
-		}
-
-		if (res != VK_SUCCESS) {
-			RENDERX_CRITICAL("CreateTransientDscriptorSet: Cannot create Descriptor Set");
-			return ResourceGroupHandle{};
-		}
-
-		WriteDescriptorSet(set, desc);
-
-		VulkanResourceGroup resourceGroup{};
-		resourceGroup.set = set;
-		resourceGroup.setIndex = desc.setIndex;
-		resourceGroup.pipelineLayout = desc.layout;
-		resourceGroup.hash = 0;
-		resourceGroup.isPersistent = false;
-		auto handle = g_TransientResourceGroupPool.allocate(resourceGroup);
-
-		return handle;
+	ResourceGroupLayoutHandle VKCreateResourceGroupLayout(const ResourceGroupLayout& desc) {
+		auto& ctx = GetVulkanContext();
+		auto Layout = ctx.descriptorSetManager->createLayout(desc);
+		RENDERX_ASSERT_MSG(Layout.layout != VK_NULL_HANDLE, "Failed to create Resource group layout");
+		auto handle = g_ResourceGroupLayoutPool.allocate(Layout);
+		if (handle.IsValid()) return handle;
 	}
 
 	ResourceGroupHandle VKCreateResourceGroup(const ResourceGroupDesc& desc) {
-		switch (desc.flags) {
-		case ResourceGroupLifetime::PerFrame:
-			return CreateTransientDscriptorSet(desc);
-		case ResourceGroupLifetime::Persistent:
-			return CreatePersistentDescriptorSet(desc);
-		default:
-			return ResourceGroupHandle{};
+		auto& ctx = GetVulkanContext();
+		auto* layout = g_ResourceGroupLayoutPool.get(desc.layout);
+
+		RENDERX_ASSERT_MSG(layout != nullptr, "Invalid layout handle");
+
+		// Determine pool based on flags
+		ResourcePool<VulkanResourceGroup, ResourceGroupHandle>* pool;
+		bool shouldCache = false;
+
+		if (Has(layout->flags, ResourceGroupFlags::BINDLESS)) {
+			pool = &g_PersistentResourceGroupPool;
+			shouldCache = true;
 		}
-	}
+		else if (Has(layout->flags, ResourceGroupFlags::DYNAMIC) ||
+				 Has(layout->flags, ResourceGroupFlags::DYNAMIC_UNIFORM)) {
+			pool = &g_TransientResourceGroupPool;
+			shouldCache = false;
+		}
+		else { // Static
+			pool = &g_PersistentResourceGroupPool;
+			shouldCache = true;
+		}
 
-	void VKDestroyResourceGroup(ResourceGroupHandle& handle) {
-		if (!handle.IsValid()) return;
-		auto ctx = GetVulkanContext();
-
-		// Try to free from per-frame descriptor pools first
-		auto* rg = g_TransientResourceGroupPool.get(handle);
-		if (!rg) return;
-
-		VkDescriptorSet set = rg->set;
-		bool freed = false;
-		for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
-			auto& frame = GetFrameContex(i);
-			if (frame.DescriptorPool != VK_NULL_HANDLE) {
-				VkResult res = vkFreeDescriptorSets(ctx.device, frame.DescriptorPool, 1, &set);
-				if (res == VK_SUCCESS) {
-					freed = true;
-					break;
-				}
+		// Check cache for persistent groups
+		if (shouldCache) {
+			Hash64 hash = ComputeResourceGroupHash(desc);
+			auto it = g_ResourceGroupCache.find(hash);
+			if (it != g_ResourceGroupCache.end()) {
+				return it->second;
 			}
 		}
 
-		// If not freed from transient pools, try persistent pool (may or may not allow freeing)
-		if (!freed && g_PersistentDescriptorPool != VK_NULL_HANDLE) {
-			VkResult pres = vkFreeDescriptorSets(ctx.device, g_PersistentDescriptorPool, 1, &set);
-			if (pres == VK_SUCCESS) freed = true;
+		// Create the group
+		uint64_t timelineValue; //= ctx.getCurrentTimelineValue();
+		auto group = ctx.descriptorSetManager->createGroup(desc.layout, desc, timelineValue);
+
+		auto handle = pool->allocate(group);
+
+		// Cache if needed
+		if (shouldCache) {
+			Hash64 hash = ComputeResourceGroupHash(desc);
+			g_ResourceGroupCache[hash] = handle;
 		}
 
-		// Remove from cache if present
-		for (auto it = g_ResourceGroupCache.begin(); it != g_ResourceGroupCache.end(); ++it) {
-			if (it->second == handle) {
-				g_ResourceGroupCache.erase(it);
-				break;
-			}
-		}
-
-		// Free bookkeeping
-		g_TransientResourceGroupPool.free(handle);
+		return handle;
 	}
 
-
-	// Shutdown helper to cleanup persistent descriptor pool and caches
-	void freeResourceGroups() {
-		auto ctx = GetVulkanContext();
-		// Clear cache
-		g_ResourceGroupCache.clear();
-		// Destroy persistent pool if created
-		if (g_PersistentDescriptorPool != VK_NULL_HANDLE && ctx.device != VK_NULL_HANDLE) {
-			vkDestroyDescriptorPool(ctx.device, g_PersistentDescriptorPool, nullptr);
-			g_PersistentDescriptorPool = VK_NULL_HANDLE;
-		}
-		g_PersistentResourceGroupPool.clear();
-
-		for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
-			auto frame = GetFrameContex(i);
-			if (frame.DescriptorPool != VK_NULL_HANDLE && ctx.device != VK_NULL_HANDLE) {
-				vkDestroyDescriptorPool(ctx.device, frame.DescriptorPool, nullptr);
-			}
-		}
+	void VKResetPersistentResourceGroups() {
+		auto& ctx = GetVulkanContext();
+		ctx.descriptorPoolManager->resetPersistent();
 	}
 
-	void VKCmdSetResourceGroup(const CommandList& cmd, const ResourceGroupHandle& handle) {
-		PROFILE_FUNCTION();
-		RENDERX_ASSERT_MSG(handle.IsValid(), " vkCmdSetResourceGroup :Invalid handle");
-		RENDERX_ASSERT_MSG(cmd.IsValid(), " vkCmdSetResourceGroup :Invalid CommandList");
+	void VKResetBindlessResourceGroups() {
+		auto& ctx = GetVulkanContext();
+		ctx.descriptorPoolManager->resetBindless();
+	}
 
-		auto ctx = GetVulkanContext();
-		auto frame = GetFrameContex(g_CurrentFrame);
-
-		// Bind descriptor set to currently bound pipeline layout
-		auto* vkCmdList = g_CommandListPool.get(cmd);
-		RENDERX_ASSERT_MSG(vkCmdList && vkCmdList->isOpen, "vkCmdSetResourceGroup: CommandList not open or invalid");
-
-		// try
-		VulkanResourceGroup* rg = g_TransientResourceGroupPool.get(handle);
-		if (!rg) rg = g_PersistentResourceGroupPool.get(handle);
-		RENDERX_ASSERT_MSG(rg, "vkCmdSetResourceGroup: cannot  find ResourceGroup handle{}", handle.id);
-
-		auto* pipelinLayout = g_LayoutPool.get(rg->pipelineLayout);
-
-		VkDescriptorSet set = rg->set;
-		RENDERX_ASSERT_MSG(set != VK_NULL_HANDLE, "vkCmdSetResourceGroup:");
-		RENDERX_ASSERT_MSG(pipelinLayout, "vkCmdSetResourceGroup: Invalid pipeline layout")
-		VkPipelineLayout layout = pipelinLayout->layout;
-		RENDERX_ASSERT_MSG(layout != VK_NULL_HANDLE, "vkCmdSetResourceGroup: No pipeline layout bound. Call CmdSetPipeline first.");
-
-		vkCmdBindDescriptorSets(
-			vkCmdList->cmdBuffer,
-			VK_PIPELINE_BIND_POINT_GRAPHICS,
-			layout,
-			rg->setIndex,
-			1,
-			&set,
-			0,
-			nullptr);
+	void VKResetDynamicResourceGroups(uint64_t timelineValue) {
+		auto& ctx = GetVulkanContext();
+		ctx.descriptorPoolManager->retire(timelineValue);
 	}
 
 } // namespace RxVK

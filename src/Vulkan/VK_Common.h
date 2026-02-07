@@ -8,7 +8,6 @@
 #include <vulkan/vulkan.hpp>
 #include "vk_mem_alloc.h"
 
-
 #include <vector>
 #include <array>
 #include <optional>
@@ -19,15 +18,31 @@
 #include <cstring>
 #include <string>
 #include <utility>
+#include <deque>
+#include <mutex>
+
+
 
 
 namespace Rx {
 namespace RxVK {
 
+
+
+} // namespace RxVK
+} // namespace Rx
+
+namespace Rx {
+namespace RxVK {
+
+	// Type Aliases & Global Variables
+
 	using Hash64 = uint64_t;
 
 	extern uint32_t MAX_FRAMES_IN_FLIGHT;
 	extern uint32_t g_CurrentFrame;
+
+	// Utility Functions
 
 	inline const char* VkResultToString(VkResult result) {
 		switch (result) {
@@ -101,6 +116,31 @@ namespace RxVK {
 		return true;
 	}
 
+	// Constants
+
+	constexpr std::array<VkDynamicState, 2> g_DynamicStates{
+		VK_DYNAMIC_STATE_VIEWPORT,
+		VK_DYNAMIC_STATE_SCISSOR
+	};
+
+	constexpr std::array<const char*, 1> g_RequestedValidationLayers{
+		"VK_LAYER_KHRONOS_validation"
+	};
+
+	constexpr std::array<const char*, 1> g_RequestedDeviceExtensions{
+		VK_KHR_SWAPCHAIN_EXTENSION_NAME
+	};
+
+
+	enum class DescriptorBindingModel {
+		Static,
+		DynamicUniform,
+		Bindless,
+		DescriptorBuffer,
+		Dynamic
+	};
+
+	// Data Structures
 
 	struct DescriptorPoolSizes {
 		uint32_t uniformBufferCount = 0;
@@ -130,19 +170,44 @@ namespace RxVK {
 		uint32_t swapchainImageIndex = 0;
 	};
 
-
-
 	struct VulkanCommandList {
 		VkCommandBuffer cmdBuffer;
 		bool isOpen = false;
 		uint32_t lastFrame = 0;
 	};
 
+	struct VulkanResourceGroupLayout {
+		VkDescriptorSetLayout layout = VK_NULL_HANDLE;
+		ResourceGroupFlags flags = ResourceGroupFlags::NONE;
+		DescriptorBindingModel model = DescriptorBindingModel::Static;
+	};
+
+	struct VulkanDescriptorBuffer {
+		VkBuffer buffer = VK_NULL_HANDLE;
+		VmaAllocation allocation = VK_NULL_HANDLE;
+		VkDeviceAddress address = 0;
+		VkDeviceSize stride = 0;
+	};
+
+	struct VulkanResourceGroup {
+		DescriptorBindingModel model = DescriptorBindingModel::Static;
+		ResourceGroupFlags flags = ResourceGroupFlags::NONE;
+
+		// Static / Dynamic
+		VkDescriptorSet set = VK_NULL_HANDLE;
+		uint32_t dynamicOffset = 0;
+
+		// Bindless
+		std::vector<uint32_t> bindlessIndices;
+
+		// Descriptor buffer
+		VulkanDescriptorBuffer descriptorBuffer;
+	};
+
 	struct VulkanPipelineLayout {
 		VkPipelineLayout layout;
 		std::vector<VkDescriptorSetLayout> setlayouts;
 		std::vector<Hash64> setHashs;
-
 		bool isBound = false;
 	};
 
@@ -157,15 +222,6 @@ namespace RxVK {
 		VkSemaphore renderFinishedSemaphore = VK_NULL_HANDLE;
 	};
 
-	struct VulkanResourceGroup {
-		PipelineLayoutHandle pipelineLayout;
-		VkDescriptorSet set;
-		uint32_t setIndex;
-		Hash64 hash;
-		bool isAlive = false;
-		bool isPersistent = true;
-	};
-
 	struct VulkanBufferConfig {
 		VkBufferUsageFlags usage;
 		VmaMemoryUsage vmaUsage;
@@ -176,12 +232,10 @@ namespace RxVK {
 		VkBuffer buffer = VK_NULL_HANDLE;
 		VmaAllocation allocation = VK_NULL_HANDLE;
 		VmaAllocationInfo allocInfo = {};
-
 		VkDeviceSize size = 0;
 		uint32_t bindingCount = 1;
 		BufferFlags flags;
 
-// Optional
 #ifdef RENDERX_DEBUG
 		const char* debugName = nullptr;
 #endif
@@ -218,40 +272,25 @@ namespace RxVK {
 		std::vector<VkPresentModeKHR> presentModes;
 	};
 
-	struct VulkanDeviceLimits {
-		uint32_t minUniformBufferOffsetAlignment;
-		uint32_t minStorageBufferOffsetAlignment;
-		uint32_t minDrawIndirectBufferOffsetAlignment;
+	struct VulkanCommandBuffer {
+		VkCommandPool pool = VK_NULL_HANDLE;
+		VkCommandBuffer buffer = VK_NULL_HANDLE;
+		uint64_t submissionID = 0;
 	};
 
-	struct VulkanContext {
-		void* window = nullptr;
-		VkInstance instance = VK_NULL_HANDLE;
+	struct SwapchainCreateInfo {
 		VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
 		VkDevice device = VK_NULL_HANDLE;
-		VmaAllocator allocator;
-		VulkanDeviceLimits deviceLimits;
-		VkQueue graphicsQueue = VK_NULL_HANDLE;
-		uint32_t graphicsQueueFamilyIndex = 0;
 		VkSurfaceKHR surface = VK_NULL_HANDLE;
-
-		RenderPassHandle swapchainRenderPassHandle;
-		VkRenderPass swapchainRenderPass = VK_NULL_HANDLE;
-		std::vector<VkFramebuffer> swapchainFramebuffers;
-		std::vector<SwapchainImageSync> swapchainImageSync;
-
-		VkSwapchainKHR swapchain = VK_NULL_HANDLE;
-		VkFormat swapchainImageFormat = VK_FORMAT_UNDEFINED;
-		VkExtent2D swapchainExtent{ 0, 0 };
-		std::vector<VkImage> swapchainImages;
-		std::vector<VkImageView> swapchainImageviews;
-
-		// Depth-stencil resources for the swapchain (one per swapchain image)
-		VkFormat depthFormat = VK_FORMAT_UNDEFINED;
-		std::vector<VkImage> depthImages;
-		std::vector<VmaAllocation> depthAllocations;
-		std::vector<VkImageView> depthImageViews;
+		uint32_t width = 0;
+		uint32_t height = 0;
+		uint32_t imageCount = 3;
+		VkFormat preferredFormat = VK_FORMAT_B8G8R8A8_UNORM;
+		VkColorSpaceKHR preferredColorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+		VkPresentModeKHR preferredPresentMode = VK_PRESENT_MODE_MAILBOX_KHR;
 	};
+
+	// Resource Pool Template
 
 	template <typename ResourceType, typename Tag>
 	class ResourcePool {
@@ -261,8 +300,6 @@ namespace RxVK {
 		ResourcePool() {
 			_My_resource.emplace_back();
 			_My_generation.emplace_back(1);
-
-			// Generate a unique per-pool secret
 			_My_key = GenerateKey();
 		}
 
@@ -295,13 +332,11 @@ namespace RxVK {
 				"ResourcePool::free : Trying to free invalid handle");
 
 			uint64_t raw = Decrypt(handle.id);
-
 			auto index = static_cast<ValueType>(raw & 0xFFFFFFFF);
 			auto gen = static_cast<ValueType>(raw >> 32);
 
 			RENDERX_ASSERT_MSG(
-				index < _My_resource.size() &&
-					_My_generation[index] == gen,
+				index < _My_resource.size() && _My_generation[index] == gen,
 				"ResourcePool::free : Stale or foreign handle detected");
 
 			handle.id = 0;
@@ -314,7 +349,6 @@ namespace RxVK {
 				"ResourcePool::get : invalid handle");
 
 			uint64_t raw = Decrypt(handle.id);
-
 			auto index = static_cast<ValueType>(raw & 0xFFFFFFFF);
 			auto gen = static_cast<ValueType>(raw >> 32);
 
@@ -340,24 +374,20 @@ namespace RxVK {
 				return false;
 
 			uint64_t raw = Decrypt(handle.id);
-
 			auto index = static_cast<ValueType>(raw & 0xFFFFFFFF);
 			auto gen = static_cast<ValueType>(raw >> 32);
 
-			return index < _My_resource.size() &&
-				   _My_generation[index] == gen;
+			return index < _My_resource.size() && _My_generation[index] == gen;
 		}
 
 		void clear() {
 			_My_resource.clear();
 			_My_generation.clear();
 			_My_freelist.clear();
-
 			_My_resource.emplace_back();
 			_My_generation.emplace_back(1);
 		}
 	private:
-		// Encryption
 		static uint64_t RotateLeft(uint64_t x, int r) {
 			return (x << r) | (x >> (64 - r));
 		}
@@ -386,96 +416,270 @@ namespace RxVK {
 		std::vector<ResourceType> _My_resource;
 		std::vector<ValueType> _My_generation;
 		std::vector<ValueType> _My_freelist;
-
 		uint64_t _My_key = 0;
 	};
 
+	struct VulkanContext;
+	class VulkanInstance;
+	class VulkanDevice;
+	class VulkanSwapchain;
+	class VulkanAllocator;
+	class VulkanQueue;
+	class VulkanDescriptorPoolManager;
+	class VulkanDescriptorManager;
 
-	struct VulkanTextureView {
+	// Class Declarations
+
+	class VulkanSwapchain {
+	public:
+		VulkanSwapchain() = default;
+		~VulkanSwapchain();
+
+		bool create(const SwapchainCreateInfo& info);
+		void destroy();
+		bool acquireNextImage(VkSemaphore signalSemaphore, uint32_t* outImageIndex);
+		bool present(VkQueue presentQueue, VkSemaphore waitSemaphore, uint32_t imageIndex);
+		void recreate(uint32_t width, uint32_t height);
+
+		VkFormat format() const { return m_Format; }
+		VkExtent2D extent() const { return m_Extent; }
+		uint32_t imageCount() const { return uint32_t(m_Images.size()); }
+		VkImage image(uint32_t index) const { return m_Images[index]; }
+		VkImageView imageView(uint32_t index) const { return m_ImageViews[index]; }
+	private:
+		void createSwapchain(uint32_t width, uint32_t height);
+		void destroySwapchain();
+		VkSurfaceFormatKHR chooseSurfaceFormat() const;
+		VkPresentModeKHR choosePresentMode() const;
+		VkExtent2D chooseExtent(uint32_t width, uint32_t height) const;
+	private:
+		VkPhysicalDevice m_PhysicalDevice = VK_NULL_HANDLE;
+		VkDevice m_Device = VK_NULL_HANDLE;
+		VkSurfaceKHR m_Surface = VK_NULL_HANDLE;
+		VkSwapchainKHR m_Swapchain = VK_NULL_HANDLE;
+		VkFormat m_Format = VK_FORMAT_UNDEFINED;
+		VkExtent2D m_Extent{};
+		uint32_t m_ImageCount = 0;
+		std::vector<VkImage> m_Images;
+		std::vector<VkImageView> m_ImageViews;
+		SwapchainCreateInfo m_Info{};
 	};
 
+	class VulkanInstance {
+	public:
+		VulkanInstance(const Window& window);
+		~VulkanInstance();
+
+		VkInstance getInstance() const { return m_Instance; }
+		VkSurfaceKHR getSurface() const { return m_Surface; }
+	private:
+		void createInstance(const Window& window);
+		void createSurface(const Window& window);
+	private:
+		VkInstance m_Instance = VK_NULL_HANDLE;
+		VkSurfaceKHR m_Surface = VK_NULL_HANDLE;
+	};
+
+	class VulkanDevice {
+	public:
+		VulkanDevice(
+			VkInstance instance,
+			VkSurfaceKHR surface,
+			const std::vector<const char*>& requiredExtensions = {},
+			const std::vector<const char*>& requiredLayers = {});
+		~VulkanDevice();
+
+		VkPhysicalDevice physical() const { return m_PhysicalDevice; }
+		VkDevice logical() const { return m_Device; }
+		VkQueue graphicsQueue() const { return m_GraphicsQueue; }
+		VkQueue computeQueue() const { return m_ComputeQueue; }
+		VkQueue transferQueue() const { return m_TransferQueue; }
+		uint32_t graphicsFamily() const { return m_GraphicsFamily; }
+		uint32_t computeFamily() const { return m_ComputeFamily; }
+		uint32_t transferFamily() const { return m_TransferFamily; }
+		const VkPhysicalDeviceLimits& limits() const { return m_Limits; }
+	private:
+		void pickPhysicalDevice();
+		bool isDeviceSuitable(VkPhysicalDevice device) const;
+		void createLogicalDevice(
+			const std::vector<const char*>& requiredExtensions,
+			const std::vector<const char*>& requiredLayers);
+		void queryLimits();
+	private:
+		VkInstance m_Instance = VK_NULL_HANDLE;
+		VkSurfaceKHR m_Surface = VK_NULL_HANDLE;
+		VkPhysicalDevice m_PhysicalDevice = VK_NULL_HANDLE;
+		VkDevice m_Device = VK_NULL_HANDLE;
+		VkQueue m_GraphicsQueue = VK_NULL_HANDLE;
+		VkQueue m_ComputeQueue = VK_NULL_HANDLE;
+		VkQueue m_TransferQueue = VK_NULL_HANDLE;
+		uint32_t m_GraphicsFamily = UINT32_MAX;
+		uint32_t m_ComputeFamily = UINT32_MAX;
+		uint32_t m_TransferFamily = UINT32_MAX;
+		VkPhysicalDeviceLimits m_Limits{};
+	};
+
+	class VulkanAllocator {
+	public:
+		VulkanAllocator(
+			VkInstance instance,
+			VkPhysicalDevice physicalDevice,
+			VkDevice device);
+		~VulkanAllocator();
+
+		bool createBuffer(
+			VkDeviceSize size,
+			VkBufferUsageFlags usage,
+			VmaMemoryUsage memoryUsage,
+			VmaAllocationCreateFlags flags,
+			VkBuffer& outBuffer,
+			VmaAllocation& outAllocation,
+			VmaAllocationInfo* outInfo = nullptr);
+
+		void destroyBuffer(VkBuffer buffer, VmaAllocation allocation);
+
+		bool createImage(
+			const VkImageCreateInfo& imageInfo,
+			VmaMemoryUsage memoryUsage,
+			VmaAllocationCreateFlags flags,
+			VkImage& outImage,
+			VmaAllocation& outAllocation,
+			VmaAllocationInfo* outInfo = nullptr);
+
+		void destroyImage(VkImage image, VmaAllocation allocation);
+		void* map(VmaAllocation allocation);
+		void unmap(VmaAllocation allocation);
+		VmaAllocator handle() const { return m_Allocator; }
+	private:
+		VmaAllocator m_Allocator = VK_NULL_HANDLE;
+	};
+
+	class VulkanQueue {
+	public:
+		VulkanQueue(VkDevice device, VkQueue queue, uint32_t family);
+		~VulkanQueue();
+
+		VulkanCommandBuffer* acquire();
+		uint64_t submit(VulkanCommandBuffer** buffers, uint32_t count);
+		bool submitImmediate(VkCommandBuffer cmdBuffer, VkFence fence);
+		void addWait(VkSemaphore semaphore, uint64_t value);
+		void addSignal(VkSemaphore semaphore, uint64_t value);
+		bool poll(uint64_t submissionID);
+		void wait(uint64_t id, uint64_t timeout);
+		void retire();
+
+		VkQueue getVkQueue();
+		uint64_t getLastSubmittedID();
+		uint64_t getCompletedID();
+	private:
+		VkDevice m_Device = VK_NULL_HANDLE;
+		VkQueue m_Queue = VK_NULL_HANDLE;
+		uint32_t m_Family = UINT32_MAX;
+		VkSemaphore m_Timeline = VK_NULL_HANDLE;
+		uint64_t m_Submitted = 0;
+		uint64_t m_Completed = 0;
+
+		std::vector<VkSemaphore> m_WaitSemaphores;
+		std::vector<uint64_t> m_WaitValues;
+		std::vector<VkSemaphore> m_SignalSemaphores;
+		std::vector<uint64_t> m_SignalValues;
+
+		std::deque<std::shared_ptr<VulkanCommandBuffer>> m_Free;
+		std::vector<std::shared_ptr<VulkanCommandBuffer>> m_InFlight;
+		std::mutex m_Mutex;
+	};
+
+
+	class VulkanDescriptorPoolManager {
+	public:
+		VulkanDescriptorPoolManager(VulkanContext& ctx);
+		~VulkanDescriptorPoolManager();
+
+		VkDescriptorPool acquire(bool allowFree, bool updateAfterBind, uint64_t gpuValue);
+		void submit(uint64_t submissionID);
+		void retire(uint64_t completedSubmission);
+		void resetPersistent();
+		void resetBindless();
+	private:
+		VkDescriptorPool createPool(uint32_t maxSets, bool allowFree, bool updateAfterBind);
+	private:
+		VulkanContext& m_Ctx;
+
+
+		struct VulkanDescriptorPool {
+			VkDescriptorPool pool = VK_NULL_HANDLE;
+			uint64_t submissionID = 0; // 0 = free
+		};
+
+		std::deque<VulkanDescriptorPool> m_usedPools;
+		std::vector<VkDescriptorPool> m_freePools;
+		VulkanDescriptorPool m_CurrentTransient;
+		VkDescriptorPool m_Persistent = VK_NULL_HANDLE;
+		VkDescriptorPool m_Bindless = VK_NULL_HANDLE;
+	};
+
+	class VulkanDescriptorManager {
+	public:
+		VulkanDescriptorManager(VulkanContext& ctx);
+		~VulkanDescriptorManager();
+
+		VulkanResourceGroupLayout createLayout(const ResourceGroupLayout& layout);
+		VulkanResourceGroup createGroup(
+			const ResourceGroupLayoutHandle& layout,
+			const ResourceGroupDesc& desc, uint64_t timelineValue = 0);
+
+		void bind(
+			VkCommandBuffer cmd,
+			VkPipelineLayout pipelineLayout,
+			uint32_t setIndex,
+			const VulkanResourceGroup& group);
+	private:
+		VulkanContext& m_Ctx;
+	};
+
+	struct VulkanContext {
+		void* window = nullptr;
+		std::unique_ptr<VulkanInstance> instance;
+		std::unique_ptr<VulkanDevice> device;
+		std::unique_ptr<VulkanSwapchain> swapchain;
+		std::unique_ptr<VulkanQueue> graphicsQueue;
+		std::unique_ptr<VulkanQueue> computeQueue;
+		std::unique_ptr<VulkanQueue> transferQueue;
+		std::unique_ptr<VulkanAllocator> allocator;
+		std::unique_ptr<VulkanDescriptorManager> descriptorSetManager;
+		std::unique_ptr<VulkanDescriptorPoolManager> descriptorPoolManager;
+	};
+
+	// Global Resource Pools
 	extern ResourcePool<VulkanBuffer, BufferHandle> g_BufferPool;
 	extern ResourcePool<VulkanBufferView, BufferViewHandle> g_BufferViewPool;
 	extern ResourcePool<VkRenderPass, RenderPassHandle> g_RenderPassPool;
 	extern ResourcePool<VulkanTexture, TextureHandle> g_TexturePool;
 	extern ResourcePool<VulkanShader, ShaderHandle> g_ShaderPool;
 	extern ResourcePool<VulkanPipeline, PipelineHandle> g_PipelinePool;
-	extern ResourcePool<VulkanPipelineLayout, PipelineLayoutHandle> g_LayoutPool;
-
+	extern ResourcePool<VulkanPipelineLayout, PipelineLayoutHandle> g_PipelineLayoutPool;
+	extern ResourcePool<VulkanResourceGroupLayout, ResourceGroupLayoutHandle> g_ResourceGroupLayoutPool;
 	extern ResourcePool<VulkanResourceGroup, ResourceGroupHandle> g_TransientResourceGroupPool;
 	extern ResourcePool<VulkanResourceGroup, ResourceGroupHandle> g_PersistentResourceGroupPool;
-
 	extern ResourcePool<VulkanCommandList, CommandList> g_CommandListPool;
+
 
 	extern std::unordered_map<Hash64, BufferViewHandle> g_BufferViewCache;
 	extern std::unordered_map<Hash64, ResourceGroupHandle> g_ResourceGroupCache;
 
+	// Context & Cleanup Functions
 
-	/*
-	extern ResourcePool<VulkanTextureView, HandleType::TextureView> g_TextureViewPool;
-	extern ResourcePool<VulkanTextureView, HandleType::Sampler> g_SamplerPool;*/
-
-	//  CONTEXT ACCESS
 
 	VulkanContext& GetVulkanContext();
-	FrameContex& GetFrameContex(uint32_t index);
-
-	// Cleanup function for common Vulkan resources
+	void freeAllVulkanResources();
 	void VKShutdownCommon();
 
-	//  INITIALIZATION FUNCTIONS
-
-	bool InitInstance(uint32_t extCount, const char** extentions);
-
-	bool PickPhysicalDevice(
-		VkInstance instance,
-		VkSurfaceKHR surface,
-		VkPhysicalDevice* outPhysicalDevice,
-		uint32_t* outGraphicsQueueFamily);
-
-	bool InitLogicalDevice(
-		VkPhysicalDevice physicalDevice,
-		uint32_t graphicsQueueFamily,
-		VkDevice* outDevice,
-		VkQueue* outGraphicsQueue);
-
-	bool InitVulkanMemoryAllocator(
-		VkInstance instance,
-		VkPhysicalDevice physicalDevice,
-		VkDevice device);
-
-	//  SWAPCHAIN FUNCTIONS
-
-	SwapchainSupportDetails QuerySwapchainSupport(
-		VkPhysicalDevice device,
-		VkSurfaceKHR surface);
-
-	VkSurfaceFormatKHR ChooseSwapSurfaceFormat(
-		const std::vector<VkSurfaceFormatKHR>& availableFormats);
-
-	VkPresentModeKHR ChoosePresentMode(
-		const std::vector<VkPresentModeKHR>& availablePresentModes);
-
-	VkExtent2D ChooseSwapExtent(
-		const VkSurfaceCapabilitiesKHR& capabilities,
-		Window window);
-	bool CreateSwapchain(VulkanContext& ctx, Window window);
-	void InitFrameContext();
-	void CreateSurface(Window);
-	bool CreatePersistentDescriptorPool();
-	bool CreatePerFrameUploadBuffer(FrameContex& frame, uint32_t bufferSize);
-
-	// shutdown / cleanup
-	void freeResourceGroups();
-	void freeAllVulkanResources();
-
-
-	VkRenderPass GetVulkanRenderPass(RenderPassHandle handle);
-
+	// Descriptor Pool Creation
 
 	inline VkDescriptorPool CreateDescriptorPool(const DescriptorPoolSizes& sizes, bool allowFree) {
 		std::vector<VkDescriptorPoolSize> poolSizes;
-		auto ctx = GetVulkanContext();
+		auto& ctx = GetVulkanContext();
+
 		if (sizes.uniformBufferCount > 0)
 			poolSizes.push_back({ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, sizes.uniformBufferCount });
 		if (sizes.storageBufferCount > 0)
@@ -497,389 +701,637 @@ namespace RxVK {
 		poolInfo.pPoolSizes = poolSizes.data();
 
 		VkDescriptorPool pool;
-		VkResult result = vkCreateDescriptorPool(ctx.device, &poolInfo, nullptr, &pool);
+		VkResult result = vkCreateDescriptorPool(ctx.device->logical(), &poolInfo, nullptr, &pool);
 
 		return (result == VK_SUCCESS) ? pool : VK_NULL_HANDLE;
 	}
 
-	// Format conversion helpers
-	inline VkFormat ToVkFormat(DataFormat format) {
-		switch (format) {
-		case DataFormat::R8:
-			return VK_FORMAT_R8_UNORM;
-		case DataFormat::RG8: return VK_FORMAT_R8G8_UNORM;
-		case DataFormat::RGBA8: return VK_FORMAT_R8G8B8A8_UNORM;
-		case DataFormat::R16F: return VK_FORMAT_R16_SFLOAT;
-		case DataFormat::RG16F: return VK_FORMAT_R16G16_SFLOAT;
-		case DataFormat::RGBA16F: return VK_FORMAT_R16G16B16A16_SFLOAT;
-		case DataFormat::R32F: return VK_FORMAT_R32_SFLOAT;
-		case DataFormat::RG32F: return VK_FORMAT_R32G32_SFLOAT;
-		case DataFormat::RGBA32F: return VK_FORMAT_R32G32B32A32_SFLOAT;
-		case DataFormat::RGB32F:
-			return VK_FORMAT_R32G32B32_SFLOAT; // Vertex only
 
-		// Unsupported formats
-		case DataFormat::RGB8:
-			RENDERX_ERROR("RGB8 not supported in Vulkan. Use RGBA8");
-			return VK_FORMAT_UNDEFINED;
-		case DataFormat::RGB16F:
-			RENDERX_ERROR("RGB16F not supported in Vulkan. Use RGBA16F");
-			return VK_FORMAT_UNDEFINED;
-
-		default:
-			RENDERX_ERROR("Unknown DataFormat: {}", static_cast<int>(format));
-			return VK_FORMAT_UNDEFINED;
-		}
-	}
-
-	inline VkFormat ToVkTextureFormat(TextureFormat format) {
-		switch (format) {
-		case TextureFormat::R8: return VK_FORMAT_R8_UNORM;
-		case TextureFormat::R16F: return VK_FORMAT_R16_SFLOAT;
-		case TextureFormat::R32F: return VK_FORMAT_R32_SFLOAT;
-
-		case TextureFormat::RGBA8: return VK_FORMAT_R8G8B8A8_UNORM;
-		case TextureFormat::RGBA8_SRGB: return VK_FORMAT_R8G8B8A8_SRGB;
-		case TextureFormat::RGBA16F: return VK_FORMAT_R16G16B16A16_SFLOAT;
-		case TextureFormat::RGBA32F: return VK_FORMAT_R32G32B32A32_SFLOAT;
-
-		case TextureFormat::BGRA8: return VK_FORMAT_B8G8R8A8_UNORM;
-		case TextureFormat::BGRA8_SRGB: return VK_FORMAT_B8G8R8A8_SRGB;
-
-		case TextureFormat::Depth32F: return VK_FORMAT_D32_SFLOAT;
-		case TextureFormat::Depth24Stencil8: return VK_FORMAT_D24_UNORM_S8_UINT;
-
-		case TextureFormat::BC1: return VK_FORMAT_BC1_RGBA_UNORM_BLOCK;
-		case TextureFormat::BC1_SRGB: return VK_FORMAT_BC1_RGBA_SRGB_BLOCK;
-		case TextureFormat::BC3: return VK_FORMAT_BC3_UNORM_BLOCK;
-		case TextureFormat::BC3_SRGB: return VK_FORMAT_BC3_SRGB_BLOCK;
-
-		default:
-			RENDERX_ERROR("Unknown TextureFormat: {}", static_cast<int>(format));
-			return VK_FORMAT_UNDEFINED;
-		}
-	}
-
-
-	inline VkShaderStageFlagBits ToVkShaderStage(ShaderStage type) {
-		switch (type) {
-		case ShaderStage::Vertex: return VK_SHADER_STAGE_VERTEX_BIT;
-		case ShaderStage::Fragment: return VK_SHADER_STAGE_FRAGMENT_BIT;
-		case ShaderStage::Compute: return VK_SHADER_STAGE_COMPUTE_BIT;
-		case ShaderStage::Geometry: return VK_SHADER_STAGE_GEOMETRY_BIT;
-		case ShaderStage::TessControl: return VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
-		case ShaderStage::TessEvaluation: return VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
-
-		default:
-			RENDERX_ERROR("Unknown ShaderStage: {}", static_cast<int>(type));
-			return VK_SHADER_STAGE_VERTEX_BIT;
-		}
-	}
-
-	inline VkPrimitiveTopology ToVkPrimitiveTopology(PrimitiveType type) {
-		switch (type) {
-		case PrimitiveType::Points: return VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
-		case PrimitiveType::Lines: return VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
-		case PrimitiveType::LineStrip: return VK_PRIMITIVE_TOPOLOGY_LINE_STRIP;
-		case PrimitiveType::Triangles: return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-		case PrimitiveType::TriangleStrip: return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
-		case PrimitiveType::TriangleFan: return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN;
-
-		default:
-			RENDERX_ERROR("Unknown PrimitiveType: {}", static_cast<int>(type));
-			return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-		}
-	}
-
-	inline VkCullModeFlags ToVkCullMode(CullMode mode) {
-		switch (mode) {
-		case CullMode::None: return VK_CULL_MODE_NONE;
-		case CullMode::Front: return VK_CULL_MODE_FRONT_BIT;
-		case CullMode::Back: return VK_CULL_MODE_BACK_BIT;
-		case CullMode::FrontAndBack: return VK_CULL_MODE_FRONT_AND_BACK;
-
-		default:
-			RENDERX_ERROR("Unknown CullMode: {}", static_cast<int>(mode));
-			return VK_CULL_MODE_BACK_BIT;
-		}
-	}
-
-	inline VkCompareOp ToVkCompareOp(CompareFunc func) {
-		switch (func) {
-		case CompareFunc::Never: return VK_COMPARE_OP_NEVER;
-		case CompareFunc::Less: return VK_COMPARE_OP_LESS;
-		case CompareFunc::Equal: return VK_COMPARE_OP_EQUAL;
-		case CompareFunc::LessEqual: return VK_COMPARE_OP_LESS_OR_EQUAL;
-		case CompareFunc::Greater: return VK_COMPARE_OP_GREATER;
-		case CompareFunc::NotEqual: return VK_COMPARE_OP_NOT_EQUAL;
-		case CompareFunc::GreaterEqual: return VK_COMPARE_OP_GREATER_OR_EQUAL;
-		case CompareFunc::Always: return VK_COMPARE_OP_ALWAYS;
-
-		default:
-			RENDERX_ERROR("Unknown CompareFunc: {}", static_cast<int>(func));
-			return VK_COMPARE_OP_ALWAYS;
-		}
-	}
-
-	inline VkPolygonMode ToVkPolygonMode(FillMode mode) {
-		switch (mode) {
-		case FillMode::Solid: return VK_POLYGON_MODE_FILL;
-		case FillMode::Wireframe: return VK_POLYGON_MODE_LINE;
-		case FillMode::Point: return VK_POLYGON_MODE_POINT;
-
-		default:
-			RENDERX_ERROR("Unknown FillMode: {}", static_cast<int>(mode));
-			return VK_POLYGON_MODE_FILL;
-		}
-	}
-	//
-	inline VkBlendFactor ToVkBlendFactor(BlendFunc func) {
-		switch (func) {
-		case BlendFunc::Zero: return VK_BLEND_FACTOR_ZERO;
-		case BlendFunc::One: return VK_BLEND_FACTOR_ONE;
-		case BlendFunc::SrcColor: return VK_BLEND_FACTOR_SRC_COLOR;
-		case BlendFunc::OneMinusSrcColor: return VK_BLEND_FACTOR_ONE_MINUS_SRC_COLOR;
-		case BlendFunc::DstColor: return VK_BLEND_FACTOR_DST_COLOR;
-		case BlendFunc::OneMinusDstColor: return VK_BLEND_FACTOR_ONE_MINUS_DST_COLOR;
-		case BlendFunc::SrcAlpha: return VK_BLEND_FACTOR_SRC_ALPHA;
-		case BlendFunc::OneMinusSrcAlpha: return VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-		case BlendFunc::DstAlpha: return VK_BLEND_FACTOR_DST_ALPHA;
-		case BlendFunc::OneMinusDstAlpha: return VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA;
-		case BlendFunc::ConstantColor: return VK_BLEND_FACTOR_CONSTANT_COLOR;
-		case BlendFunc::OneMinusConstantColor: return VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_COLOR;
-		default:
-			RENDERX_ERROR("Unknown BlendFunc");
-			return VK_BLEND_FACTOR_ONE;
-		}
-	}
-
-	inline VkBlendOp ToVkBlendOp(BlendOp op) {
-		switch (op) {
-		case BlendOp::Add: return VK_BLEND_OP_ADD;
-		case BlendOp::Subtract: return VK_BLEND_OP_SUBTRACT;
-		case BlendOp::ReverseSubtract: return VK_BLEND_OP_REVERSE_SUBTRACT;
-		case BlendOp::Min: return VK_BLEND_OP_MIN;
-		case BlendOp::Max: return VK_BLEND_OP_MAX;
-		default:
-			RENDERX_ERROR("Unknown BlendOp");
-			return VK_BLEND_OP_ADD;
-		}
-	}
-
-	inline VkAttachmentLoadOp ToVkAttachmentLoadOp(LoadOp op) {
-		switch (op) {
-		case LoadOp::Load:
-			return VK_ATTACHMENT_LOAD_OP_LOAD;
-
-		case LoadOp::Clear:
-			return VK_ATTACHMENT_LOAD_OP_CLEAR;
-
-		case LoadOp::DontCare:
-			return VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-
-		default:
-			RENDERX_ERROR("Unknown LoadOp");
-			return VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-		}
-	}
-
-	inline VkAttachmentStoreOp ToVkAttachmentStoreOp(StoreOp op) {
-		switch (op) {
-		case StoreOp::Store:
-			return VK_ATTACHMENT_STORE_OP_STORE;
-
-		case StoreOp::DontCare:
-			return VK_ATTACHMENT_STORE_OP_DONT_CARE;
-
-		default:
-			RENDERX_ERROR("Unknown StoreOp");
-			return VK_ATTACHMENT_STORE_OP_DONT_CARE;
-		}
-	}
-
-	inline VkImageLayout ToVkLayout(ResourceState state) {
-		switch (state) {
-		case ResourceState::Undefined:
-			return VK_IMAGE_LAYOUT_UNDEFINED;
-		case ResourceState::RenderTarget:
-			return VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-		case ResourceState::DepthWrite:
-			return VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-		case ResourceState::ShaderRead:
-			return VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-		case ResourceState::Present:
-			return VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-		default:
-			return VK_IMAGE_LAYOUT_UNDEFINED;
-		}
-	}
-
-	inline VkDescriptorType ToVkDescriptorType(ResourceType type) {
-		switch (type) {
-		case ResourceType::ConstantBuffer:
-			return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-
-		case ResourceType::StorageBuffer:
-		case ResourceType::RWStorageBuffer:
-			return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-
-		case ResourceType::Texture_SRV:
-			return VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-
-		case ResourceType::Texture_UAV:
-			return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-
-		case ResourceType::Sampler:
-			return VK_DESCRIPTOR_TYPE_SAMPLER;
-
-		case ResourceType::CombinedTextureSampler:
-			return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-
-		case ResourceType::AccelerationStructure:
-			return VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
-
-		default:
-			RENDERX_ERROR("Unknown ResourceType");
-			return VK_DESCRIPTOR_TYPE_MAX_ENUM;
-		}
-	}
-
-	inline VkShaderStageFlags ToVkShaderStageFlags(ShaderStage stages) {
-		VkShaderStageFlags vkStages = 0;
-
-		if (Has(stages, ShaderStage::Vertex))
-			vkStages |= VK_SHADER_STAGE_VERTEX_BIT;
-
-		if (Has(stages, ShaderStage::Fragment))
-			vkStages |= VK_SHADER_STAGE_FRAGMENT_BIT;
-
-		if (Has(stages, ShaderStage::Geometry))
-			vkStages |= VK_SHADER_STAGE_GEOMETRY_BIT;
-
-		if (Has(stages, ShaderStage::TessControl))
-			vkStages |= VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
-
-		if (Has(stages, ShaderStage::TessEvaluation))
-			vkStages |= VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
-
-		if (Has(stages, ShaderStage::Compute))
-			vkStages |= VK_SHADER_STAGE_COMPUTE_BIT;
-
-		return vkStages;
-	}
-
-	inline VkBufferUsageFlags ToVkBufferFlags(BufferFlags flags) {
-		VkBufferUsageFlags vkFlags = 0;
-
-		if (Has(flags, BufferFlags::Vertex))
-			vkFlags |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-
-		if (Has(flags, BufferFlags::Index))
-			vkFlags |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
-
-		if (Has(flags, BufferFlags::Uniform))
-			vkFlags |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-
-		if (Has(flags, BufferFlags::Storage))
-			vkFlags |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-
-		if (Has(flags, BufferFlags::Indirect))
-			vkFlags |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
-
-		if (Has(flags, BufferFlags::TransferSrc))
-			vkFlags |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-
-		if (Has(flags, BufferFlags::TransferDst))
-			vkFlags |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-
-		return vkFlags;
-	}
-
-	// Convert MemoryType to VMA allocation info
-	inline VmaAllocationCreateInfo ToVmaMomoryType(MemoryType type, BufferFlags flags) {
+	// VMA Memory Allocation Conversion
+	/// Convert RenderX MemoryType to VMA allocation info
+	inline VmaAllocationCreateInfo ToVmaAllocationCreateInfo(MemoryType type, BufferFlags flags) {
 		VmaAllocationCreateInfo allocInfo = {};
-
-		// Note: Static/Dynamic from BufferFlags affects the allocation strategy
-		bool isDynamic = Has(flags, BufferFlags::Dynamic);
+		bool isDynamic = Has(flags, BufferFlags::DYNAMIC);
+		bool isStreaming = Has(flags, BufferFlags::STREAMING);
 
 		switch (type) {
-		case MemoryType::GpuOnly:
+		case MemoryType::GPU_ONLY:
 			allocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
 			allocInfo.flags = 0;
 			break;
 
-		case MemoryType::CpuToGpu:
+		case MemoryType::CPU_TO_GPU:
 			allocInfo.usage = VMA_MEMORY_USAGE_AUTO;
 			allocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
-			if (isDynamic) {
+
+			if (isDynamic || isStreaming) {
 				allocInfo.flags |= VMA_ALLOCATION_CREATE_MAPPED_BIT;
 			}
+
+			allocInfo.flags |= VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT;
 			break;
 
-		case MemoryType::GpuToCpu:
+		case MemoryType::GPU_TO_CPU:
 			allocInfo.usage = VMA_MEMORY_USAGE_AUTO;
 			allocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT |
 							  VMA_ALLOCATION_CREATE_MAPPED_BIT;
+
 			allocInfo.requiredFlags = VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
 			break;
 
-		case MemoryType::CpuOnly:
+		case MemoryType::CPU_ONLY:
 			allocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
 			allocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT |
 							  VMA_ALLOCATION_CREATE_MAPPED_BIT;
 			break;
 
-		case MemoryType::Auto:
+		case MemoryType::AUTO:
 			allocInfo.usage = VMA_MEMORY_USAGE_AUTO;
 			allocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT;
-			if (isDynamic) {
-				allocInfo.flags |= VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+
+			if (isDynamic || isStreaming) {
+				allocInfo.flags |= VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
+								   VMA_ALLOCATION_CREATE_MAPPED_BIT;
 			}
 			break;
 
 		default:
-			// Fallback
 			allocInfo.usage = VMA_MEMORY_USAGE_AUTO;
+			allocInfo.flags = 0;
 			break;
 		}
 
 		return allocInfo;
 	}
 
-	// Convert MemoryType to raw Vulkan memory properties (if not using VMA)
-	inline VkMemoryPropertyFlags MemoryTypeToVulkan(MemoryType type) {
-		VkMemoryPropertyFlags vkFlags = 0;
+	/// Legacy conversion to VkMemoryPropertyFlags
+	/// VMA 3.0+ prefers VmaAllocationCreateInfo approach
+	inline VkMemoryPropertyFlags ToVulkanMemoryPropertyFlags(MemoryType type) {
+		switch (type) {
+		case MemoryType::GPU_ONLY:
+			return VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+
+		case MemoryType::CPU_TO_GPU:
+			return VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+				   VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+
+		case MemoryType::GPU_TO_CPU:
+			return VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+				   VK_MEMORY_PROPERTY_HOST_COHERENT_BIT |
+				   VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+
+		case MemoryType::CPU_ONLY:
+			return VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+				   VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+
+		case MemoryType::AUTO:
+			return VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+
+		default:
+			return 0;
+		}
+	}
+
+	/// Extended allocation info with priority and dedicated allocation support
+	inline VmaAllocationCreateInfo ToVmaAllocationCreateInfoEx(
+		MemoryType type,
+		BufferFlags flags,
+		float priority = 0.5f,
+		bool dedicatedAllocation = false) {
+		VmaAllocationCreateInfo allocInfo = ToVmaAllocationCreateInfo(type, flags);
+		allocInfo.priority = priority;
+		if (dedicatedAllocation) {
+			allocInfo.flags |= VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
+		}
+
+		return allocInfo;
+	}
+
+	/// Get preferred flags vs required flags
+	inline void GetMemoryRequirements(
+		MemoryType type,
+		VkMemoryPropertyFlags& preferredFlags,
+		VkMemoryPropertyFlags& requiredFlags) {
+		requiredFlags = 0;
+		preferredFlags = 0;
 
 		switch (type) {
-		case MemoryType::GpuOnly:
-			vkFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+		case MemoryType::GPU_ONLY:
+			preferredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+			requiredFlags = 0; // Can fallback if no device-local available
 			break;
 
-		case MemoryType::CpuToGpu:
-			vkFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-					  VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+		case MemoryType::CPU_TO_GPU:
+			requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+							VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+			preferredFlags = requiredFlags | VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
 			break;
 
-		case MemoryType::GpuToCpu:
-			vkFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-					  VK_MEMORY_PROPERTY_HOST_COHERENT_BIT |
-					  VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+		case MemoryType::GPU_TO_CPU:
+			requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+							VK_MEMORY_PROPERTY_HOST_COHERENT_BIT |
+							VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+			preferredFlags = requiredFlags;
 			break;
 
-		case MemoryType::CpuOnly:
-			vkFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-					  VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+		case MemoryType::CPU_ONLY:
+			requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+							VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+			preferredFlags = requiredFlags;
 			break;
 
-		case MemoryType::Auto:
-			// This is a hint, not a hard requirement
-			// Prefer device local, but fallback to host visible
-			vkFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-			//  fallback logic when this fails
+		case MemoryType::AUTO:
+			preferredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+			requiredFlags = 0;
+			break;
+		}
+	}
+
+	// Image/Texture Memory Allocation
+	/// VMA allocation info specifically for images/textures
+	inline VmaAllocationCreateInfo ToVmaAllocationCreateInfoForImage(
+		MemoryType type,
+		bool isRenderTarget = false,
+		bool isDynamic = false) {
+		VmaAllocationCreateInfo allocInfo = {};
+
+		switch (type) {
+		case MemoryType::GPU_ONLY:
+			allocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
+			allocInfo.flags = 0;
+
+			// Render targets should prefer dedicated allocations
+			if (isRenderTarget) {
+				allocInfo.flags |= VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
+			}
+			break;
+
+		case MemoryType::CPU_TO_GPU:
+			// For dynamic textures (e.g., streaming video)
+			allocInfo.usage = VMA_MEMORY_USAGE_AUTO;
+			allocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+
+			if (isDynamic) {
+				allocInfo.flags |= VMA_ALLOCATION_CREATE_MAPPED_BIT;
+			}
+			break;
+
+		case MemoryType::GPU_TO_CPU:
+			// For readback
+			allocInfo.usage = VMA_MEMORY_USAGE_AUTO;
+			allocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT |
+							  VMA_ALLOCATION_CREATE_MAPPED_BIT;
+			allocInfo.requiredFlags = VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+			break;
+
+		case MemoryType::AUTO:
+		default:
+			allocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
+			allocInfo.flags = 0;
 			break;
 		}
 
-		return vkFlags;
+		return allocInfo;
 	}
-} // namespace RxVK
+
+
+	// Utility Functions
+	/// Check if a memory type requires host-visible memory
+	inline bool IsHostVisible(MemoryType type) {
+		return type == MemoryType::CPU_TO_GPU ||
+			   type == MemoryType::GPU_TO_CPU ||
+			   type == MemoryType::CPU_ONLY;
+	}
+
+	/// Check if a memory type should be persistently mapped
+	inline bool ShouldBePersistentlyMapped(MemoryType type, BufferFlags flags) {
+		bool isDynamic = Has(flags, BufferFlags::DYNAMIC);
+		bool isStreaming = Has(flags, BufferFlags::STREAMING);
+
+		return IsHostVisible(type) && (isDynamic || isStreaming);
+	}
+
+	/// Get human-readable name for memory type (useful for debugging)
+	inline const char* MemoryTypeToString(MemoryType type) {
+		switch (type) {
+		case MemoryType::GPU_ONLY: return "GPU_ONLY";
+		case MemoryType::CPU_TO_GPU: return "CPU_TO_GPU";
+		case MemoryType::GPU_TO_CPU: return "GPU_TO_CPU";
+		case MemoryType::CPU_ONLY: return "CPU_ONLY";
+		case MemoryType::AUTO: return "AUTO";
+		default: return "UNKNOWN";
+		}
+	}
+
+	/// Get recommended memory type based on usage pattern
+	inline MemoryType GetRecommendedMemoryType(BufferFlags flags) {
+		if (Has(flags, BufferFlags::DYNAMIC) || Has(flags, BufferFlags::STREAMING)) {
+			return MemoryType::CPU_TO_GPU;
+		}
+		else if (Has(flags, BufferFlags::STATIC)) {
+			return MemoryType::GPU_ONLY;
+		}
+
+		// Default to AUTO and let VMA decide
+		return MemoryType::AUTO;
+	}
+
+	// Format Conversion
+	inline VkFormat ToVulkanFormat(Format format) {
+		switch (format) {
+		case Format::UNDEFINED: return VK_FORMAT_UNDEFINED;
+		case Format::R8_UNORM: return VK_FORMAT_R8_UNORM;
+		case Format::RG8_UNORM: return VK_FORMAT_R8G8_UNORM;
+		case Format::RGBA8_UNORM: return VK_FORMAT_R8G8B8A8_UNORM;
+		case Format::RGBA8_SRGB: return VK_FORMAT_R8G8B8A8_SRGB;
+		case Format::BGRA8_UNORM: return VK_FORMAT_B8G8R8A8_UNORM;
+		case Format::BGRA8_SRGB: return VK_FORMAT_B8G8R8A8_SRGB;
+		case Format::R16_SFLOAT: return VK_FORMAT_R16_SFLOAT;
+		case Format::RG16_SFLOAT: return VK_FORMAT_R16G16_SFLOAT;
+		case Format::RGBA16_SFLOAT: return VK_FORMAT_R16G16B16A16_SFLOAT;
+		case Format::R32_SFLOAT: return VK_FORMAT_R32_SFLOAT;
+		case Format::RG32_SFLOAT: return VK_FORMAT_R32G32_SFLOAT;
+		case Format::RGB32_SFLOAT: return VK_FORMAT_R32G32B32_SFLOAT;
+		case Format::RGBA32_SFLOAT: return VK_FORMAT_R32G32B32A32_SFLOAT;
+		case Format::D24_UNORM_S8_UINT: return VK_FORMAT_D24_UNORM_S8_UINT;
+		case Format::D32_SFLOAT: return VK_FORMAT_D32_SFLOAT;
+		case Format::BC1_RGBA_UNORM: return VK_FORMAT_BC1_RGBA_UNORM_BLOCK;
+		case Format::BC1_RGBA_SRGB: return VK_FORMAT_BC1_RGBA_SRGB_BLOCK;
+		case Format::BC3_UNORM: return VK_FORMAT_BC3_UNORM_BLOCK;
+		case Format::BC3_SRGB: return VK_FORMAT_BC3_SRGB_BLOCK;
+		default: return VK_FORMAT_UNDEFINED;
+		}
+	}
+
+	// Texture/Image Type Conversion
+	inline VkImageType ToVulkanImageType(TextureType type) {
+		switch (type) {
+		case TextureType::TEXTURE_2D:
+		case TextureType::TEXTURE_2D_ARRAY:
+		case TextureType::TEXTURE_CUBE:
+			return VK_IMAGE_TYPE_2D;
+		case TextureType::TEXTURE_3D:
+			return VK_IMAGE_TYPE_3D;
+		default:
+			return VK_IMAGE_TYPE_2D;
+		}
+	}
+
+	inline VkImageViewType ToVulkanImageViewType(TextureType type) {
+		switch (type) {
+		case TextureType::TEXTURE_2D: return VK_IMAGE_VIEW_TYPE_2D;
+		case TextureType::TEXTURE_3D: return VK_IMAGE_VIEW_TYPE_3D;
+		case TextureType::TEXTURE_CUBE: return VK_IMAGE_VIEW_TYPE_CUBE;
+		case TextureType::TEXTURE_2D_ARRAY: return VK_IMAGE_VIEW_TYPE_2D_ARRAY;
+		default: return VK_IMAGE_VIEW_TYPE_2D;
+		}
+	}
+
+
+	// Filter Conversion
+	inline VkFilter ToVulkanFilter(Filter filter) {
+		switch (filter) {
+		case Filter::NEAREST:
+		case Filter::NEAREST_MIPMAP_NEAREST:
+		case Filter::NEAREST_MIPMAP_LINEAR:
+			return VK_FILTER_NEAREST;
+		case Filter::LINEAR:
+		case Filter::LINEAR_MIPMAP_NEAREST:
+		case Filter::LINEAR_MIPMAP_LINEAR:
+			return VK_FILTER_LINEAR;
+		default:
+			return VK_FILTER_LINEAR;
+		}
+	}
+
+	inline VkSamplerMipmapMode ToVulkanMipmapMode(Filter filter) {
+		switch (filter) {
+		case Filter::NEAREST_MIPMAP_NEAREST:
+		case Filter::LINEAR_MIPMAP_NEAREST:
+			return VK_SAMPLER_MIPMAP_MODE_NEAREST;
+		case Filter::NEAREST_MIPMAP_LINEAR:
+		case Filter::LINEAR_MIPMAP_LINEAR:
+			return VK_SAMPLER_MIPMAP_MODE_LINEAR;
+		default:
+			return VK_SAMPLER_MIPMAP_MODE_NEAREST;
+		}
+	}
+
+
+	// Texture Wrap/Address Mode Conversion
+	inline VkSamplerAddressMode ToVulkanAddressMode(TextureWrap wrap) {
+		switch (wrap) {
+		case TextureWrap::REPEAT: return VK_SAMPLER_ADDRESS_MODE_REPEAT;
+		case TextureWrap::MIRRORED_REPEAT: return VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+		case TextureWrap::CLAMP_TO_EDGE: return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+		case TextureWrap::CLAMP_TO_BORDER: return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+		default: return VK_SAMPLER_ADDRESS_MODE_REPEAT;
+		}
+	}
+
+	// Topology/Primitive Type Conversion
+	inline VkPrimitiveTopology ToVulkanTopology(Topology topology) {
+		switch (topology) {
+		case Topology::POINTS: return VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
+		case Topology::LINES: return VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
+		case Topology::LINE_STRIP: return VK_PRIMITIVE_TOPOLOGY_LINE_STRIP;
+		case Topology::TRIANGLES: return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+		case Topology::TRIANGLE_STRIP: return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+		case Topology::TRIANGLE_FAN: return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN;
+		default: return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+		}
+	}
+
+
+	// Compare Function Conversion
+	inline VkCompareOp ToVulkanCompareOp(CompareFunc func) {
+		switch (func) {
+		case CompareFunc::NEVER: return VK_COMPARE_OP_NEVER;
+		case CompareFunc::LESS: return VK_COMPARE_OP_LESS;
+		case CompareFunc::EQUAL: return VK_COMPARE_OP_EQUAL;
+		case CompareFunc::LESS_EQUAL: return VK_COMPARE_OP_LESS_OR_EQUAL;
+		case CompareFunc::GREATER: return VK_COMPARE_OP_GREATER;
+		case CompareFunc::NOT_EQUAL: return VK_COMPARE_OP_NOT_EQUAL;
+		case CompareFunc::GREATER_EQUAL: return VK_COMPARE_OP_GREATER_OR_EQUAL;
+		case CompareFunc::ALWAYS: return VK_COMPARE_OP_ALWAYS;
+		default: return VK_COMPARE_OP_LESS;
+		}
+	}
+
+
+	// Blend Function Conversion
+	inline VkBlendFactor ToVulkanBlendFactor(BlendFunc func) {
+		switch (func) {
+		case BlendFunc::ZERO: return VK_BLEND_FACTOR_ZERO;
+		case BlendFunc::ONE: return VK_BLEND_FACTOR_ONE;
+		case BlendFunc::SRC_COLOR: return VK_BLEND_FACTOR_SRC_COLOR;
+		case BlendFunc::ONE_MINUS_SRC_COLOR: return VK_BLEND_FACTOR_ONE_MINUS_SRC_COLOR;
+		case BlendFunc::DST_COLOR: return VK_BLEND_FACTOR_DST_COLOR;
+		case BlendFunc::ONE_MINUS_DST_COLOR: return VK_BLEND_FACTOR_ONE_MINUS_DST_COLOR;
+		case BlendFunc::SRC_ALPHA: return VK_BLEND_FACTOR_SRC_ALPHA;
+		case BlendFunc::ONE_MINUS_SRC_ALPHA: return VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+		case BlendFunc::DST_ALPHA: return VK_BLEND_FACTOR_DST_ALPHA;
+		case BlendFunc::ONE_MINUS_DST_ALPHA: return VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA;
+		case BlendFunc::CONSTANT_COLOR: return VK_BLEND_FACTOR_CONSTANT_COLOR;
+		case BlendFunc::ONE_MINUS_CONSTANT_COLOR: return VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_COLOR;
+		default: return VK_BLEND_FACTOR_ONE;
+		}
+	}
+
+
+	// Blend Operation Conversion
+	inline VkBlendOp ToVulkanBlendOp(BlendOp op) {
+		switch (op) {
+		case BlendOp::ADD: return VK_BLEND_OP_ADD;
+		case BlendOp::SUBTRACT: return VK_BLEND_OP_SUBTRACT;
+		case BlendOp::REVERSE_SUBTRACT: return VK_BLEND_OP_REVERSE_SUBTRACT;
+		case BlendOp::MIN: return VK_BLEND_OP_MIN;
+		case BlendOp::MAX: return VK_BLEND_OP_MAX;
+		default: return VK_BLEND_OP_ADD;
+		}
+	}
+
+
+	// Cull Mode Conversion
+	inline VkCullModeFlags ToVulkanCullMode(CullMode mode) {
+		switch (mode) {
+		case CullMode::NONE: return VK_CULL_MODE_NONE;
+		case CullMode::FRONT: return VK_CULL_MODE_FRONT_BIT;
+		case CullMode::BACK: return VK_CULL_MODE_BACK_BIT;
+		case CullMode::FRONT_AND_BACK: return VK_CULL_MODE_FRONT_AND_BACK;
+		default: return VK_CULL_MODE_NONE;
+		}
+	}
+
+
+	// Fill Mode/Polygon Mode Conversion
+	inline VkPolygonMode ToVulkanPolygonMode(FillMode mode) {
+		switch (mode) {
+		case FillMode::SOLID: return VK_POLYGON_MODE_FILL;
+		case FillMode::WIREFRAME: return VK_POLYGON_MODE_LINE;
+		case FillMode::POINT: return VK_POLYGON_MODE_POINT;
+		default: return VK_POLYGON_MODE_FILL;
+		}
+	}
+
+
+	// Load Operation Conversion
+	inline VkAttachmentLoadOp ToVulkanLoadOp(LoadOp op) {
+		switch (op) {
+		case LoadOp::LOAD: return VK_ATTACHMENT_LOAD_OP_LOAD;
+		case LoadOp::CLEAR: return VK_ATTACHMENT_LOAD_OP_CLEAR;
+		case LoadOp::DONT_CARE: return VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		default: return VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		}
+	}
+
+
+	// Store Operation Conversion
+
+	inline VkAttachmentStoreOp ToVulkanStoreOp(StoreOp op) {
+		switch (op) {
+		case StoreOp::STORE: return VK_ATTACHMENT_STORE_OP_STORE;
+		case StoreOp::DONT_CARE: return VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		default: return VK_ATTACHMENT_STORE_OP_STORE;
+		}
+	}
+
+
+	// Shader Stage Conversion
+	inline VkShaderStageFlagBits ToVulkanShaderStage(ShaderStage stage) {
+		switch (stage) {
+		case ShaderStage::VERTEX: return VK_SHADER_STAGE_VERTEX_BIT;
+		case ShaderStage::FRAGMENT: return VK_SHADER_STAGE_FRAGMENT_BIT;
+		case ShaderStage::GEOMETRY: return VK_SHADER_STAGE_GEOMETRY_BIT;
+		case ShaderStage::TESS_CONTROL: return VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
+		case ShaderStage::TESS_EVALUATION: return VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
+		case ShaderStage::COMPUTE: return VK_SHADER_STAGE_COMPUTE_BIT;
+		default: return VK_SHADER_STAGE_VERTEX_BIT;
+		}
+	}
+
+	inline VkShaderStageFlags ToVulkanShaderStageFlags(ShaderStage stages) {
+		VkShaderStageFlags flags = 0;
+
+		if (Has(stages, ShaderStage::VERTEX))
+			flags |= VK_SHADER_STAGE_VERTEX_BIT;
+		if (Has(stages, ShaderStage::FRAGMENT))
+			flags |= VK_SHADER_STAGE_FRAGMENT_BIT;
+		if (Has(stages, ShaderStage::GEOMETRY))
+			flags |= VK_SHADER_STAGE_GEOMETRY_BIT;
+		if (Has(stages, ShaderStage::TESS_CONTROL))
+			flags |= VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
+		if (Has(stages, ShaderStage::TESS_EVALUATION))
+			flags |= VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
+		if (Has(stages, ShaderStage::COMPUTE))
+			flags |= VK_SHADER_STAGE_COMPUTE_BIT;
+
+		return flags;
+	}
+
+
+	// Descriptor/Resource Type Conversion
+	inline VkDescriptorType ToVulkanDescriptorType(ResourceType type) {
+		switch (type) {
+		case ResourceType::CONSTANT_BUFFER:
+			return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		case ResourceType::STORAGE_BUFFER:
+			return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+		case ResourceType::RW_STORAGE_BUFFER:
+			return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+		case ResourceType::TEXTURE_SRV:
+			return VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+		case ResourceType::TEXTURE_UAV:
+			return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+		case ResourceType::SAMPLER:
+			return VK_DESCRIPTOR_TYPE_SAMPLER;
+		case ResourceType::COMBINED_TEXTURE_SAMPLER:
+			return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		case ResourceType::ACCELERATION_STRUCTURE:
+			return VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+		default:
+			return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		}
+	}
+
+
+	// Buffer Usage Flags Conversion
+	inline VkBufferUsageFlags ToVulkanBufferUsage(BufferFlags flags) {
+		VkBufferUsageFlags usage = 0;
+
+		if (Has(flags, BufferFlags::VERTEX))
+			usage |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+		if (Has(flags, BufferFlags::INDEX))
+			usage |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+		if (Has(flags, BufferFlags::UNIFORM))
+			usage |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+		if (Has(flags, BufferFlags::STORAGE))
+			usage |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+		if (Has(flags, BufferFlags::INDIRECT))
+			usage |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
+		if (Has(flags, BufferFlags::TRANSFER_SRC))
+			usage |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+		if (Has(flags, BufferFlags::TRANSFER_DST))
+			usage |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+
+		return usage;
+	}
+
+
+	// Memory Type/VMA Allocation Conversion
+	inline VmaMemoryUsage ToVmaMemoryUsage(MemoryType type) {
+		switch (type) {
+		case MemoryType::GPU_ONLY:
+			return VMA_MEMORY_USAGE_GPU_ONLY;
+		case MemoryType::CPU_TO_GPU:
+			return VMA_MEMORY_USAGE_CPU_TO_GPU;
+		case MemoryType::GPU_TO_CPU:
+			return VMA_MEMORY_USAGE_GPU_TO_CPU;
+		case MemoryType::CPU_ONLY:
+			return VMA_MEMORY_USAGE_CPU_ONLY;
+		case MemoryType::AUTO:
+			return VMA_MEMORY_USAGE_AUTO;
+		default:
+			return VMA_MEMORY_USAGE_AUTO;
+		}
+	}
+
+	inline VmaAllocationCreateFlags ToVmaAllocationFlags(MemoryType type, BufferFlags bufferFlags) {
+		VmaAllocationCreateFlags flags = 0;
+
+		// Memory type specific flags
+		switch (type) {
+		case MemoryType::CPU_TO_GPU:
+			flags |= VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+			flags |= VMA_ALLOCATION_CREATE_MAPPED_BIT;
+			break;
+		case MemoryType::GPU_TO_CPU:
+			flags |= VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT;
+			flags |= VMA_ALLOCATION_CREATE_MAPPED_BIT;
+			break;
+		case MemoryType::CPU_ONLY:
+			flags |= VMA_ALLOCATION_CREATE_MAPPED_BIT;
+			break;
+		case MemoryType::GPU_ONLY:
+
+			break;
+		case MemoryType::AUTO:
+			flags |= VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT;
+			break;
+		}
+
+		// Buffer-specific flags
+		if (Has(bufferFlags, BufferFlags::DYNAMIC)) {
+			flags |= VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+			flags |= VMA_ALLOCATION_CREATE_MAPPED_BIT;
+		}
+
+		return flags;
+	}
+
+
+	// Image Usage Flags Conversion (Helper)
+	inline VkImageUsageFlags GetDefaultImageUsageFlags(TextureType type, Format format) {
+		VkImageUsageFlags usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+								  VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+								  VK_IMAGE_USAGE_SAMPLED_BIT;
+
+		// Add depth/stencil usage for depth formats
+		if (format == Format::D24_UNORM_S8_UINT || format == Format::D32_SFLOAT) {
+			usage |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+		}
+		else {
+			usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+		}
+
+		return usage;
+	}
+
+	// Vertex Input Rate Conversion
+	inline VkVertexInputRate ToVulkanInputRate(bool perInstance) {
+		return perInstance ? VK_VERTEX_INPUT_RATE_INSTANCE : VK_VERTEX_INPUT_RATE_VERTEX;
+	}
+
+
+	// Image Layout Helpers
+	inline VkImageLayout GetDefaultImageLayout(Format format) {
+		if (format == Format::D24_UNORM_S8_UINT || format == Format::D32_SFLOAT) {
+			return VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+		}
+		return VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+	}
+
+	inline VkImageAspectFlags GetImageAspect(Format format) {
+		if (format == Format::D32_SFLOAT) {
+			return VK_IMAGE_ASPECT_DEPTH_BIT;
+		}
+		else if (format == Format::D24_UNORM_S8_UINT) {
+			return VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+		}
+		return VK_IMAGE_ASPECT_COLOR_BIT;
+	}
+
+
+	// Pipeline Stage Flags (for synchronization)
+
+	inline VkPipelineStageFlags ShaderStageToPipelineStage(ShaderStage stages) {
+		VkPipelineStageFlags flags = 0;
+
+		if (Has(stages, ShaderStage::VERTEX))
+			flags |= VK_PIPELINE_STAGE_VERTEX_SHADER_BIT;
+		if (Has(stages, ShaderStage::FRAGMENT))
+			flags |= VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+		if (Has(stages, ShaderStage::GEOMETRY))
+			flags |= VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT;
+		if (Has(stages, ShaderStage::TESS_CONTROL))
+			flags |= VK_PIPELINE_STAGE_TESSELLATION_CONTROL_SHADER_BIT;
+		if (Has(stages, ShaderStage::TESS_EVALUATION))
+			flags |= VK_PIPELINE_STAGE_TESSELLATION_EVALUATION_SHADER_BIT;
+		if (Has(stages, ShaderStage::COMPUTE))
+			flags |= VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+
+		return flags;
+	}
+
+} // namespace VulkanConversion
 } // namespace Rx

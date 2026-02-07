@@ -11,7 +11,7 @@ namespace Rx {
 
 	// Global Variables
 	RenderDispatchTable g_DispatchTable;
-	GraphicsAPI API = GraphicsAPI::None;
+	GraphicsAPI API = GraphicsAPI::NONE;
 
 	void Init(const Window& window) {
 #ifdef RENDERX_DEBUG
@@ -26,16 +26,16 @@ namespace Rx {
 		ProLog::SetConfig(config);
 #endif
 		// If a backend is already active, shut it down cleanly so we can switch.
-		if (API != GraphicsAPI::None && g_DispatchTable.Shutdown) {
+		if (API != GraphicsAPI::NONE && g_DispatchTable.Shutdown) {
 			RENDERX_INFO("Init: shutting down active backend before reinitializing");
 			g_DispatchTable.Shutdown();
 			// Clear function pointers so stale calls are impossible.
 			std::memset(&g_DispatchTable, 0, sizeof(g_DispatchTable));
-			API = GraphicsAPI::None;
+			API = GraphicsAPI::NONE;
 		}
 
 		switch (window.api) {
-		case GraphicsAPI::OpenGL: {
+		case GraphicsAPI::OPENGL: {
 			RENDERX_INFO("Initializing OpenGL backend...");
 #define X(_ret, _name, ...) g_DispatchTable._name = RxGL::GL##_name;
 			RENDERX_API(X)
@@ -49,7 +49,7 @@ namespace Rx {
 			break;
 		}
 
-		case GraphicsAPI::Vulkan: {
+		case GraphicsAPI::VULKAN: {
 			RENDERX_INFO("Initializing Vulkan backend...");
 #define X(_ret, _name, ...) g_DispatchTable._name = RxVK::VK##_name;
 			RENDERX_API(X)
@@ -63,7 +63,7 @@ namespace Rx {
 			break;
 		}
 
-		case GraphicsAPI::None:
+		case GraphicsAPI::NONE:
 			RENDERX_WARN("RendererAPI::None selected no rendering backend loaded.");
 			break;
 
@@ -80,7 +80,7 @@ namespace Rx {
 		}
 		// Reset dispatch table and API so a new backend can be initialized safely.
 		std::memset(&g_DispatchTable, 0, sizeof(g_DispatchTable));
-		API = GraphicsAPI::None;
+		API = GraphicsAPI::NONE;
 
 		PROFILE_END_SESSION();
 		LOG_SHUTDOWN();
@@ -109,30 +109,7 @@ namespace Rx {
 	ResourceGroupHandle CreateResourceGroup(const ResourceGroupDesc& desc) { return g_DispatchTable.CreateResourceGroup(desc); }
 	void DestroyResourceGroup(ResourceGroupHandle& handle) { g_DispatchTable.DestroyResourceGroup(handle); }
 
-	CommandList CreateCommandList(uint32_t frameIndex) { return g_DispatchTable.CreateCommandList(frameIndex); }
+	CommandList* CreateCommandList(uint32_t frameIndex) { return nullptr; }
 	void DestroyCommandList(CommandList& cmdList, uint32_t frameIndex) { g_DispatchTable.DestroyCommandList(cmdList, frameIndex); }
 	void ExecuteCommandList(CommandList& cmdList) { g_DispatchTable.ExecuteCommandList(cmdList); }
-
-	void CommandList::open() { g_DispatchTable.CmdOpen(*this); }
-	void CommandList::close() { g_DispatchTable.CmdClose(*this); }
-	void CommandList::setPipeline(const PipelineHandle& pipeline) { g_DispatchTable.CmdSetPipeline(*this, pipeline); }
-	void CommandList::setIndexBuffer(const BufferHandle& buffer, uint64_t offset) { g_DispatchTable.CmdSetIndexBuffer(*this, buffer, offset); }
-	void CommandList::setVertexBuffer(const BufferHandle& buffer, uint64_t offset) { g_DispatchTable.CmdSetVertexBuffer(*this, buffer, offset); }
-	void CommandList::setResourceGroup(const ResourceGroupHandle& handle) { g_DispatchTable.CmdSetResourceGroup(*this, handle); }
-	void CommandList::draw(uint32_t vertexCount, uint32_t instanceCount,
-		uint32_t firstVertex, uint32_t firstInstance) { g_DispatchTable.CmdDraw(*this, vertexCount, instanceCount, firstVertex, firstInstance); }
-	void CommandList::drawIndexed(uint32_t indexCount, int32_t vertexOffset,
-		uint32_t instanceCount, uint32_t firstIndex, uint32_t firstInstance) { g_DispatchTable.CmdDrawIndexed(*this, indexCount,
-		vertexOffset, instanceCount, firstIndex, firstInstance); }
-
-	void CommandList::beginRenderPass(RenderPassHandle pass,
-		const ClearValue* clears, uint32_t clearCount) { g_DispatchTable.CmdBeginRenderPass(*this, pass, clears, clearCount); }
-	void CommandList::endRenderPass() { g_DispatchTable.CmdEndRenderPass(*this); }
-
-	void CommandList::writeBuffer(BufferHandle handle, void* data, uint32_t offset, uint32_t size) {
-		g_DispatchTable.CmdWriteBuffer(*this, handle, data, offset, size);
-	}
-
-
-
 } // namespace Rx

@@ -66,13 +66,15 @@ namespace Rx {
 	 * @return Created resource group handle.
 	 */
 	RENDERX_EXPORT ResourceGroupHandle CreateResourceGroup(const ResourceGroupDesc& desc);
+	RENDERX_EXPORT ResourceGroupLayoutHandle CreateResourceGroupLayout(const ResourceGroupLayout& desc);
+
+	RENDERX_EXPORT void DestroyResourceGroup(ResourceGroupHandle& handle);
 
 	/**
 	 * @brief Destroys a resource group instance.
 	 *
 	 * @param handle Handle to resource group to destroy.
 	 */
-	RENDERX_EXPORT void DestroyResourceGroup(ResourceGroupHandle& handle);
 
 	RENDERX_EXPORT FramebufferHandle CreateFramebuffer(const FramebufferDesc& desc);
 	RENDERX_EXPORT void DestroyFramebuffer(FramebufferHandle handle);
@@ -81,7 +83,7 @@ namespace Rx {
 	RENDERX_EXPORT void DestroyRenderPass(RenderPassHandle& handle);
 	RENDERX_EXPORT RenderPassHandle GetDefaultRenderPass();
 
-	RENDERX_EXPORT CommandList CreateCommandList(uint32_t frameIndex);
+	RENDERX_EXPORT CommandList* CreateCommandList(uint32_t frameIndex);
 	RENDERX_EXPORT void DestroyCommandList(CommandList& cmdList, uint32_t frameIndex);
 	RENDERX_EXPORT void ExecuteCommandList(CommandList& cmdList);
 

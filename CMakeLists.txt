@@ -51,8 +51,8 @@ add_subdirectory(Test/HelloTriangle)
 file(GLOB_RECURSE SOURCES
     "${CMAKE_SOURCE_DIR}/src/RenderX/*.cpp"
     "${CMAKE_SOURCE_DIR}/src/RenderX/*.h"
-    "${CMAKE_SOURCE_DIR}/src/OpenGL/*.cpp"
-    "${CMAKE_SOURCE_DIR}/src/OpenGL/*.h"
+    #"${CMAKE_SOURCE_DIR}/src/OpenGL/*.cpp"
+    #"${CMAKE_SOURCE_DIR}/src/OpenGL/*.h"
     "${CMAKE_SOURCE_DIR}/src/Vulkan/*.cpp"
     "${CMAKE_SOURCE_DIR}/src/Vulkan/*.h"
 )
