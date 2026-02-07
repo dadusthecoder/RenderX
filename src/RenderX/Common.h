@@ -617,7 +617,7 @@ namespace Rx {
 
 		ResourceGroupLayoutItem()
 			: binding(0), type(ResourceType::CONSTANT_BUFFER),
-			  stages(ShaderStage::All), count(1) {}
+			  stages(ShaderStage::ALL), count(1) {}
 
 		ResourceGroupLayoutItem(uint32_t bind, ResourceType t, ShaderStage s = ShaderStage::ALL, uint32_t cnt = 1)
 			: binding(bind), type(t), stages(s), count(cnt) {}
