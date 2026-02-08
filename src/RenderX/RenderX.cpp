@@ -38,11 +38,10 @@ namespace Rx {
 		case GraphicsAPI::OPENGL: {
 			RENDERX_INFO("Initializing OpenGL backend...");
 #define X(_ret, _name, ...) g_DispatchTable._name = RxGL::GL##_name;
-			RENDERX_API(X)
+			// RENDERX_API(X)
 #undef X
 
-			if (g_DispatchTable.Init)
-				g_DispatchTable.Init(window);
+			if (g_DispatchTable.Init) g_DispatchTable.Init(window);
 
 			API = window.api;
 			RENDERX_INFO("OpenGL backend loaded successfully.");
@@ -51,8 +50,8 @@ namespace Rx {
 
 		case GraphicsAPI::VULKAN: {
 			RENDERX_INFO("Initializing Vulkan backend...");
-#define X(_ret, _name, ...) g_DispatchTable._name = RxVK::VK##_name;
-			RENDERX_API(X)
+#define RX_BIND_FUNC(_ret, _name, _parms, _args) g_DispatchTable._name = RxVK::VK##_name;
+			RENDERX_FUNC(RX_BIND_FUNC)
 #undef X
 
 			if (g_DispatchTable.Init)
@@ -86,30 +85,21 @@ namespace Rx {
 		LOG_SHUTDOWN();
 	}
 
-	// API Functions
-	void Begin(uint32_t frameIndex) { return g_DispatchTable.Begin(frameIndex); }
-	void End(uint32_t frameIndex) { g_DispatchTable.End(frameIndex); }
+#define RX_FORWARD(_ret, _name, _parms, _args) \
+	_ret _name _parms { return g_DispatchTable._name _args; }
 
-	ShaderHandle CreateShader(const ShaderDesc& desc) { return g_DispatchTable.CreateShader(desc); }
-	PipelineHandle CreateGraphicsPipeline(PipelineDesc& desc) { return g_DispatchTable.CreateGraphicsPipeline(desc); }
+	RX_FORWARD(PipelineLayoutHandle, CreatePipelineLayout, (const ResourceGroupLayoutHandle* layouts, uint32_t layoutCount), (layouts, layoutCount))
+	RX_FORWARD(PipelineHandle, CreateGraphicsPipeline, (PipelineDesc & desc), (desc))
+	RX_FORWARD(ShaderHandle, CreateShader, (const ShaderDesc& desc), (desc))
+	RX_FORWARD(BufferHandle, CreateBuffer, (const BufferDesc& desc), (desc))
+	RX_FORWARD(BufferViewHandle, CreateBufferView, (const BufferViewDesc& desc), (desc))
+	RX_FORWARD(void, DestroyBufferView, (BufferViewHandle & handle), (handle))
+	RX_FORWARD(RenderPassHandle, CreateRenderPass, (const RenderPassDesc& desc), (desc))
+	RX_FORWARD(void, DestroyRenderPass, (RenderPassHandle & pass), (pass))
+	RX_FORWARD(FramebufferHandle, CreateFramebuffer, (const FramebufferDesc& desc), (desc))
+	RX_FORWARD(void, DestroyFramebuffer, (FramebufferHandle & framebuffer), (framebuffer))
+	RX_FORWARD(ResourceGroupHandle, CreateResourceGroup, (const ResourceGroupDesc& desc), (desc))
+	RX_FORWARD(void, DestroyResourceGroup, (ResourceGroupHandle & handle), (handle))
+	RX_FORWARD(ResourceGroupLayoutHandle, CreateResourceGroupLayout, (const ResourceGroupLayout& desc), (desc))
 
-	RenderPassHandle CreateRenderPass(const RenderPassDesc& desc) { return g_DispatchTable.CreateRenderPass(desc); }
-	void DestroyRenderPass(RenderPassHandle& pass) { g_DispatchTable.DestroyRenderPass(pass); }
-	RenderPassHandle GetDefaultRenderPass() { return g_DispatchTable.GetDefaultRenderPass(); }
-
-	FramebufferHandle CreateFramebuffer(const FramebufferDesc& desc) { return g_DispatchTable.CreateFramebuffer(desc); }
-	void DestroyFramebuffer(FramebufferHandle& framebuffer) { g_DispatchTable.DestroyFramebuffer(framebuffer); }
-
-	BufferHandle CreateBuffer(const BufferDesc& desc) { return g_DispatchTable.CreateBuffer(desc); }
-
-	BufferViewHandle CreateBufferView(const BufferViewDesc& desc) { return g_DispatchTable.CreateBufferView(desc); }
-	void DestroyBufferView(BufferViewHandle& handle) { g_DispatchTable.DestroyBufferView(handle); }
-
-	PipelineLayoutHandle CreatePipelineLayout(const ResourceGroupLayout* playouts, uint32_t layoutCount) { return g_DispatchTable.CreatePipelineLayout(playouts, layoutCount); }
-	ResourceGroupHandle CreateResourceGroup(const ResourceGroupDesc& desc) { return g_DispatchTable.CreateResourceGroup(desc); }
-	void DestroyResourceGroup(ResourceGroupHandle& handle) { g_DispatchTable.DestroyResourceGroup(handle); }
-
-	CommandList* CreateCommandList(uint32_t frameIndex) { return nullptr; }
-	void DestroyCommandList(CommandList& cmdList, uint32_t frameIndex) { g_DispatchTable.DestroyCommandList(cmdList, frameIndex); }
-	void ExecuteCommandList(CommandList& cmdList) { g_DispatchTable.ExecuteCommandList(cmdList); }
 } // namespace Rx

@@ -49,11 +49,6 @@ namespace RxVK {
 		auto g_Device = ctx.device->logical();
 		vkDeviceWaitIdle(ctx.device->logical());
 
-
-		g_TransientResourceGroupPool.ForEach([](VulkanResourceGroup& group) {
-			group.set = VK_NULL_HANDLE;
-		});
-
 		g_BufferViewPool.ForEach([](VulkanBufferView& view) {
 			view.isValid = false;
 		});
@@ -125,8 +120,6 @@ namespace RxVK {
 			}
 		});
 
-		g_CommandListPool.clear();
-		g_TransientResourceGroupPool.clear();
 		g_BufferViewPool.clear();
 		g_BufferPool.clear();
 		g_TexturePool.clear();
@@ -142,15 +135,16 @@ namespace RxVK {
 		vkDeviceWaitIdle(ctx.device->logical());
 		freeAllVulkanResources();
 
-		ctx.swapchain.reset();
+		// must folllow this order
+		ctx.descriptorPoolManager.reset();
+		ctx.descriptorSetManager.reset();
 		ctx.graphicsQueue.reset();
 		ctx.computeQueue.reset();
 		ctx.transferQueue.reset();
+		ctx.swapchain.reset();
+		ctx.allocator.reset();
 		ctx.device.reset();
 		ctx.instance.reset();
-		ctx.allocator.reset();
-		ctx.descriptorPoolManager.reset();
-		ctx.descriptorSetManager.reset();
 	}
 
 } // namespace RxVK

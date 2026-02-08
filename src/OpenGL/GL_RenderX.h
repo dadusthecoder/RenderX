@@ -6,9 +6,9 @@ namespace Rx {
 namespace RxGL {
 
 // Declare backend functions matching RenderXAPI.def
-#undef X
-#define X(_ret, _name, ...) _ret GL##_name(__VA_ARGS__);
-	RENDERX_API(X)
+#undef RENDERER_FUNC
+#define RX_FUNC_BACKEND_GL_DECAL(_ret, _name, _parms, _args) _ret GL##_name _parms;
+	RENDERX_FUNC(RX_FUNC_BACKEND_GL_DECAL)
 #undef X
 
 	void GLBindPipeline(const PipelineHandle pipeline);

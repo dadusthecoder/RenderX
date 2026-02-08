@@ -57,7 +57,7 @@ namespace Rx {
 	 * @param desc ResourceGroupLayoutDesc specifying binding slots and types.
 	 * @return Created resource group layout handle.
 	 */
-	RENDERX_EXPORT PipelineLayoutHandle CreatePipelineLayout(const ResourceGroupLayout* playouts, uint32_t layoutCount);
+	RENDERX_EXPORT PipelineLayoutHandle CreatePipelineLayout(const ResourceGroupLayoutHandle* playouts, uint32_t layoutCount);
 
 	/**
 	 * @brief Creates a resource group instance with actual resource bindings.
@@ -77,20 +77,9 @@ namespace Rx {
 	 */
 
 	RENDERX_EXPORT FramebufferHandle CreateFramebuffer(const FramebufferDesc& desc);
-	RENDERX_EXPORT void DestroyFramebuffer(FramebufferHandle handle);
-
 	RENDERX_EXPORT RenderPassHandle CreateRenderPass(const RenderPassDesc& desc);
 	RENDERX_EXPORT void DestroyRenderPass(RenderPassHandle& handle);
 	RENDERX_EXPORT RenderPassHandle GetDefaultRenderPass();
-
-	RENDERX_EXPORT CommandList* CreateCommandList(uint32_t frameIndex);
-	RENDERX_EXPORT void DestroyCommandList(CommandList& cmdList, uint32_t frameIndex);
-	RENDERX_EXPORT void ExecuteCommandList(CommandList& cmdList);
-
 	RENDERX_EXPORT void Init(const Window& info);
 	RENDERX_EXPORT void Shutdown();
-
-	// frame Lifecycle
-	RENDERX_EXPORT void Begin(uint32_t frameIndex);
-	RENDERX_EXPORT void End(uint32_t frameIndex);
 } // namespace Rx

@@ -19,11 +19,23 @@ namespace RxVK {
 		MAX_FRAMES_IN_FLIGHT = window.maxFramesInFlight;
 
 		ctx.instance = std::make_unique<VulkanInstance>(window);
-		ctx.device = std::make_unique<VulkanDevice>(ctx.instance->getInstance(), ctx.instance->getSurface(), g_RequestedDeviceExtensions.data(), g_RequestedValidationLayers.data());
+		ctx.device = std::make_unique<VulkanDevice>(
+			ctx.instance->getInstance(),
+			ctx.instance->getSurface(),
+			std::vector<const char*>(g_RequestedDeviceExtensions.begin(), g_RequestedDeviceExtensions.end()),
+			std::vector<const char*>(g_RequestedValidationLayers.begin(), g_RequestedValidationLayers.end()));
+
 		ctx.swapchain = std::make_unique<VulkanSwapchain>();
-		ctx.graphicsQueue = std::make_unique<VulkanQueue>(ctx.device->logical(), ctx.device->graphicsQueue(), ctx.device->graphicsFamily());
-		ctx.computeQueue = std::make_unique<VulkanQueue>(ctx.device->logical(), ctx.device->computeQueue(), ctx.device->computeFamily());
-		ctx.transferQueue = std::make_unique<VulkanQueue>(ctx.device->logical(), ctx.device->transferQueue(), ctx.device->transferFamily());
+
+		ctx.graphicsQueue = std::make_unique<VulkanCommandQueue>(ctx.device->logical(), ctx.device->graphicsQueue(),
+			ctx.device->graphicsFamily(), QueueType::GRAPHICS);
+
+		ctx.computeQueue = std::make_unique<VulkanCommandQueue>(ctx.device->logical(), ctx.device->computeQueue(),
+			ctx.device->computeFamily(), QueueType::COMPUTE);
+
+		ctx.transferQueue = std::make_unique<VulkanCommandQueue>(ctx.device->logical(), ctx.device->transferQueue(),
+			ctx.device->transferFamily(), QueueType::TRANSFER);
+
 		ctx.descriptorPoolManager = std::make_unique<VulkanDescriptorPoolManager>(ctx);
 		ctx.descriptorSetManager = std::make_unique<VulkanDescriptorManager>(ctx);
 	}

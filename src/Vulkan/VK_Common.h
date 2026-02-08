@@ -100,17 +100,19 @@ namespace RxVK {
 		}
 	}
 
-#define VK_CHECK(x)                                         \
-	do {                                                    \
-		VkResult err = x;                                   \
-		if (err != VK_SUCCESS)                              \
-			RENDERX_ERROR("[Vulkan] {} at {}:{}",           \
-				VkResultToString(err), __FILE__, __LINE__); \
+#define VK_CHECK(x)                                                                           \
+	do {                                                                                      \
+		VkResult err = x;                                                                     \
+		if (err != VK_SUCCESS)                                                                \
+			RENDERX_ERROR("[Vulkan] {} at {}:{}", VkResultToString(err), __FILE__, __LINE__); \
 	} while (0)
 
-	inline bool CheckVk(VkResult result, const char* message) {
+	inline bool CheckVk(VkResult result, const char* message = nullptr) {
 		if (result != VK_SUCCESS) {
-			RENDERX_ERROR("[Vulkan] {} ({})", message, VkResultToString(result));
+			if (message)
+				RENDERX_ERROR("[Vulkan] {} ({})", message, VkResultToString(result));
+			else
+				RENDERX_ERROR("[Vulkan] {} ", VkResultToString(result));
 			return false;
 		}
 		return true;
@@ -168,12 +170,6 @@ namespace RxVK {
 		VkFence fence = VK_NULL_HANDLE;
 		VulkanUploadContext upload;
 		uint32_t swapchainImageIndex = 0;
-	};
-
-	struct VulkanCommandList {
-		VkCommandBuffer cmdBuffer;
-		bool isOpen = false;
-		uint32_t lastFrame = 0;
 	};
 
 	struct VulkanResourceGroupLayout {
@@ -480,6 +476,20 @@ namespace RxVK {
 		VkSurfaceKHR m_Surface = VK_NULL_HANDLE;
 	};
 
+	struct DeviceInfo {
+		VkPhysicalDevice device;
+		VkPhysicalDeviceProperties properties;
+		VkPhysicalDeviceFeatures features;
+		VkPhysicalDeviceMemoryProperties memoryProperties;
+		std::vector<VkQueueFamilyProperties> queueFamilies;
+		std::vector<VkExtensionProperties> extensions;
+
+		// Suitability score
+		uint32_t score = 0;
+		int index;
+		// bool suitable = false;
+	};
+
 	class VulkanDevice {
 	public:
 		VulkanDevice(
@@ -499,7 +509,10 @@ namespace RxVK {
 		uint32_t transferFamily() const { return m_TransferFamily; }
 		const VkPhysicalDeviceLimits& limits() const { return m_Limits; }
 	private:
-		void pickPhysicalDevice();
+		DeviceInfo gatherDeviceInfo(VkPhysicalDevice device) const;
+		void logDeviceInfo(uint32_t index, const DeviceInfo& info) const;
+		uint32_t scoreDevice(const DeviceInfo& info) const;
+		int selectDevice(const std::vector<DeviceInfo>& devices) const;
 		bool isDeviceSuitable(VkPhysicalDevice device) const;
 		void createLogicalDevice(
 			const std::vector<const char*>& requiredExtensions,
@@ -554,41 +567,6 @@ namespace RxVK {
 		VmaAllocator m_Allocator = VK_NULL_HANDLE;
 	};
 
-	class VulkanQueue {
-	public:
-		VulkanQueue(VkDevice device, VkQueue queue, uint32_t family);
-		~VulkanQueue();
-
-		VulkanCommandBuffer* acquire();
-		uint64_t submit(VulkanCommandBuffer** buffers, uint32_t count);
-		bool submitImmediate(VkCommandBuffer cmdBuffer, VkFence fence);
-		void addWait(VkSemaphore semaphore, uint64_t value);
-		void addSignal(VkSemaphore semaphore, uint64_t value);
-		bool poll(uint64_t submissionID);
-		void wait(uint64_t id, uint64_t timeout);
-		void retire();
-
-		VkQueue getVkQueue();
-		uint64_t getLastSubmittedID();
-		uint64_t getCompletedID();
-	private:
-		VkDevice m_Device = VK_NULL_HANDLE;
-		VkQueue m_Queue = VK_NULL_HANDLE;
-		uint32_t m_Family = UINT32_MAX;
-		VkSemaphore m_Timeline = VK_NULL_HANDLE;
-		uint64_t m_Submitted = 0;
-		uint64_t m_Completed = 0;
-
-		std::vector<VkSemaphore> m_WaitSemaphores;
-		std::vector<uint64_t> m_WaitValues;
-		std::vector<VkSemaphore> m_SignalSemaphores;
-		std::vector<uint64_t> m_SignalValues;
-
-		std::deque<std::shared_ptr<VulkanCommandBuffer>> m_Free;
-		std::vector<std::shared_ptr<VulkanCommandBuffer>> m_InFlight;
-		std::mutex m_Mutex;
-	};
-
 
 	class VulkanDescriptorPoolManager {
 	public:
@@ -637,14 +615,122 @@ namespace RxVK {
 		VulkanContext& m_Ctx;
 	};
 
+
+
+	class VulkanCommandList : public CommandList {
+	public:
+		VulkanCommandList();
+		VulkanCommandList(
+			VkCommandBuffer cmdBuffer,
+			VkCommandPool cmdPool,
+			QueueType queueType,
+			const char* debugName = nullptr)
+			: m_CommandBuffer(cmdBuffer), m_CommandPool(cmdPool), m_QueueType(queueType), isRecording(false), m_DebugName(debugName) {}
+
+		~VulkanCommandList() override;
+		void open() override;
+		void close() override;
+
+		void setPipeline(const PipelineHandle& pipeline) override;
+		void setVertexBuffer(const BufferHandle& buffer, uint64_t offset = 0) override;
+		void setIndexBuffer(const BufferHandle& buffer, uint64_t offset = 0) override;
+
+		void draw(
+			uint32_t vertexCount,
+			uint32_t instanceCount = 1,
+			uint32_t firstVertex = 0,
+			uint32_t firstInstance = 0) override;
+
+		void drawIndexed(
+			uint32_t indexCount,
+			int32_t vertexOffset = 0,
+			uint32_t instanceCount = 1,
+			uint32_t firstIndex = 0,
+			uint32_t firstInstance = 0) override;
+
+		void beginRenderPass(
+			RenderPassHandle pass,
+			const void* clearValues,
+			uint32_t clearCount) override;
+
+		void endRenderPass() override;
+
+		void writeBuffer(
+			BufferHandle handle,
+			const void* data,
+			uint32_t offset,
+			uint32_t size) override;
+
+		virtual void setResourceGroup(
+			const ResourceGroupHandle& handle) override;
+
+		friend class VulkanCommandQueue;
+	private:
+		const char* m_DebugName;
+		bool isRecording;
+		VkCommandBuffer m_CommandBuffer;
+		VkCommandPool m_CommandPool;
+		QueueType m_QueueType;
+		CommandListState m_state = CommandListState::INVALID;
+	};
+
+
+	class VulkanCommandQueue : public CommandQueue {
+	public:
+		VulkanCommandQueue(VkDevice device, VkQueue queue, uint32_t family, QueueType type);
+		~VulkanCommandQueue();
+	private:
+		struct VulkanCommandPool {
+			VkCommandPool pool;
+			Timeline timeline;
+		};
+
+		std::deque<std::shared_ptr<VulkanCommandPool>> m_Free;
+		std::vector<std::shared_ptr<VulkanCommandPool>> m_InFlight;
+
+		void addWait(VkSemaphore semaphore, uint64_t value);
+		void addSignal(VkSemaphore semaphore, uint64_t value);
+		std::shared_ptr<VulkanCommandPool> CommandPool();
+		VkQueue Queue();
+		VkSemaphore Semaphore() { return m_Semaphore; }
+
+		VkDevice m_Device = VK_NULL_HANDLE;
+		VkQueue m_Queue = VK_NULL_HANDLE;
+		uint32_t m_Family = UINT32_MAX;
+		VkSemaphore m_Semaphore = VK_NULL_HANDLE;
+		QueueType m_Type = QueueType::GRAPHICS;
+
+		uint64_t m_Submitted = 0;
+		uint64_t m_Completed = 0;
+
+		std::shared_ptr<VulkanCommandPool> m_CurrentCommandPool;
+
+		std::vector<VkSemaphore> m_WaitSemaphores;
+		std::vector<uint64_t> m_WaitValues;
+		std::vector<VkSemaphore> m_SignalSemaphores;
+		std::vector<uint64_t> m_SignalValues;
+	public:
+		CommandList* CreateCommandList(const char* debugName = nullptr) override;
+		void DestroyCommandList(CommandList* commandList) override;
+		Timeline Submit(CommandList* commandList) override;
+		Timeline Submit(const SubmitInfo& submitInfo) override;
+		bool Wait(Timeline value, uint64_t timeout = UINT64_MAX) override;
+		void WaitIdle() override;
+		bool Poll(Timeline value) override;
+		Timeline Completed() const override;
+		Timeline Submitted() const override;
+		uint64_t TimestampFrequency() const override;
+		void Flush() override;
+	};
+
 	struct VulkanContext {
 		void* window = nullptr;
 		std::unique_ptr<VulkanInstance> instance;
 		std::unique_ptr<VulkanDevice> device;
 		std::unique_ptr<VulkanSwapchain> swapchain;
-		std::unique_ptr<VulkanQueue> graphicsQueue;
-		std::unique_ptr<VulkanQueue> computeQueue;
-		std::unique_ptr<VulkanQueue> transferQueue;
+		std::unique_ptr<VulkanCommandQueue> graphicsQueue;
+		std::unique_ptr<VulkanCommandQueue> computeQueue;
+		std::unique_ptr<VulkanCommandQueue> transferQueue;
 		std::unique_ptr<VulkanAllocator> allocator;
 		std::unique_ptr<VulkanDescriptorManager> descriptorSetManager;
 		std::unique_ptr<VulkanDescriptorPoolManager> descriptorPoolManager;
@@ -659,10 +745,6 @@ namespace RxVK {
 	extern ResourcePool<VulkanPipeline, PipelineHandle> g_PipelinePool;
 	extern ResourcePool<VulkanPipelineLayout, PipelineLayoutHandle> g_PipelineLayoutPool;
 	extern ResourcePool<VulkanResourceGroupLayout, ResourceGroupLayoutHandle> g_ResourceGroupLayoutPool;
-	extern ResourcePool<VulkanResourceGroup, ResourceGroupHandle> g_TransientResourceGroupPool;
-	extern ResourcePool<VulkanResourceGroup, ResourceGroupHandle> g_PersistentResourceGroupPool;
-	extern ResourcePool<VulkanCommandList, CommandList> g_CommandListPool;
-
 
 	extern std::unordered_map<Hash64, BufferViewHandle> g_BufferViewCache;
 	extern std::unordered_map<Hash64, ResourceGroupHandle> g_ResourceGroupCache;

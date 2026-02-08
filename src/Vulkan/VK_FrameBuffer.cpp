@@ -61,7 +61,7 @@ namespace Rx::RxVK {
 
 
 		if (it->second != VK_NULL_HANDLE) {
-			vkDestroyFramebuffer(ctx.device, it->second, nullptr);
+			vkDestroyFramebuffer(ctx.device->logical(), it->second, nullptr);
 		}
 		s_Framebuffers.erase(it);
 		handle.id = 0;

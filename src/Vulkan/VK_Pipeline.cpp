@@ -6,7 +6,7 @@ namespace Rx {
 
 	namespace RxVK {
 
-		ResourcePool<VulkanPipelineLayout, PipelineLayoutHandle> g_LayoutPool;
+		ResourcePool<VulkanPipelineLayout, PipelineLayoutHandle> g_PipelineLayoutPool;
 	} // namespace RxVK
 
 
@@ -23,9 +23,9 @@ namespace Rx {
 
 		VkShaderModule shaderModule;
 		auto& ctx = RxVK::GetVulkanContext();
-		RENDERX_ASSERT_MSG(ctx.device != VK_NULL_HANDLE, "VKCreateShader: device is VK_NULL_HANDLE");
+		RENDERX_ASSERT_MSG(ctx.device && ctx.device->logical() != VK_NULL_HANDLE, "VKCreateShader: device is VK_NULL_HANDLE");
 
-		VkResult result = vkCreateShaderModule(ctx.device, &ci, nullptr, &shaderModule);
+		VkResult result = vkCreateShaderModule(ctx.device->logical(), &ci, nullptr, &shaderModule);
 		if (!CheckVk(result, "VKCreateShader: Failed to create shader module")) {
 			return ShaderHandle{};
 		}
@@ -53,13 +53,12 @@ namespace Rx {
 		RENDERX_ASSERT_MSG(layoutcount > 0, "VKCreatePipelineLayout: layout count is zero");
 		RENDERX_ASSERT_MSG(playouts != nullptr, "VKCreatePipelineLayout: playouts pointer is null");
 		auto& ctx = GetVulkanContext();
-		RENDERX_ASSERT_MSG(ctx.device != VK_NULL_HANDLE, "VKCreatePipelineLayout: device is VK_NULL_HANDLE");
+		RENDERX_ASSERT_MSG(ctx.device && ctx.device->logical() != VK_NULL_HANDLE, "VKCreatePipelineLayout: device is VK_NULL_HANDLE");
 
 		std::vector<VkDescriptorSetLayout> setLayouts;
 
 		for (int i = 0; i < layoutcount; ++i) {
-
-			auto layout = g_Re 
+			// auto layout = g_Re
 		}
 
 		// ---------- Pipeline Layout ----------
@@ -76,21 +75,21 @@ namespace Rx {
 		RENDERX_ASSERT_MSG(pipelinelayout != VK_NULL_HANDLE, "VKCreatePipelineLayout: created pipeline layout is null");
 
 		// Debug naming
-		if (desc.&& desc.debugName[0] != '\0') {
-			VkDebugUtilsObjectNameInfoEXT nameInfo = {};
-			nameInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
-			nameInfo.objectType = VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT;
-			nameInfo.objectHandle = (uint64_t)pipelinelayout;
-			nameInfo.pObjectName = desc.debugName;
-			// vkSetDebugUtilsObjectNameEXT(m_device, &nameInfo);
-		}
+		// if (desc.&& desc.debugName[0] != '\0') {
+		//	VkDebugUtilsObjectNameInfoEXT nameInfo = {};
+		//	nameInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
+		//	nameInfo.objectType = VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT;
+		//	nameInfo.objectHandle = (uint64_t)pipelinelayout;
+		//	nameInfo.pObjectName = desc.debugName;
+		//	// vkSetDebugUtilsObjectNameEXT(m_device, &nameInfo);
+		//}
 
 		VulkanPipelineLayout rxPipelneLayout{};
 		rxPipelneLayout.layout = pipelinelayout;
 		rxPipelneLayout.setlayouts = setLayouts;
 
 		// handle
-		auto handle = g_LayoutPool.allocate(rxPipelneLayout);
+		auto handle = g_PipelineLayoutPool.allocate(rxPipelneLayout);
 		return handle;
 	}
 
@@ -227,18 +226,18 @@ namespace Rx {
 		pci.pMultisampleState = &ms;
 		pci.pDepthStencilState = &depth;
 		pci.pColorBlendState = &cb;
-		pci.renderPass = GetVulkanRenderPass(desc.renderPass);
-		auto* layout = g_LayoutPool.get(desc.layout);
+		pci.renderPass = *g_RenderPassPool.get(desc.renderPass);
+		auto* layout = g_PipelineLayoutPool.get(desc.layout);
 		pci.layout = layout->layout;
 
 		VkPipeline pipeline;
-		if (vkCreateGraphicsPipelines(ctx.device, VK_NULL_HANDLE, 1, &pci, nullptr, &pipeline) != VK_SUCCESS) {
+		if (vkCreateGraphicsPipelines(ctx.device->logical(), VK_NULL_HANDLE, 1, &pci, nullptr, &pipeline) != VK_SUCCESS) {
 			RENDERX_CRITICAL("Failed to create graphics pipeline");
 			// destroy the pipeline layout to avoid leaking it
 			if (layout->layout != VK_NULL_HANDLE) {
-				vkDestroyPipelineLayout(ctx.device, layout->layout, nullptr);
+				vkDestroyPipelineLayout(ctx.device->logical(), layout->layout, nullptr);
 				layout->isBound = false;
-				g_LayoutPool.free(desc.layout);
+				g_PipelineLayoutPool.free(desc.layout);
 			}
 			return {};
 		}
@@ -250,23 +249,6 @@ namespace Rx {
 		auto handle = g_PipelinePool.allocate(vkpipe);
 		RENDERX_INFO("Created Vulkan Graphics Pipeline with ID {}", handle.id);
 		return handle;
-	}
-
-	// command List Functions
-
-	void RxVK::VKCmdSetPipeline(CommandList& cmdList, PipelineHandle pipeline) {
-		PROFILE_FUNCTION();
-
-		RENDERX_ASSERT_MSG(cmdList.IsValid(), "Invalid CommandList");
-		auto* vkCmdList = g_CommandListPool.get(cmdList);
-
-		RENDERX_ASSERT_MSG(vkCmdList->isOpen, "CommandList must be open");
-
-		// bind pipeline and remember layout for descriptor binding
-		auto* p = g_PipelinePool.get(pipeline);
-		p->isBound = true;
-		RENDERX_ASSERT_MSG(p, "VKCmdSetPipeline: invalid pipeline handle");
-		vkCmdBindPipeline(vkCmdList->cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, p->pipeline);
 	}
 
 } // namespace Rx

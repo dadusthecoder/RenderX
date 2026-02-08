@@ -12,10 +12,10 @@ namespace Rx {
 	 */
 
 	struct RenderDispatchTable {
-#define X(_ret, _name, ...)                       \
-	using _name##_func_t = _ret (*)(__VA_ARGS__); \
+#define RX_DESPATCH_TABLE_FUNC(_ret, _name, _parms, _args) \
+	using _name##_func_t = _ret(*) _parms;                 \
 	_name##_func_t _name;
-		RENDERX_API(X)
+		RENDERX_FUNC(RX_DESPATCH_TABLE_FUNC)
 #undef RENDERER_FUNC
 	};
 

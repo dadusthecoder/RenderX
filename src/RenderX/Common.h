@@ -79,53 +79,80 @@
 
 namespace Rx {
 
-	// RenderX API X-Macro
-#define RENDERX_API(X)                                                    \
+// RenderX API X-Macro
+#define RENDERX_FUNC(X)                                                   \
                                                                           \
 	/* RenderX Lifetime */                                                \
-	X(void, Init, const Window&)                                          \
-	X(void, Shutdown)                                                     \
+	X(void, Init,                                                         \
+		(const Window& window),                                           \
+		(window))                                                         \
                                                                           \
-	/* Frame Lifetime */                                                  \
-	X(void, Begin, uint32_t frameIndex)                                   \
-	X(void, End, uint32_t)                                                \
+	X(void, Shutdown,                                                     \
+		(),                                                               \
+		())                                                               \
                                                                           \
 	/* Pipeline Layout */                                                 \
 	X(PipelineLayoutHandle, CreatePipelineLayout,                         \
-		const ResourceGroupLayoutHandle* layout, uint32_t layoutcount)    \
+		(const ResourceGroupLayoutHandle* layouts, uint32_t layoutCount), \
+		(layouts, layoutCount))                                           \
                                                                           \
 	/* Pipeline Graphics */                                               \
-	X(PipelineHandle, CreateGraphicsPipeline, PipelineDesc& desc)         \
-	X(ShaderHandle, CreateShader, const ShaderDesc& desc)                 \
+	X(PipelineHandle, CreateGraphicsPipeline,                             \
+		(PipelineDesc & desc),                                            \
+		(desc))                                                           \
+                                                                          \
+	X(ShaderHandle, CreateShader,                                         \
+		(const ShaderDesc& desc),                                         \
+		(desc))                                                           \
                                                                           \
 	/* Resource Creation */                                               \
 	/* Buffers */                                                         \
-	X(BufferHandle, CreateBuffer, const BufferDesc& desc)                 \
+	X(BufferHandle, CreateBuffer,                                         \
+		(const BufferDesc& desc),                                         \
+		(desc))                                                           \
                                                                           \
 	/* Buffer Views */                                                    \
-	X(BufferViewHandle, CreateBufferView, const BufferViewDesc& desc)     \
-	X(void, DestroyBufferView, BufferViewHandle& handle)                  \
+	X(BufferViewHandle, CreateBufferView,                                 \
+		(const BufferViewDesc& desc),                                     \
+		(desc))                                                           \
+                                                                          \
+	X(void, DestroyBufferView,                                            \
+		(BufferViewHandle & handle),                                      \
+		(handle))                                                         \
                                                                           \
 	/* Render Pass */                                                     \
-	X(RenderPassHandle, CreateRenderPass, const RenderPassDesc&)          \
-	X(void, DestroyRenderPass, RenderPassHandle&)                         \
-	X(RenderPassHandle, GetDefaultRenderPass)                             \
+	X(RenderPassHandle, CreateRenderPass,                                 \
+		(const RenderPassDesc& desc),                                     \
+		(desc))                                                           \
+                                                                          \
+	X(void, DestroyRenderPass,                                            \
+		(RenderPassHandle & pass),                                        \
+		(pass))                                                           \
                                                                           \
 	/* Framebuffer */                                                     \
-	X(FramebufferHandle, CreateFramebuffer, const FramebufferDesc&)       \
-	X(void, DestroyFramebuffer, FramebufferHandle&)                       \
+	X(FramebufferHandle, CreateFramebuffer,                               \
+		(const FramebufferDesc& desc),                                    \
+		(desc))                                                           \
+                                                                          \
+	X(void, DestroyFramebuffer,                                           \
+		(FramebufferHandle & framebuffer),                                \
+		(framebuffer))                                                    \
                                                                           \
 	/* Resource Groups */                                                 \
-	X(ResourceGroupHandle, CreateResourceGroup, const ResourceGroupDesc&) \
-	X(void, DestroyResourceGroup, ResourceGroupHandle&)                   \
+	X(ResourceGroupHandle, CreateResourceGroup,                           \
+		(const ResourceGroupDesc& desc),                                  \
+		(desc))                                                           \
                                                                           \
-	/* Command List Creation & Management */                              \
-	X(CommandList, CreateCommandList, uint32_t)                           \
-	X(void, ExecuteCommandList, CommandList&)                             \
-	X(void, DestroyCommandList, CommandList&, uint32_t)                   \
+	X(void, DestroyResourceGroup,                                         \
+		(ResourceGroupHandle & handle),                                   \
+		(handle))                                                         \
                                                                           \
 	X(ResourceGroupLayoutHandle, CreateResourceGroupLayout,               \
-		const ResourceGroupLayout&)
+		(const ResourceGroupLayout& desc),                                \
+		(desc))
+
+
+
 
 
 	// Base Handle Template
@@ -845,13 +872,57 @@ namespace Rx {
 		}
 	};
 
+	enum class CommandListState : uint8_t {
+		INITIAL,	// Just created, ready to begin recording
+		RECORDING,	// Currently recording commands
+		EXECUTABLE, // Recording finished, ready to submit
+		SUBMITTED,	// Submitted to queue, waiting for execution
+		COMPLETED,	// Execution finished
+		INVALID		// Error state or destroyed
+	};
 
-	// class RENDERX_EXPORT CommandQueue {
-	// public:
-	//	virtual CommandList* createCommandList() = 0;
-	//	virtual uint64_t submit(CommandList* const* lists, uint32_t count) = 0;
-	//	virtual void wait(uint64_t submissionID) = 0;
-	// };
+	inline const char* CommandListStateToString(CommandListState state) {
+		switch (state) {
+		case CommandListState::INITIAL: return "INITIAL";
+		case CommandListState::RECORDING: return "RECORDING";
+		case CommandListState::EXECUTABLE: return "EXECUTABLE";
+		case CommandListState::SUBMITTED: return "SUBMITTED";
+		case CommandListState::COMPLETED: return "COMPLETED";
+		case CommandListState::INVALID: return "INVALID";
+		default: return "UNKNOWN";
+		}
+	}
+
+	// Queue Types
+	enum class QueueType : uint8_t {
+		GRAPHICS, // Graphics + compute(if the GPU supports) + transfer operations
+		COMPUTE,  // Compute + transfer operations
+		TRANSFER  // Transfer operations only
+	};
+
+	// Synchronization Primitives
+	struct Timeline {
+		uint64_t value;
+
+		Timeline(uint64_t v = 0) : value(v) {}
+
+		bool operator==(const Timeline& other) const { return value == other.value; }
+		bool operator!=(const Timeline& other) const { return value != other.value; }
+		bool operator<(const Timeline& other) const { return value < other.value; }
+		bool operator<=(const Timeline& other) const { return value <= other.value; }
+		bool operator>(const Timeline& other) const { return value > other.value; }
+		bool operator>=(const Timeline& other) const { return value >= other.value; }
+
+		Timeline& operator++() {
+			++value;
+			return *this;
+		}
+		Timeline operator++(int) {
+			Timeline temp = *this;
+			++value;
+			return temp;
+		}
+	};
 
 	class RENDERX_EXPORT CommandList {
 	public:
@@ -892,6 +963,97 @@ namespace Rx {
 
 		virtual void setResourceGroup(
 			const ResourceGroupHandle& handle) = 0;
+	};
+
+
+	// Synchronization dependency between queues
+	struct QueueDependency {
+		QueueType waitQueue; // Queue that needs to wait
+		Timeline waitValue;	 // Timeline value to wait for
+
+		QueueDependency(QueueType queue, Timeline value)
+			: waitQueue(queue), waitValue(value) {}
+	};
+
+	// Command List Submission
+	// Describes how to submit a command list
+	struct SubmitInfo {
+		// Command list to submit
+		CommandList* commandList = nullptr;
+		uint32_t commandListCount;
+		// Dependencies - wait for these timeline values before executing
+		std::vector<QueueDependency> waitDependencies;
+		SubmitInfo() = default;
+		SubmitInfo(CommandList* cmd, uint32_t count)
+			: commandList(cmd), commandListCount(count) {}
+	};
+
+	// Queue Capabilities
+	// Information about a queue's capabilities
+	struct QueueInfo {
+		QueueType type;
+		uint32_t familyIndex;					 // Internal queue family
+		bool supportsPresent;					 // Can present to swapchain
+		bool supportsTimestamps;				 // Can query GPU timestamps
+		uint32_t minImageTransferGranularity[3]; // Optimal transfer block size
+
+		QueueInfo()
+			: type(QueueType::GRAPHICS), familyIndex(0), supportsPresent(false), supportsTimestamps(false), minImageTransferGranularity{ 1, 1, 1 } {}
+	};
+
+	// Command Queue Interface
+	class RENDERX_EXPORT CommandQueue {
+	public:
+		virtual ~CommandQueue() = default;
+
+		/// Queue Information
+		/// Get queue type
+		/*	virtual QueueType GetType() const = 0;*/
+
+		/*	/// Get detailed queue info
+			virtual QueueInfo GetInfo() const = 0;*/
+
+		/// Command List Management
+		/// Create a command list for this queue
+		/// @param debugName Optional name for debugging
+		virtual CommandList* CreateCommandList(const char* debugName = nullptr) = 0;
+
+		/// Destroy a command list
+		virtual void DestroyCommandList(CommandList* commandList) = 0;
+
+		/// Submission
+		/// Submit a single command list
+		/// @return Timeline value that will be signaled when complete
+		virtual Timeline Submit(CommandList* commandList) = 0;
+
+		/// Submit with dependencies and custom signal value
+		virtual Timeline Submit(const SubmitInfo& submitInfo) = 0;
+
+		/// Synchronization
+
+		/// Wait for a specific timeline value on CPU!
+		/// @param timeout Timeout in nanoseconds (UINT64_MAX = infinite)
+		/// @return true if wait succeeded, false if timeout
+		virtual bool Wait(Timeline value, uint64_t timeout = UINT64_MAX) = 0;
+
+		/// Wait for the queue to be idle on CPU! (all submitted work complete)
+		virtual void WaitIdle() = 0;
+
+		/// Check if a timeline value has been reached (non-blocking)
+		virtual bool Poll(Timeline value) = 0;
+
+		/// Get the current timeline value (last completed submission)
+		virtual Timeline Completed() const = 0;
+
+		/// Get the next timeline value that will be signaled
+		virtual Timeline Submitted() const = 0;
+
+		/// Features
+		/// Get GPU timestamp frequency (ticks per second)
+		virtual uint64_t TimestampFrequency() const = 0;
+
+		/// Flush any pending submissions
+		virtual void Flush() = 0;
 	};
 
 } // namespace  RenderX

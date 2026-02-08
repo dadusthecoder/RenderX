@@ -37,7 +37,7 @@ namespace RxVK {
 				hash ^= binding.textureView.id;
 				break;
 
-			case ResourceType::Samp:
+			case ResourceType::SAMPLER:
 				hash ^= binding.sampler.id;
 				break;
 			}
@@ -61,7 +61,20 @@ namespace RxVK {
 	}
 
 	VulkanDescriptorPoolManager::~VulkanDescriptorPoolManager() {
-		// TODO
+		for (auto& pool : m_usedPools) {
+			if (pool.pool != VK_NULL_HANDLE)
+				vkDestroyDescriptorPool(m_Ctx.device->logical(), pool.pool, nullptr);
+		}
+		for (auto& pool : m_freePools) {
+			if (pool != VK_NULL_HANDLE)
+				vkDestroyDescriptorPool(m_Ctx.device->logical(), pool, nullptr);
+		}
+		if (m_Bindless != VK_NULL_HANDLE)
+			vkDestroyDescriptorPool(m_Ctx.device->logical(), m_Bindless, nullptr);
+		if (m_Persistent != VK_NULL_HANDLE)
+			vkDestroyDescriptorPool(m_Ctx.device->logical(), m_Persistent, nullptr);
+		if (m_CurrentTransient.pool != VK_NULL_HANDLE)
+			vkDestroyDescriptorPool(m_Ctx.device->logical(), m_CurrentTransient.pool, nullptr);
 	}
 
 	VkDescriptorPool VulkanDescriptorPoolManager::createPool(
@@ -149,13 +162,13 @@ namespace RxVK {
 	}
 
 	static DescriptorBindingModel ChooseModel(ResourceGroupFlags flags) {
-		if (Has(flags, ResourceGroupFlags::Bindless))
+		if (Has(flags, ResourceGroupFlags::BINDLESS))
 			return DescriptorBindingModel::Bindless;
-		if (Has(flags, ResourceGroupFlags::Buffer))
+		if (Has(flags, ResourceGroupFlags::BUFFER))
 			return DescriptorBindingModel::DescriptorBuffer;
-		if (Has(flags, ResourceGroupFlags::DynamicUniform))
+		if (Has(flags, ResourceGroupFlags::DYNAMIC_UNIFORM))
 			return DescriptorBindingModel::DynamicUniform;
-		if (Has(flags, ResourceGroupFlags::Dynamic))
+		if (Has(flags, ResourceGroupFlags::DYNAMIC))
 			return DescriptorBindingModel::Dynamic;
 		return DescriptorBindingModel::Static;
 	}
@@ -288,9 +301,9 @@ namespace RxVK {
 					//	break;
 					//}
 
-				case ResourceType::ConstantBuffer:
-				case ResourceType::StorageBuffer:
-				case ResourceType::RWStorageBuffer: {
+				case ResourceType::CONSTANT_BUFFER:
+				case ResourceType::STORAGE_BUFFER:
+				case ResourceType::RW_STORAGE_BUFFER: {
 					auto* bufView = g_BufferViewPool.get(r.bufferView);
 					auto* buf = g_BufferPool.get(bufView->buffer);
 
@@ -375,9 +388,9 @@ namespace RxVK {
 					//	break;
 					//}
 
-				case ResourceType::ConstantBuffer:
-				case ResourceType::StorageBuffer:
-				case ResourceType::RWStorageBuffer: {
+				case ResourceType::CONSTANT_BUFFER:
+				case ResourceType::STORAGE_BUFFER:
+				case ResourceType::RW_STORAGE_BUFFER: {
 					auto* bufView = g_BufferViewPool.get(r.bufferView);
 					auto* buf = g_BufferPool.get(bufView->buffer);
 
@@ -565,13 +578,13 @@ namespace RxVK {
 			bindingInfo.address = group.descriptorBuffer.address;
 			bindingInfo.usage = VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT;
 
-			vkCmdBindDescriptorBuffersEXT(cmd, 1, &bindingInfo);
+			// vkCmdBindDescriptorBuffersEXT(cmd, 1, &bindingInfo);
 
 			uint32_t bufferIndex = 0;
 			VkDeviceSize offset = 0;
-			vkCmdSetDescriptorBufferOffsetsEXT(
-				cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-				layout, setIndex, 1, &bufferIndex, &offset);
+			// vkCmdSetDescriptorBufferOffsetsEXT(
+			// cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+			// yout, setIndex, 1, &bufferIndex, &offset);
 			break;
 		}
 		}
@@ -596,16 +609,16 @@ namespace RxVK {
 		bool shouldCache = false;
 
 		if (Has(layout->flags, ResourceGroupFlags::BINDLESS)) {
-			pool = &g_PersistentResourceGroupPool;
+			pool = &g_ResourceGroupPool;
 			shouldCache = true;
 		}
 		else if (Has(layout->flags, ResourceGroupFlags::DYNAMIC) ||
 				 Has(layout->flags, ResourceGroupFlags::DYNAMIC_UNIFORM)) {
-			pool = &g_TransientResourceGroupPool;
+			pool = &g_ResourceGroupPool;
 			shouldCache = false;
 		}
 		else { // Static
-			pool = &g_PersistentResourceGroupPool;
+			pool = &g_ResourceGroupPool;
 			shouldCache = true;
 		}
 
@@ -633,6 +646,8 @@ namespace RxVK {
 		return handle;
 	}
 
+	void VKDestroyResourceGroup(ResourceGroupHandle& handle) {
+	}
 	void VKResetPersistentResourceGroups() {
 		auto& ctx = GetVulkanContext();
 		ctx.descriptorPoolManager->resetPersistent();
