@@ -25,8 +25,7 @@ namespace RxVK {
 	ResourcePool<VulkanTexture, TextureHandle> g_TexturePool;
 	ResourcePool<VulkanBuffer, BufferHandle> g_BufferPool;
 	ResourcePool<VulkanShader, ShaderHandle> g_ShaderPool;
-	ResourcePool<VulkanPipeline, PipelineHandle> g_PipelinePool;
-	ResourcePool<VkRenderPass, RenderPassHandle> g_RenderPassPool;
+	ResourcePool<VulkanRenderPass, RenderPassHandle> g_RenderPassPool;
 
 	// // Legacy unordered_map declarations (deprecated, kept for compatibility)
 	// std::unordered_map<uint64_t, VulkanBuffer> g_Buffers;
@@ -113,10 +112,9 @@ namespace RxVK {
 			}
 		});
 
-		g_RenderPassPool.ForEach([&](VkRenderPass& rp) {
-			if (rp != VK_NULL_HANDLE) {
-				vkDestroyRenderPass(g_Device, rp, nullptr);
-				rp = VK_NULL_HANDLE;
+		g_RenderPassPool.ForEach([&](VulkanRenderPass& rp) {
+			if (rp.renderPass != VK_NULL_HANDLE) {
+				vkDestroyRenderPass(g_Device, rp.renderPass, nullptr);
 			}
 		});
 

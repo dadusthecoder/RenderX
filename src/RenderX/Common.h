@@ -185,6 +185,10 @@ namespace Rx {
 		(const ShaderDesc& desc),                                         \
 		(desc))                                                           \
                                                                           \
+	X(void, DestroyShader,                                                \
+		(ShaderHandle & handle),                                          \
+		(handle))                                                         \
+                                                                          \
 	/* Resource Creation */                                               \
 	/* Buffers */                                                         \
 	X(BufferHandle, CreateBuffer,                                         \

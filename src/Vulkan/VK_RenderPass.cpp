@@ -5,8 +5,6 @@
 namespace Rx {
 namespace RxVK {
 
-	static uint32_t s_NextRenderPassId = 1;
-
 	RenderPassHandle VKCreateRenderPass(const RenderPassDesc& desc) {
 		auto& ctx = GetVulkanContext();
 		RENDERX_ASSERT_MSG(ctx.device != VK_NULL_HANDLE, "VKCreateRenderPass: device is VK_NULL_HANDLE");
@@ -16,7 +14,7 @@ namespace RxVK {
 		std::vector<VkAttachmentDescription> attachments;
 		std::vector<VkAttachmentReference> colorRefs;
 
-		// --- Color attachments ---
+		//  Color attachments
 		for (uint32_t i = 0; i < desc.colorAttachments.size(); i++) {
 			const auto& a = desc.colorAttachments[i];
 
@@ -25,8 +23,8 @@ namespace RxVK {
 			att.samples = VK_SAMPLE_COUNT_1_BIT;
 			att.loadOp = ToVulkanLoadOp(a.loadOp);
 			att.storeOp = ToVulkanStoreOp(a.storeOp);
-
-
+			att.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+			att.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 			attachments.push_back(att);
 
 			VkAttachmentReference ref{};
@@ -54,7 +52,7 @@ namespace RxVK {
 			attachments.push_back(depth);
 		}
 
-		// --- Subpass ---
+		//  Subpass
 		VkSubpassDescription subpass{};
 		subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
 		subpass.colorAttachmentCount = (uint32_t)colorRefs.size();
@@ -62,7 +60,7 @@ namespace RxVK {
 		if (desc.hasDepthStencil)
 			subpass.pDepthStencilAttachment = &depthRef;
 
-		// --- RenderPass ---
+		//  RenderPass
 		VkRenderPassCreateInfo ci{};
 		ci.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
 		ci.attachmentCount = (uint32_t)attachments.size();
@@ -70,40 +68,30 @@ namespace RxVK {
 		ci.subpassCount = 1;
 		ci.pSubpasses = &subpass;
 
-		VkRenderPass rp;
-		VkResult result = vkCreateRenderPass(ctx.device->logical(), &ci, nullptr, &rp);
+		VulkanRenderPass rp;
+		VkResult result = vkCreateRenderPass(ctx.device->logical(), &ci, nullptr, &rp.renderPass);
 		if (!CheckVk(result, "VKCreateRenderPass: Failed to create render pass")) {
 			return RenderPassHandle{};
 		}
-		RENDERX_ASSERT_MSG(rp != VK_NULL_HANDLE, "VKCreateRenderPass: created render pass is null");
+		RENDERX_ASSERT_MSG(rp.renderPass != VK_NULL_HANDLE, "VKCreateRenderPass: created render pass is null");
 
 		// Use ResourcePool for RenderPass management
 		RenderPassHandle handle = g_RenderPassPool.allocate(rp);
-
+		RENDERX_INFO("Created Frame Buffer ID : {}", handle.id);
 		return handle;
 	}
 
 	void VKDestroyRenderPass(RenderPassHandle& handle) {
 		auto& ctx = GetVulkanContext();
-		RENDERX_ASSERT_MSG(ctx.device != VK_NULL_HANDLE, "VKDestroyRenderPass: device is VK_NULL_HANDLE");
-
-		if (!handle.IsValid()) {
-			RENDERX_WARN("VKDestroyRenderPass: invalid render pass handle");
+		auto* rp = g_RenderPassPool.get(handle);
+		if (rp) {
+			vkDestroyRenderPass(ctx.device->logical(), rp->renderPass, nullptr);
+			g_RenderPassPool.free(handle);
 			return;
 		}
-
-		// Try ResourcePool first
-		auto* rp = g_RenderPassPool.get(handle);
-		if (rp != nullptr && *rp != VK_NULL_HANDLE) {
-			vkDestroyRenderPass(ctx.device->logical(), *rp, nullptr);
-			g_RenderPassPool.free(handle);
-		}
-		else {
-			RENDERX_WARN("VKDestroyRenderPass: render pass already null or invalid");
-		}
-	}
-
-} // namespace  RxVK
+		RENDERX_ASSERT_MSG(false, "Invalid FramebufferHandle")
+	} // namespace  RxVK
 
 
+}
 } // namespace Rx

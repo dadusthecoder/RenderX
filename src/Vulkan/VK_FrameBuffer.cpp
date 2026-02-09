@@ -3,66 +3,62 @@
 
 namespace Rx::RxVK {
 
-	static std::unordered_map<uint32_t, VkFramebuffer> s_Framebuffers;
-	static uint32_t s_NextFramebufferId = 1;
+	ResourcePool<VulkanFramebuffer, FramebufferHandle> g_FramebufferPool;
 
 	FramebufferHandle VKCreateFramebuffer(const FramebufferDesc& desc) {
 		auto& ctx = GetVulkanContext();
-		(void)ctx; // Context will be used when implementing this function
+		RENDERX_ASSERT_MSG(ctx.device != VK_NULL_HANDLE, "VKCreateFramebuffer: device is VK_NULL_HANDLE");
+		RENDERX_ASSERT(desc.renderPass.IsValid());
+		RENDERX_ASSERT(desc.width > 0 && desc.height > 0);
 
-		// TODO: implement VKCreateFramebuffer - creating VkFramebuffer and
-		// registering it in s_Framebuffers. Currently this is intentionally
-		// unimplemented and returns an invalid handle.
-		// RENDERX_ASSERT(desc.renderPass.IsValid());
-		// RENDERX_ASSERT(desc.width > 0 && desc.height > 0);
-		//
-		// std::vector<VkImageView> attachments;
-		//
-		// // --- Color attachments ---
-		// for (auto& tex : desc.colorAttachments) {
-		// 	RENDERX_ASSERT(tex.IsValid());
-		// 	attachments.push_back(GetVkImageView(tex));
-		// }
-		//
-		// // --- Depth attachment ---
-		// if (desc.depthStencilAttachment.IsValid()) {
-		// 	attachments.push_back(GetVkImageView(desc.depthStencilAttachment));
-		// }
-		//
-		// VkFramebufferCreateInfo ci{};
-		// ci.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-		// ci.renderPass = s_RenderPasses[desc.renderPass.id];
-		// ci.attachmentCount = (uint32_t)attachments.size();
-		// ci.pAttachments = attachments.data();
-		// ci.width = desc.width;
-		// ci.height = desc.height;
-		// ci.layers = desc.layers;
-		//
-		// VkFramebuffer framebuffer;
-		// VK_CHECK(vkCreateFramebuffer(ctx.device, &ci, nullptr, &framebuffer));
-		//
-		// FramebufferHandle handle{ s_NextFramebufferId++ };
-		// s_Framebuffers[handle.id] = framebuffer;
+		auto* rp = g_RenderPassPool.get(desc.renderPass);
+		if (rp == nullptr || rp->renderPass == VK_NULL_HANDLE) {
+			RENDERX_WARN("VKCreateFramebuffer: invalid render pass handle");
+			return FramebufferHandle{};
+		}
 
-		return FramebufferHandle{};
+		const bool hasDepth = desc.depthStencilAttachment.IsValid();
+		std::vector<VkImageView> attachments;
+		attachments.reserve(desc.colorAttachments.size() + (hasDepth ? 1u : 0u));
+
+		for (const auto& tex : desc.colorAttachments) {
+			RENDERX_ASSERT(tex.IsValid());
+			auto* vkTex = g_TexturePool.get(tex);
+			RENDERX_ASSERT(vkTex != nullptr && vkTex->view != VK_NULL_HANDLE);
+			attachments.push_back(vkTex->view);
+		}
+
+		if (hasDepth) {
+			auto* vkDepth = g_TexturePool.get(desc.depthStencilAttachment);
+			RENDERX_ASSERT(vkDepth != nullptr && vkDepth->view != VK_NULL_HANDLE);
+			attachments.push_back(vkDepth->view);
+		}
+
+		VkFramebufferCreateInfo ci{};
+		ci.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+		ci.renderPass = rp->renderPass;
+		ci.attachmentCount = static_cast<uint32_t>(attachments.size());
+		ci.pAttachments = attachments.data();
+		ci.width = desc.width;
+		ci.height = desc.height;
+		ci.layers = desc.layers;
+		VkFramebuffer framebuffer = VK_NULL_HANDLE;
+		VkResult result = vkCreateFramebuffer(ctx.device->logical(), &ci, nullptr, &framebuffer);
+		if (!CheckVk(result, "VKCreateFramebuffer: Failed to create framebuffer")) {
+			return FramebufferHandle{};
+		}
+		RENDERX_ASSERT(framebuffer != VK_NULL_HANDLE);
+		VulkanFramebuffer temp{ framebuffer };
+		auto handle = g_FramebufferPool.allocate(temp);
+		return handle;
 	}
 
 	void VKDestroyFramebuffer(FramebufferHandle& handle) {
-		// auto& ctx = GetVulkanContext();
-		// auto it = s_Framebuffers.find(handle.id);
-		// if (it == s_Framebuffers.end())
-		// 	return;
+		auto* it = g_FramebufferPool.get(handle);
+		RENDERX_ASSERT_MSG(it->framebuffer != VK_NULL_HANDLE, "Framebuffer is VK_NULL_HANDLE");
 
-		/*auto& ctx = GetVulkanContext();
-		auto it = s_Framebuffers.find(handle.id);
-		if (it == s_Framebuffers.end())
-			return;
-
-
-		if (it->second != VK_NULL_HANDLE) {
-			vkDestroyFramebuffer(ctx.device->logical(), it->second, nullptr);
-		}
-		s_Framebuffers.erase(it);
-		handle.id = 0;*/
+		auto& ctx = GetVulkanContext();
+		vkDestroyFramebuffer(ctx.device->logical(), it->framebuffer, nullptr);
+		g_FramebufferPool.free(handle);
 	}
 }

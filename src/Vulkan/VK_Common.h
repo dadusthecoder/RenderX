@@ -273,6 +273,14 @@ namespace RxVK {
 		VkPresentModeKHR preferredPresentMode = VK_PRESENT_MODE_MAILBOX_KHR;
 	};
 
+	struct VulkanRenderPass {
+		VkRenderPass renderPass = VK_NULL_HANDLE;
+	};
+
+	struct VulkanFramebuffer {
+		VkFramebuffer framebuffer = VK_NULL_HANDLE;
+	};
+
 	// Resource Pool Template
 
 	template <typename ResourceType, typename Tag>
@@ -606,7 +614,7 @@ namespace RxVK {
 		VulkanCommandList(
 			VkCommandBuffer cmdBuffer,
 			QueueType queueType)
-			: m_CommandBuffer(cmdBuffer), m_QueueType(queueType){}
+			: m_CommandBuffer(cmdBuffer), m_QueueType(queueType) {}
 		void open() override;
 		void close() override;
 		void setPipeline(const PipelineHandle& pipeline) override;
@@ -648,7 +656,7 @@ namespace RxVK {
 		const char* m_DebugName;
 		VkCommandBuffer m_CommandBuffer;
 		QueueType m_QueueType;
-	
+
 		// Track currently bound pipeline / layout so descriptor sets can be bound
 		PipelineHandle m_CurrentPipeline;
 		PipelineLayoutHandle m_CurrentPipelineLayout;
@@ -728,29 +736,25 @@ namespace RxVK {
 	// Global Resource Pools
 	extern ResourcePool<VulkanBuffer, BufferHandle> g_BufferPool;
 	extern ResourcePool<VulkanBufferView, BufferViewHandle> g_BufferViewPool;
-	extern ResourcePool<VkRenderPass, RenderPassHandle> g_RenderPassPool;
 	extern ResourcePool<VulkanTexture, TextureHandle> g_TexturePool;
 	extern ResourcePool<VulkanShader, ShaderHandle> g_ShaderPool;
 	extern ResourcePool<VulkanPipeline, PipelineHandle> g_PipelinePool;
 	extern ResourcePool<VulkanPipelineLayout, PipelineLayoutHandle> g_PipelineLayoutPool;
 	extern ResourcePool<VulkanResourceGroupLayout, ResourceGroupLayoutHandle> g_ResourceGroupLayoutPool;
-
-	// ResourceGroup pool is defined in VK_ResourceGroups.cpp; expose extern so
-	// other modules (e.g. command list) can bind descriptor sets.
+	extern ResourcePool<VulkanRenderPass, RenderPassHandle> g_RenderPassPool;
+	extern ResourcePool<VulkanFramebuffer, FramebufferHandle> g_Framebufferpool;
 	extern ResourcePool<VulkanResourceGroup, ResourceGroupHandle> g_ResourceGroupPool;
 
+	// Global Hash Storage (Only for now :TODO implement better cache managenet )
 	extern std::unordered_map<Hash64, BufferViewHandle> g_BufferViewCache;
 	extern std::unordered_map<Hash64, ResourceGroupHandle> g_ResourceGroupCache;
 
 	// Context & Cleanup Functions
-
-
 	VulkanContext& GetVulkanContext();
 	void freeAllVulkanResources();
 	void VKShutdownCommon();
 
-	// Descriptor Pool Creation
-
+	// Create a Descriptor Pool
 	inline VkDescriptorPool CreateDescriptorPool(const DescriptorPoolSizes& sizes, bool allowFree) {
 		std::vector<VkDescriptorPoolSize> poolSizes;
 		auto& ctx = GetVulkanContext();
