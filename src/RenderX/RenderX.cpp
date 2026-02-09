@@ -3,7 +3,6 @@
 #include "RenderX/DebugProfiler.h"
 #include "OpenGL/GL_RenderX.h"
 #include "Vulkan/VK_RenderX.h"
-#include "Log.h"
 #include "ProLog/ProLog.h"
 #include <cstring>
 

@@ -6,8 +6,7 @@
 // RENDERING HARDWARE INTERFACE (RHI)
 //------------------------------------------------------------------------------
 // Defines the runtime-dispatchable abstraction for graphics APIs.
-// Backend modules (OpenGL(Not Functional - WIP), Vulkan(Unstable), DirectX(Planed), etc.) provide actual
-// implementations routed through the dispatch table.
+// Backend modules (OpenGL(Not Functional - WIP), Vulkan(Unstable), DirectX(Planned), etc.) provide actual// implementations routed through the dispatch table.
 //------------------------------------------------------------------------------
 
 namespace Rx {

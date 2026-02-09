@@ -19,10 +19,7 @@ namespace Rx {
 #undef RENDERER_FUNC
 	};
 
-	//------------------------------------------------------------------------------
 	// GLOBAL STATE
-	//------------------------------------------------------------------------------
-
 	/// @brief Global dispatch table instance bound to the active backend.
 	extern RENDERX_EXPORT RenderDispatchTable g_DispatchTable;
 

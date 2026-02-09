@@ -1,4 +1,3 @@
-#include "RenderX/Log.h"
 #include "RenderX/DebugProfiler.h"
 #include "VK_RenderX.h"
 #include "VK_Common.h"

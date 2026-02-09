@@ -1,6 +1,4 @@
 #pragma once
-
-#include "RenderX/Log.h"
 #include "ProLog/ProLog.h"
 #include "RenderX/Common.h"
 

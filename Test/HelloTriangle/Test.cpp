@@ -4,9 +4,6 @@
 #define RENDERX_DEBUG
 #include "RenderX/RenderX.h"
 
-
-
-
 struct Frame {
 	Rx::CommandAllocator* graphicsAlloc;
 	Rx::CommandAllocator* computeAlloc;
@@ -37,10 +34,10 @@ int main() {
 	rxWindow.displayHandle = GetModuleHandle(nullptr);
 	Rx::Init(rxWindow);
 
-
 	Rx::CommandQueue* graphics = Rx::GetGpuQueue(Rx::QueueType::GRAPHICS);
 	Rx::CommandQueue* compute = Rx::GetGpuQueue(Rx::QueueType::COMPUTE);
 
+	
 	Frame frames[3];
 	for (auto& frame : frames) {
 		frame.graphicsAlloc = graphics->CreateCommandAllocator();
@@ -51,6 +48,8 @@ int main() {
 	uint32_t currentFrame = 0;
 
 	while (!glfwWindowShouldClose(window)) {
+
+		//look out for missing reference operator !!!
 		auto& frame = frames[currentFrame];
 		graphics->Wait(frame.T);
 
@@ -74,6 +73,7 @@ int main() {
 	}
 
 	graphics->WaitIdle();
+	compute->WaitIdle();
 	for (auto& frame : frames) {
 		frame.computeAlloc->Free(frame.computelist);
 		frame.graphicsAlloc->Free(frame.graphicslist);

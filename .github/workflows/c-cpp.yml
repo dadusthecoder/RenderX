@@ -1,4 +1,4 @@
-name: C/C++ CI
+name: Build
 
 on:
   push:
@@ -8,16 +8,40 @@ on:
 
 jobs:
   build:
+    runs-on: ${{ matrix.os }}
 
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+        build-type: [Debug, Release]
+        include:
+          - os: windows-latest
+            generator: "Visual Studio 17 2022"
+            arch: "-A x64"
+          - os: ubuntu-latest
+            generator: "Unix Makefiles"
+            arch: ""
 
     steps:
     - uses: actions/checkout@v4
-    - name: configure
-      run: ./configure
-    - name: make
-      run: make
-    - name: make check
-      run: make check
-    - name: make distcheck
-      run: make distcheck
+      with:
+        submodules: recursive
+
+    - name: Setup CMake
+      uses: cmake-actions/setup-cmake@v3
+
+    - name: Install dependencies (Linux)
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev
+
+    - name: Configure CMake
+      run: cmake -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=${{ matrix.build-type }} -G "${{ matrix.generator }}" ${{ matrix.arch }}
+
+    - name: Build
+      run: cmake --build ${{ github.workspace }}/build --config ${{ matrix.build-type }} --parallel 4
+
+    - name: Test
+      working-directory: ${{ github.workspace }}/build
+      run: ctest --build-config ${{ matrix.build-type }} --output-on-failure
