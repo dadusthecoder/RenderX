@@ -133,6 +133,7 @@ namespace Rx {
 #define RX_STATUS(msg)
 #endif
 
+// for backword compatibliaty
 #ifdef RENDERX_DEBUG
 #define LOG_INIT() ::Rx::Log::Init()
 #define RENDERX_TRACE(...) ::Rx::Log::Core()->trace(__VA_ARGS__)

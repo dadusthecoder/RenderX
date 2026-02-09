@@ -6,6 +6,15 @@
 
 
 
+
+struct Frame {
+	Rx::CommandAllocator* graphicsAlloc;
+	Rx::CommandAllocator* computeAlloc;
+	Rx::CommandList* graphicslist;
+	Rx::CommandList* computelist;
+	Rx::Timeline T = Rx::Timeline(0);
+};
+
 int main() {
 	glfwInit();
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
@@ -28,37 +37,49 @@ int main() {
 	rxWindow.displayHandle = GetModuleHandle(nullptr);
 	Rx::Init(rxWindow);
 
+
 	Rx::CommandQueue* graphics = Rx::GetGpuQueue(Rx::QueueType::GRAPHICS);
 	Rx::CommandQueue* compute = Rx::GetGpuQueue(Rx::QueueType::COMPUTE);
 
-	Rx::CommandAllocator* graphicsAlloc = graphics->CreateCommandAllocator();
-	Rx::CommandAllocator* computeAlloc = compute->CreateCommandAllocator();
-
-	Rx::CommandList* graphicslist = graphicsAlloc->Allocate();
-	Rx::CommandList* computelist = computeAlloc->Allocate();
+	Frame frames[3];
+	for (auto& frame : frames) {
+		frame.graphicsAlloc = graphics->CreateCommandAllocator();
+		frame.computeAlloc = compute->CreateCommandAllocator();
+		frame.graphicslist = frame.graphicsAlloc->Allocate();
+		frame.computelist = frame.computeAlloc->Allocate();
+	}
+	uint32_t currentFrame = 0;
 
 	while (!glfwWindowShouldClose(window)) {
-		computelist->open();
-		computelist->close();
-		graphicslist->open();
-		graphicslist->close();
+		auto& frame = frames[currentFrame];
+		graphics->Wait(frame.T);
 
-		auto t0 = compute->Submit(computelist);
+		frame.computelist->open();
+		// Compute work
+		frame.computelist->close();
+
+		frame.graphicslist->open();
+		// Graphics Work
+		frame.graphicslist->close();
+
+		auto t0 = compute->Submit(frame.computelist);
 		Rx::SubmitInfo submitInfo{};
-		submitInfo.commandList = graphicslist;
+		submitInfo.commandList = frame.graphicslist;
 		submitInfo.commandListCount = 1;
 		submitInfo.waitDependencies.push_back({ Rx::QueueType::COMPUTE, t0 });
-		auto t1 = graphics->Submit(submitInfo);
+		frame.T = graphics->Submit(submitInfo);
 
-		graphics->Wait(t1);
-		//computeAlloc->Reset();
-		//graphicsAlloc->Reset();
+		currentFrame = (currentFrame + 1) % 3;
 		glfwPollEvents();
 	}
 
-	graphics->DestroyCommandAllocator(graphicsAlloc);
-	compute->DestroyCommandAllocator(computeAlloc);
-
+	graphics->WaitIdle();
+	for (auto& frame : frames) {
+		frame.computeAlloc->Free(frame.computelist);
+		frame.graphicsAlloc->Free(frame.graphicslist);
+		graphics->DestroyCommandAllocator(frame.graphicsAlloc);
+		compute->DestroyCommandAllocator(frame.computeAlloc);
+	}
 	Rx::Shutdown();
 	return 0;
 }
