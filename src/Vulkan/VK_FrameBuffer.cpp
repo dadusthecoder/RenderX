@@ -54,7 +54,7 @@ namespace Rx::RxVK {
 		// if (it == s_Framebuffers.end())
 		// 	return;
 
-		auto& ctx = GetVulkanContext();
+		/*auto& ctx = GetVulkanContext();
 		auto it = s_Framebuffers.find(handle.id);
 		if (it == s_Framebuffers.end())
 			return;
@@ -64,6 +64,6 @@ namespace Rx::RxVK {
 			vkDestroyFramebuffer(ctx.device->logical(), it->second, nullptr);
 		}
 		s_Framebuffers.erase(it);
-		handle.id = 0;
+		handle.id = 0;*/
 	}
 }

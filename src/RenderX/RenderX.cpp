@@ -26,9 +26,9 @@ namespace Rx {
 		ProLog::SetConfig(config);
 #endif
 		// If a backend is already active, shut it down cleanly so we can switch.
-		if (API != GraphicsAPI::NONE && g_DispatchTable.Shutdown) {
+		if (API != GraphicsAPI::NONE && g_DispatchTable.BackendShutdown) {
 			RENDERX_INFO("Init: shutting down active backend before reinitializing");
-			g_DispatchTable.Shutdown();
+			g_DispatchTable.BackendShutdown();
 			// Clear function pointers so stale calls are impossible.
 			std::memset(&g_DispatchTable, 0, sizeof(g_DispatchTable));
 			API = GraphicsAPI::NONE;
@@ -41,7 +41,7 @@ namespace Rx {
 			// RENDERX_API(X)
 #undef X
 
-			if (g_DispatchTable.Init) g_DispatchTable.Init(window);
+			if (g_DispatchTable.BackendInit) g_DispatchTable.BackendInit(window);
 
 			API = window.api;
 			RENDERX_INFO("OpenGL backend loaded successfully.");
@@ -54,8 +54,8 @@ namespace Rx {
 			RENDERX_FUNC(RX_BIND_FUNC)
 #undef X
 
-			if (g_DispatchTable.Init)
-				g_DispatchTable.Init(window);
+			if (g_DispatchTable.BackendInit)
+				g_DispatchTable.BackendInit(window);
 
 			API = window.api;
 			RENDERX_INFO("Vulkan backend loaded successfully.");
@@ -74,8 +74,8 @@ namespace Rx {
 
 	void Shutdown() {
 		// Call the active backend's shutdown if available.
-		if (g_DispatchTable.Shutdown) {
-			g_DispatchTable.Shutdown();
+		if (g_DispatchTable.BackendShutdown) {
+			g_DispatchTable.BackendShutdown();
 		}
 		// Reset dispatch table and API so a new backend can be initialized safely.
 		std::memset(&g_DispatchTable, 0, sizeof(g_DispatchTable));
@@ -85,21 +85,9 @@ namespace Rx {
 		LOG_SHUTDOWN();
 	}
 
-#define RX_FORWARD(_ret, _name, _parms, _args) \
+#define RX_FORWARD_FUNC(_ret, _name, _parms, _args) \
 	_ret _name _parms { return g_DispatchTable._name _args; }
-
-	RX_FORWARD(PipelineLayoutHandle, CreatePipelineLayout, (const ResourceGroupLayoutHandle* layouts, uint32_t layoutCount), (layouts, layoutCount))
-	RX_FORWARD(PipelineHandle, CreateGraphicsPipeline, (PipelineDesc & desc), (desc))
-	RX_FORWARD(ShaderHandle, CreateShader, (const ShaderDesc& desc), (desc))
-	RX_FORWARD(BufferHandle, CreateBuffer, (const BufferDesc& desc), (desc))
-	RX_FORWARD(BufferViewHandle, CreateBufferView, (const BufferViewDesc& desc), (desc))
-	RX_FORWARD(void, DestroyBufferView, (BufferViewHandle & handle), (handle))
-	RX_FORWARD(RenderPassHandle, CreateRenderPass, (const RenderPassDesc& desc), (desc))
-	RX_FORWARD(void, DestroyRenderPass, (RenderPassHandle & pass), (pass))
-	RX_FORWARD(FramebufferHandle, CreateFramebuffer, (const FramebufferDesc& desc), (desc))
-	RX_FORWARD(void, DestroyFramebuffer, (FramebufferHandle & framebuffer), (framebuffer))
-	RX_FORWARD(ResourceGroupHandle, CreateResourceGroup, (const ResourceGroupDesc& desc), (desc))
-	RX_FORWARD(void, DestroyResourceGroup, (ResourceGroupHandle & handle), (handle))
-	RX_FORWARD(ResourceGroupLayoutHandle, CreateResourceGroupLayout, (const ResourceGroupLayout& desc), (desc))
+    RENDERX_FUNC(RX_FORWARD_FUNC)
+#undef RX_FORWARD
 
 } // namespace Rx

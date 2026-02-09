@@ -187,7 +187,7 @@ namespace ProLog {
 // Feature Toggles
 // ============================================================================
 #define ENABLE_PROFILING 0 // set to 0 to disable profiling
-#define ENABLE_LOGGING 0  // set to 0 to disable logging
+#define ENABLE_LOGGING 1   // set to 0 to disable logging
 // ============================================================================
 // Profiling Macros
 // ============================================================================
@@ -232,21 +232,17 @@ namespace ProLog {
 // ============================================================================
 
 #if ENABLE_LOGGING
-
 #define LOG_TRACE(...) ::ProLog::Logger::Get().GetLogger()->trace(__VA_ARGS__)
 #define LOG_DEBUG(...) ::ProLog::Logger::Get().GetLogger()->debug(__VA_ARGS__)
 #define LOG_INFO(...) ::ProLog::Logger::Get().GetLogger()->info(__VA_ARGS__)
 #define LOG_WARN(...) ::ProLog::Logger::Get().GetLogger()->warn(__VA_ARGS__)
 #define LOG_ERROR(...) ::ProLog::Logger::Get().GetLogger()->error(__VA_ARGS__)
 #define LOG_CRITICAL(...) ::ProLog::Logger::Get().GetLogger()->critical(__VA_ARGS__)
-
 #define LOG_IF(condition, level, ...)            \
 	do {                                         \
 		if (condition) LOG_##level(__VA_ARGS__); \
 	} while (0)
-
 #else
-
 // Compile out logging completely
 #define LOG_TRACE(...)
 #define LOG_DEBUG(...)
@@ -254,7 +250,5 @@ namespace ProLog {
 #define LOG_WARN(...)
 #define LOG_ERROR(...)
 #define LOG_CRITICAL(...)
-
 #define LOG_IF(condition, level, ...)
-
 #endif

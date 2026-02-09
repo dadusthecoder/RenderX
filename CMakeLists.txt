@@ -64,7 +64,7 @@ find_package(Vulkan REQUIRED)
 add_library(${PROJECT_NAME} SHARED ${SOURCES})
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE RENDERX_BUILD_DLL)
-#target_compile_definitions(${PROJECT_NAME} PRIVATE RENDERX_DEBUG)
+target_compile_definitions(${PROJECT_NAME} PRIVATE RENDERX_DEBUG)
 
 
 target_compile_options(RenderX PRIVATE
@@ -74,10 +74,10 @@ target_compile_options(RenderX PRIVATE
 target_include_directories(${PROJECT_NAME}
     PRIVATE "${CMAKE_SOURCE_DIR}/External_local/glew-2.1.0/include"
     PRIVATE "${CMAKE_SOURCE_DIR}/External/VulkanMemoryAllocator/include"
+    PRIVATE "${CMAKE_SOURCE_DIR}/External/spdlog/include"
 
     PUBLIC "${CMAKE_SOURCE_DIR}/src"
     PUBLIC  "${CMAKE_SOURCE_DIR}/External/glm"
-    PUBLIC "${CMAKE_SOURCE_DIR}/External/spdlog/include"
     PUBLIC "${CMAKE_SOURCE_DIR}/External/glfw/include"
     PUBLIC "${CMAKE_SOURCE_DIR}/External_local/ProLog/include"
 )
@@ -86,12 +86,12 @@ target_link_directories(RenderX PUBLIC External_local/ProLog/bin)
 
 target_link_libraries(${PROJECT_NAME}
     PRIVATE glm
-    PRIVATE spdlog
     PRIVATE glfw
-    PRIVATE  ProLog
-    PUBLIC Vulkan::Vulkan
     PRIVATE glew_s
-
+    
+    PUBLIC spdlog
+    PUBLIC ProLog
+    PUBLIC Vulkan::Vulkan
 )
 
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD

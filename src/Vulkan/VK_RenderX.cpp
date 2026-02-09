@@ -5,7 +5,7 @@
 namespace Rx {
 namespace RxVK {
 
-	void VKInit(const Window& window) {
+	void VKBackendInit(const Window& window) {
 		PROFILE_FUNCTION();
 
 		RENDERX_ASSERT_MSG(window.nativeHandle != nullptr, "VKInit: window.nativeHandle is null");
@@ -40,7 +40,7 @@ namespace RxVK {
 		ctx.descriptorSetManager = std::make_unique<VulkanDescriptorManager>(ctx);
 	}
 
-	void VKShutdown() {
+	void VKBackendShutdown() {
 		RENDERX_WARN("Destroying all vulkan resource");
 		VKShutdownCommon();
 	}

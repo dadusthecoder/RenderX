@@ -77,17 +77,96 @@
 	using Name##Handle = Handle<HandleType::Name>;
 
 
+#pragma once
+#include <memory>
+#include <spdlog/spdlog.h>
+#include <spdlog/fmt/ostr.h> // allows logging custom structs via operator<<
+
+
+
+#pragma once
+#include <memory>
+#include <string>
+
+namespace spdlog {
+	class logger;
+}
+
+namespace Rx {
+
+	class Log {
+	public:
+		RENDERX_EXPORT static void Init();
+		RENDERX_EXPORT static void Shutdown();
+
+		RENDERX_EXPORT static std::shared_ptr<spdlog::logger>& Core();
+		RENDERX_EXPORT static std::shared_ptr<spdlog::logger>& Client();
+
+		// Same-line console status (NO newline)
+		RENDERX_EXPORT static void Status(const std::string& msg);
+	private:
+		RENDERX_EXPORT static std::shared_ptr<spdlog::logger> s_CoreLogger;
+		RENDERX_EXPORT static std::shared_ptr<spdlog::logger> s_ClientLogger;
+	};
+
+}
+
+
+#ifdef RENDERX_DEBUG
+#define RX_CORE_TRACE(...) ::Rx::Log::Core()->trace(__VA_ARGS__)
+#define RX_CORE_INFO(...) ::Rx::Log::Core()->info(__VA_ARGS__)
+#define RX_CORE_WARN(...) ::Rx::Log::Core()->warn(__VA_ARGS__)
+#define RX_CORE_ERROR(...) ::Rx::Log::Core()->error(__VA_ARGS__)
+#define RX_CORE_CRITICAL(...) ::Rx::Log::Core()->critical(__VA_ARGS__)
+#define RX_CLIENT_TRACE(...) ::Rx::Log::Client()->trace(__VA_ARGS__)
+#define RX_CLIENT_INFO(...) ::Rx::Log::Client()->info(__VA_ARGS__)
+#define RX_CLIENT_WARN(...) ::Rx::Log::Client()->warn(__VA_ARGS__)
+#define RX_CLIENT_ERROR(...) ::Rx::Log::Client()->error(__VA_ARGS__)
+#define RX_CLIENT_CRITICAL(...) ::Rx::Log::Client()->critical(__VA_ARGS__)
+#define RX_STATUS(msg) ::Rx::Log::Status(msg)
+#else
+#define RX_CORE_TRACE(...)
+#define RX_CORE_INFO(...)
+#define RX_CORE_WARN(...)
+#define RX_CORE_ERROR(...)
+#define RX_CORE_CRITICAL(...)
+#define RX_STATUS(msg)
+#endif
+
+#ifdef RENDERX_DEBUG
+#define LOG_INIT() ::Rx::Log::Init()
+#define RENDERX_TRACE(...) ::Rx::Log::Core()->trace(__VA_ARGS__)
+#define RENDERX_INFO(...) ::Rx::Log::Core()->info(__VA_ARGS__)
+#define RENDERX_WARN(...) ::Rx::Log::Core()->warn(__VA_ARGS__)
+#define RENDERX_ERROR(...) ::Rx::Log::Core()->error(__VA_ARGS__)
+#define RENDERX_CRITICAL(...) ::Rx::Log::Core()->critical(__VA_ARGS__)
+#define LOG_SHUTDOWN() ::Rx::Log::Shutdown();
+#else
+#define LOG_INIT()
+#define RENDERX_TRACE(...)
+#define RENDERX_INFO(...)
+#define RENDERX_WARN(...)
+#define RENDERX_ERROR(...)
+#define RENDERX_CRITICAL(...)
+#define LOG_SHUTDOWN()
+#endif
+#define CLIENT_TRACE(...) ::Rx::Log::Client()->trace(__VA_ARGS__)
+#define CLIENT_INFO(...) ::Rx::Log::Client()->info(__VA_ARGS__)
+#define CLIENT_WARN(...) ::Rx::Log::Client()->warn(__VA_ARGS__)
+#define CLIENT_ERROR(...) ::Rx::Log::Client()->error(__VA_ARGS__)
+#define CLIENT_CRITICAL(...) ::Rx::Log::Client()->critical(__VA_ARGS__)
+
 namespace Rx {
 
 // RenderX API X-Macro
 #define RENDERX_FUNC(X)                                                   \
                                                                           \
 	/* RenderX Lifetime */                                                \
-	X(void, Init,                                                         \
+	X(void, BackendInit,                                                  \
 		(const Window& window),                                           \
 		(window))                                                         \
                                                                           \
-	X(void, Shutdown,                                                     \
+	X(void, BackendShutdown,                                              \
 		(),                                                               \
 		())                                                               \
                                                                           \
@@ -149,10 +228,11 @@ namespace Rx {
                                                                           \
 	X(ResourceGroupLayoutHandle, CreateResourceGroupLayout,               \
 		(const ResourceGroupLayout& desc),                                \
-		(desc))
-
-
-
+		(desc))                                                           \
+                                                                          \
+	X(CommandQueue*, GetGpuQueue,                                         \
+		(QueueType type),                                                 \
+		(type))
 
 
 	// Base Handle Template
@@ -926,8 +1006,6 @@ namespace Rx {
 
 	class RENDERX_EXPORT CommandList {
 	public:
-		virtual ~CommandList() = default;
-
 		virtual void open() = 0;
 		virtual void close() = 0;
 
@@ -975,6 +1053,24 @@ namespace Rx {
 			: waitQueue(queue), waitValue(value) {}
 	};
 
+
+	// This Class Allocates a cpu side Recoding object CommandList
+	//(Maps to VkCommandPool in vulkan or ID3D12CommandAllocator in DX12)
+	class RENDERX_EXPORT CommandAllocator {
+	public:
+		// Allocate a new CommandList in INITIAL State
+		virtual CommandList* Allocate() = 0;
+
+		// Resets a Command List To the INITIAL state
+		virtual void Reset(CommandList* list) = 0;
+
+		// Sets a CommadList to a INVALID state
+		virtual void Free(CommandList* list) = 0;
+
+		// Resets All the CommandLsit Allocated From this Allocator To the Initial State;
+		virtual void Reset() = 0;
+	};
+
 	// Command List Submission
 	// Describes how to submit a command list
 	struct SubmitInfo {
@@ -1013,13 +1109,13 @@ namespace Rx {
 		/*	/// Get detailed queue info
 			virtual QueueInfo GetInfo() const = 0;*/
 
-		/// Command List Management
-		/// Create a command list for this queue
+		/// CommandAllcoator Management
+		/// Create a CommandAllcoator for this queue
 		/// @param debugName Optional name for debugging
-		virtual CommandList* CreateCommandList(const char* debugName = nullptr) = 0;
+		virtual CommandAllocator* CreateCommandAllocator(const char* debugName = nullptr) = 0;
 
-		/// Destroy a command list
-		virtual void DestroyCommandList(CommandList* commandList) = 0;
+		/// Destroy a cCommandAllcoator
+		virtual void DestroyCommandAllocator(CommandAllocator* allocator) = 0;
 
 		/// Submission
 		/// Submit a single command list
@@ -1043,17 +1139,14 @@ namespace Rx {
 		virtual bool Poll(Timeline value) = 0;
 
 		/// Get the current timeline value (last completed submission)
-		virtual Timeline Completed() const = 0;
+		virtual Timeline Completed() = 0;
 
 		/// Get the next timeline value that will be signaled
 		virtual Timeline Submitted() const = 0;
 
 		/// Features
 		/// Get GPU timestamp frequency (ticks per second)
-		virtual uint64_t TimestampFrequency() const = 0;
-
-		/// Flush any pending submissions
-		virtual void Flush() = 0;
+		virtual float TimestampFrequency() const = 0;
 	};
 
 } // namespace  RenderX

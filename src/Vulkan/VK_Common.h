@@ -21,17 +21,6 @@
 #include <deque>
 #include <mutex>
 
-
-
-
-namespace Rx {
-namespace RxVK {
-
-
-
-} // namespace RxVK
-} // namespace Rx
-
 namespace Rx {
 namespace RxVK {
 
@@ -420,7 +409,7 @@ namespace RxVK {
 	class VulkanDevice;
 	class VulkanSwapchain;
 	class VulkanAllocator;
-	class VulkanQueue;
+	class VulkanCommandQueue;
 	class VulkanDescriptorPoolManager;
 	class VulkanDescriptorManager;
 
@@ -483,11 +472,8 @@ namespace RxVK {
 		VkPhysicalDeviceMemoryProperties memoryProperties;
 		std::vector<VkQueueFamilyProperties> queueFamilies;
 		std::vector<VkExtensionProperties> extensions;
-
-		// Suitability score
 		uint32_t score = 0;
 		int index;
-		// bool suitable = false;
 	};
 
 	class VulkanDevice {
@@ -619,18 +605,12 @@ namespace RxVK {
 
 	class VulkanCommandList : public CommandList {
 	public:
-		VulkanCommandList();
 		VulkanCommandList(
 			VkCommandBuffer cmdBuffer,
-			VkCommandPool cmdPool,
-			QueueType queueType,
-			const char* debugName = nullptr)
-			: m_CommandBuffer(cmdBuffer), m_CommandPool(cmdPool), m_QueueType(queueType), isRecording(false), m_DebugName(debugName) {}
-
-		~VulkanCommandList() override;
+			QueueType queueType)
+			: m_CommandBuffer(cmdBuffer), m_QueueType(queueType){}
 		void open() override;
 		void close() override;
-
 		void setPipeline(const PipelineHandle& pipeline) override;
 		void setVertexBuffer(const BufferHandle& buffer, uint64_t offset = 0) override;
 		void setIndexBuffer(const BufferHandle& buffer, uint64_t offset = 0) override;
@@ -661,66 +641,77 @@ namespace RxVK {
 			uint32_t offset,
 			uint32_t size) override;
 
-		virtual void setResourceGroup(
+		void setResourceGroup(
 			const ResourceGroupHandle& handle) override;
 
+		friend class VulkanCommandAllocator;
 		friend class VulkanCommandQueue;
 	private:
 		const char* m_DebugName;
-		bool isRecording;
 		VkCommandBuffer m_CommandBuffer;
-		VkCommandPool m_CommandPool;
 		QueueType m_QueueType;
-		CommandListState m_state = CommandListState::INVALID;
+	
+		// Track currently bound pipeline / layout so descriptor sets can be bound
+		PipelineHandle m_CurrentPipeline;
+		PipelineLayoutHandle m_CurrentPipelineLayout;
+		// Currently bound vertex/index buffers (handles) and offsets
+		BufferHandle m_VertexBuffer;
+		uint64_t m_VertexBufferOffset = 0;
+		BufferHandle m_IndexBuffer;
+		uint64_t m_IndexBufferOffset = 0;
 	};
 
+	class VulkanCommandAllocator : public CommandAllocator {
+	public:
+		VulkanCommandAllocator(VkCommandPool pool, VkDevice device, const char* debugName = nullptr)
+			: m_device(device), m_Pool(pool) {};
+
+		~VulkanCommandAllocator() = default;
+		CommandList* Allocate() override;
+		void Free(CommandList* list) override;
+		void Reset(CommandList* list) override;
+		void Reset() override;
+		friend class VulkanCommandQueue;
+	private:
+		const char* m_DebugName;
+		QueueType m_QueueType;
+		VkCommandPool m_Pool;
+		VkDevice m_device;
+	};
 
 	class VulkanCommandQueue : public CommandQueue {
 	public:
 		VulkanCommandQueue(VkDevice device, VkQueue queue, uint32_t family, QueueType type);
 		~VulkanCommandQueue();
 	private:
-		struct VulkanCommandPool {
-			VkCommandPool pool;
-			Timeline timeline;
-		};
-
-		std::deque<std::shared_ptr<VulkanCommandPool>> m_Free;
-		std::vector<std::shared_ptr<VulkanCommandPool>> m_InFlight;
-
-		void addWait(VkSemaphore semaphore, uint64_t value);
-		void addSignal(VkSemaphore semaphore, uint64_t value);
-		std::shared_ptr<VulkanCommandPool> CommandPool();
+		void addWait(VkSemaphore semaphore, uint64_t value, VkPipelineStageFlags stage);
 		VkQueue Queue();
-		VkSemaphore Semaphore() { return m_Semaphore; }
+		VkSemaphore Semaphore() { return m_TimelineSemaphore; }
 
 		VkDevice m_Device = VK_NULL_HANDLE;
 		VkQueue m_Queue = VK_NULL_HANDLE;
 		uint32_t m_Family = UINT32_MAX;
-		VkSemaphore m_Semaphore = VK_NULL_HANDLE;
 		QueueType m_Type = QueueType::GRAPHICS;
 
+		VkSemaphore m_TimelineSemaphore = VK_NULL_HANDLE;
 		uint64_t m_Submitted = 0;
 		uint64_t m_Completed = 0;
 
-		std::shared_ptr<VulkanCommandPool> m_CurrentCommandPool;
-
-		std::vector<VkSemaphore> m_WaitSemaphores;
-		std::vector<uint64_t> m_WaitValues;
-		std::vector<VkSemaphore> m_SignalSemaphores;
-		std::vector<uint64_t> m_SignalValues;
+		VkSemaphore m_WaitSemaphores[3];
+		uint64_t m_WaitValues[3];
+		VkPipelineStageFlags m_WaitStages[3];
+		uint32_t m_WaitCount = 0;
 	public:
-		CommandList* CreateCommandList(const char* debugName = nullptr) override;
-		void DestroyCommandList(CommandList* commandList) override;
+		CommandAllocator* CreateCommandAllocator(const char* debugName = nullptr) override;
+		void DestroyCommandAllocator(CommandAllocator* allocator) override;
 		Timeline Submit(CommandList* commandList) override;
 		Timeline Submit(const SubmitInfo& submitInfo) override;
 		bool Wait(Timeline value, uint64_t timeout = UINT64_MAX) override;
 		void WaitIdle() override;
 		bool Poll(Timeline value) override;
-		Timeline Completed() const override;
+		Timeline Completed() override;
 		Timeline Submitted() const override;
-		uint64_t TimestampFrequency() const override;
-		void Flush() override;
+		float TimestampFrequency() const override;
 	};
 
 	struct VulkanContext {
@@ -745,6 +736,10 @@ namespace RxVK {
 	extern ResourcePool<VulkanPipeline, PipelineHandle> g_PipelinePool;
 	extern ResourcePool<VulkanPipelineLayout, PipelineLayoutHandle> g_PipelineLayoutPool;
 	extern ResourcePool<VulkanResourceGroupLayout, ResourceGroupLayoutHandle> g_ResourceGroupLayoutPool;
+
+	// ResourceGroup pool is defined in VK_ResourceGroups.cpp; expose extern so
+	// other modules (e.g. command list) can bind descriptor sets.
+	extern ResourcePool<VulkanResourceGroup, ResourceGroupHandle> g_ResourceGroupPool;
 
 	extern std::unordered_map<Hash64, BufferViewHandle> g_BufferViewCache;
 	extern std::unordered_map<Hash64, ResourceGroupHandle> g_ResourceGroupCache;
