@@ -39,7 +39,7 @@ endforeach()
 add_subdirectory(External/glm)
 add_subdirectory(External/spdlog)
 add_subdirectory(External/glfw)
-add_subdirectory(External_local/glew-2.1.0/build/cmake)
+#add_subdirectory(External_local/glew-2.1.0/build/cmake)
 add_subdirectory(External_local/ProLog)
 
 
@@ -72,7 +72,7 @@ target_compile_options(RenderX PRIVATE
 )
 
 target_include_directories(${PROJECT_NAME}
-    PRIVATE "${CMAKE_SOURCE_DIR}/External_local/glew-2.1.0/include"
+    #PRIVATE "${CMAKE_SOURCE_DIR}/External_local/glew-2.1.0/include"
     PRIVATE "${CMAKE_SOURCE_DIR}/External/VulkanMemoryAllocator/include"
     PRIVATE "${CMAKE_SOURCE_DIR}/External/spdlog/include"
 
@@ -87,7 +87,7 @@ target_link_directories(RenderX PUBLIC External_local/ProLog/bin)
 target_link_libraries(${PROJECT_NAME}
     PRIVATE glm
     PRIVATE glfw
-    PRIVATE glew_s
+#    PRIVATE glew_s
     
     PUBLIC spdlog
     PUBLIC ProLog

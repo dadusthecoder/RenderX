@@ -384,7 +384,7 @@ namespace Rx::RxVK {
 		vkEnumeratePhysicalDevices(m_Instance, &count, devices.data());
 
 		for (uint32_t i = 0; i < count; i++) {
-			auto& info = gatherDeviceInfo(devices[i]);
+			auto info = gatherDeviceInfo(devices[i]);
 			info.score = scoreDevice(info);
 			logDeviceInfo(i, info);
 			info.index = i;

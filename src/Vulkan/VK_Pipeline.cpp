@@ -3,14 +3,14 @@
 
 namespace Rx {
 
-	namespace RxVK {
+namespace RxVK {
 
-		ResourcePool<VulkanPipelineLayout, PipelineLayoutHandle> g_PipelineLayoutPool;
-	} // namespace RxVK
+	ResourcePool<VulkanPipelineLayout, PipelineLayoutHandle> g_PipelineLayoutPool;
+	ResourcePool<VulkanPipeline, PipelineHandle> g_PipelinePool;
 
 
-	// ==== SHADER ====
-	ShaderHandle RxVK::VKCreateShader(const ShaderDesc& desc) {
+	// SHADER
+	ShaderHandle VKCreateShader(const ShaderDesc& desc) {
 		RENDERX_ASSERT_MSG(desc.bytecode.size() > 0, "VKCreateShader: bytecode is empty");
 		RENDERX_ASSERT_MSG(desc.bytecode.size() % sizeof(uint32_t) == 0, "VKCreateShader: bytecode size not aligned to uint32_t");
 		RENDERX_ASSERT_MSG(!desc.entryPoint.empty(), "VKCreateShader: entryPoint is empty");
@@ -21,7 +21,7 @@ namespace Rx {
 		ci.pCode = reinterpret_cast<const uint32_t*>(desc.bytecode.data());
 
 		VkShaderModule shaderModule;
-		auto& ctx = RxVK::GetVulkanContext();
+		auto& ctx = GetVulkanContext();
 		RENDERX_ASSERT_MSG(ctx.device && ctx.device->logical() != VK_NULL_HANDLE, "VKCreateShader: device is VK_NULL_HANDLE");
 
 		VkResult result = vkCreateShaderModule(ctx.device->logical(), &ci, nullptr, &shaderModule);
@@ -30,24 +30,20 @@ namespace Rx {
 		}
 		RENDERX_ASSERT_MSG(shaderModule != VK_NULL_HANDLE, "VKCreateShader: created shader module is null");
 
-		// Use ResourcePool for shader management
 		VulkanShader shader{ desc.entryPoint, desc.type, shaderModule };
-		ShaderHandle handle = RxVK::g_ShaderPool.allocate(shader);
-
+		ShaderHandle handle = g_ShaderPool.allocate(shader);
 		return handle;
 	}
 
-	// void RxVK::VKDestroyShader(ShaderHandle handle) {
-	// 	auto it = RxVK::s_Shaders.find(handle.id);
-	// 	if (it == RxVK::s_Shaders.end()) return;
-
-	// 	auto& ctx = RxVK::GetVulkanContext();
-	// 	vkDestroyShaderModule(ctx.device, it->second.shaderModule, nullptr);
-	// 	RxVK::s_Shaders.erase(it);
-	// }
+	void VKDestroyShader(ShaderHandle& handle) {
+		auto* shader = g_ShaderPool.get(handle);
+		auto& ctx = GetVulkanContext();
+		vkDestroyShaderModule(ctx.device->logical(), shader->shaderModule, nullptr);
+		g_ShaderPool.free(handle);
+	}
 
 	// Pipeline LAyout Creation
-	PipelineLayoutHandle RxVK::VKCreatePipelineLayout(const ResourceGroupLayoutHandle* playouts, uint32_t layoutcount) {
+	PipelineLayoutHandle VKCreatePipelineLayout(const ResourceGroupLayoutHandle* playouts, uint32_t layoutcount) {
 		// Store the created layout in a local registry and return a handle
 		RENDERX_ASSERT_MSG(layoutcount > 0, "VKCreatePipelineLayout: layout count is zero");
 		RENDERX_ASSERT_MSG(playouts != nullptr, "VKCreatePipelineLayout: playouts pointer is null");
@@ -60,7 +56,7 @@ namespace Rx {
 			// auto layout = g_Re
 		}
 
-		// ---------- Pipeline Layout ----------
+		//  Pipeline Layout 
 		VkPipelineLayout pipelinelayout;
 		VkPipelineLayoutCreateInfo lci{};
 		lci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -92,11 +88,11 @@ namespace Rx {
 		return handle;
 	}
 
-	// ==== GRAPHICS PIPELINE ====
-	PipelineHandle RxVK::VKCreateGraphicsPipeline(PipelineDesc& desc) {
+	// GRAPHICS PIPELINE 
+	PipelineHandle VKCreateGraphicsPipeline(PipelineDesc& desc) {
 		auto& ctx = GetVulkanContext();
 
-		// ---------- Shader Stages ----------
+		//  Shader Stages 
 		std::vector<VkPipelineShaderStageCreateInfo> stages;
 		for (auto& sh : desc.shaders) {
 			// Try ResourcePool first
@@ -114,7 +110,7 @@ namespace Rx {
 			stages.push_back(stage);
 		}
 
-		// ---------- Vertex Input ----------
+		//  Vertex Input 
 		std::vector<VkVertexInputBindingDescription> vertexBindings;
 		for (auto& b : desc.vertexInputState.vertexBindings) {
 			vertexBindings.push_back({ b.binding,
@@ -137,13 +133,13 @@ namespace Rx {
 		vertexInput.vertexAttributeDescriptionCount = (uint32_t)attrs.size();
 		vertexInput.pVertexAttributeDescriptions = attrs.data();
 
-		// ---------- Input Assembly ----------
+		//  Input Assembly 
 		VkPipelineInputAssemblyStateCreateInfo inputAsm{};
 		inputAsm.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
 		inputAsm.topology = ToVulkanTopology(desc.primitiveType);
 
 		// temp
-		//  ---------- Viewport ----------
+		//   Viewport 
 		VkViewport viewport{};
 		viewport.width = (float)ctx.swapchain->extent().width;
 		viewport.height = (float)ctx.swapchain->extent().height;
@@ -160,7 +156,7 @@ namespace Rx {
 		vp.scissorCount = 1;
 		vp.pScissors = &scissor;
 
-		// ---------- Rasterizer ----------
+		//  Rasterizer 
 		VkPipelineRasterizationStateCreateInfo rast{};
 		rast.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
 		rast.polygonMode = ToVulkanPolygonMode(desc.rasterizer.fillMode);
@@ -170,12 +166,12 @@ namespace Rx {
 							 : VK_FRONT_FACE_CLOCKWISE;
 		rast.lineWidth = 1.0f;
 
-		// ---------- Multisample ----------
+		//  Multisample 
 		VkPipelineMultisampleStateCreateInfo ms{};
 		ms.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
 		ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 
-		// ---------- Depth ----------
+		//  Depth 
 		VkPipelineDepthStencilStateCreateInfo depth{};
 		depth.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
 		depth.depthTestEnable = desc.depthStencil.depthEnable;
@@ -213,7 +209,7 @@ namespace Rx {
 		cb.blendConstants[2] = b.blendFactor.b;
 		cb.blendConstants[3] = b.blendFactor.a;
 
-		// ---------- Create Pipeline ----------
+		//  Create Pipeline 
 		VkGraphicsPipelineCreateInfo pci{};
 		pci.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
 		pci.stageCount = (uint32_t)stages.size();
@@ -225,7 +221,7 @@ namespace Rx {
 		pci.pMultisampleState = &ms;
 		pci.pDepthStencilState = &depth;
 		pci.pColorBlendState = &cb;
-		pci.renderPass = *g_RenderPassPool.get(desc.renderPass);
+		pci.renderPass = g_RenderPassPool.get(desc.renderPass)->renderPass;
 		auto* layout = g_PipelineLayoutPool.get(desc.layout);
 		pci.layout = layout->layout;
 
@@ -249,5 +245,5 @@ namespace Rx {
 		RENDERX_INFO("Created Vulkan Graphics Pipeline with ID {}", handle.id);
 		return handle;
 	}
-
+} // namespace RxVK
 } // namespace Rx
