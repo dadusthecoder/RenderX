@@ -392,7 +392,7 @@ namespace Rx::RxVK {
 		for (uint32_t i = 0; i < count; i++) {
 			auto info = gatherDeviceInfo(devices[i]);
 			info.score = scoreDevice(info);
-			logDeviceInfo(i, info);
+			//logDeviceInfo(i, info);
 			info.index = i;
 			infos.push_back(info);
 		}

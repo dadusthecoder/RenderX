@@ -69,7 +69,7 @@ int main() {
 	Rx::CommandQueue* compute = Rx::GetGpuQueue(Rx::QueueType::COMPUTE);
 
 	Rx::BufferDesc vertexbufferinfo{};
-	vertexbufferinfo.usage = Rx::BUfferUsage::VERTEX | Rx::BUfferUsage::TRANSFER_DST;
+	vertexbufferinfo.usage = Rx::BufferUsage::VERTEX | Rx::BufferUsage::TRANSFER_DST;
 	vertexbufferinfo.initialData = cubeIndices;
 	vertexbufferinfo.memoryType = Rx::MemoryType::GPU_ONLY;
 	vertexbufferinfo.size = sizeof(cubeVertices);

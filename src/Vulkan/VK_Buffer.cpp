@@ -59,10 +59,12 @@ namespace RxVK {
 		// Upload initial data if provided
 		if (desc.initialData) {
 			if (desc.memoryType == MemoryType::GPU_ONLY) {
-				// TODO	
-
-
-
+				// TODO
+				// TEMP
+				// to future me : Try to use the deffered uploader after you figure out the how to sync that with the users frame loop
+				// may i should keep the beginframe and endframe api for rendering usage
+				ctx.immediateUploader->uploadBuffer(vulkanBuffer.buffer,
+					desc.initialData, desc.size, 0, GetMinVulkanAlignment(desc.usage));
 			}
 			else {
 				// Direct upload for dynamic and stream buffers

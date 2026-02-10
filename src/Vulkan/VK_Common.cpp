@@ -120,9 +120,13 @@ namespace RxVK {
 		ctx.computeQueue.reset();
 		ctx.transferQueue.reset();
 		ctx.swapchain.reset();
+		ctx.stagingAllocator.reset();
+		ctx.immediateUploader.reset();
+		ctx.deferredUploader.reset();
 		ctx.allocator.reset();
 		ctx.device.reset();
 		ctx.instance.reset();
+
 	}
 
 } // namespace RxVK

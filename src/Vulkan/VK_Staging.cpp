@@ -23,7 +23,7 @@ namespace RxVK {
 		// Need a new chunk
 		StagingChunk* chunk = getOrCreateChunk(size);
 		if (!chunk) {
-			RENDERX_ERROR("[VulkanStagingAllocator] Failed to get staging chunk");
+			RENDERX_ERROR("Failed to get staging chunk");
 			return StagingAllocation{};
 		}
 
@@ -134,7 +134,7 @@ namespace RxVK {
 			return chunk;
 		}
 
-		RENDERX_INFO("[VulkanStagingAllocator] Created staging chunk: {} MB",
+		RENDERX_INFO("Created staging chunk: {} MB",
 			size / (1024.0f * 1024.0f));
 
 		return chunk;
@@ -254,21 +254,11 @@ namespace RxVK {
 		m_ImmediateCtx.isRecording = false;
 	}
 
-	bool VulkanImmediateUploader::uploadBuffer(
-		BufferHandle dstBuffer,
-		const void* data,
-		uint32_t size,
-		uint32_t dstOffset) {
-		VulkanBuffer* buffer = g_BufferPool.get(dstBuffer);
-		if (!buffer || !data || size == 0) {
-			RENDERX_ERROR("[ImmediateUploader] Invalid parameters");
-			return false;
-		}
-
+	bool VulkanImmediateUploader::uploadBuffer(VkBuffer dstBuffer, const void* data, uint32_t size, uint32_t dstOffset, uint32_t alignment) {
 		// Allocate staging memory
-		StagingAllocation staging = m_Ctx.stagingAllocator->allocate(size);
+		StagingAllocation staging = m_Ctx.stagingAllocator->allocate(size, alignment);
 		if (!staging.mappedPtr) {
-			RENDERX_ERROR("[ImmediateUploader] Failed to allocate staging memory");
+			RENDERX_ERROR("Failed to allocate staging memory");
 			return false;
 		}
 
@@ -284,7 +274,7 @@ namespace RxVK {
 		copyRegion.dstOffset = dstOffset;
 		copyRegion.size = size;
 
-		vkCmdCopyBuffer(cmd, staging.buffer, buffer->buffer, 1, &copyRegion);
+		vkCmdCopyBuffer(cmd, staging.buffer, dstBuffer, 1, &copyRegion);
 
 		// Submit and wait
 		endSingleTimeCommands(cmd);
@@ -293,21 +283,14 @@ namespace RxVK {
 		// It's already complete, so it will be recycled immediately
 		m_Ctx.stagingAllocator->submit(UINT64_MAX);
 		m_Ctx.stagingAllocator->retire(UINT64_MAX);
-
 		return true;
 	}
 
 	bool VulkanImmediateUploader::uploadTexture(
-		TextureHandle dstTexture,
+		VkImage dstTexture,
 		const void* data,
 		uint32_t size,
 		const TextureCopyRegion& region) {
-		VulkanTexture* texture = g_TexturePool.get(dstTexture);
-		if (!texture || !data || size == 0) {
-			RENDERX_ERROR("Invalid texture parameters");
-			return false;
-		}
-
 		// Allocate staging memory
 		StagingAllocation staging = m_Ctx.stagingAllocator->allocate(size);
 		if (!staging.mappedPtr) {
@@ -328,7 +311,7 @@ namespace RxVK {
 		barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
 		barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 		barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		barrier.image = texture->image;
+		barrier.image = dstTexture;
 		barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 		barrier.subresourceRange.baseMipLevel = region.dstMipLevel;
 		barrier.subresourceRange.levelCount = 1;
@@ -355,13 +338,13 @@ namespace RxVK {
 		copyRegion.imageSubresource.mipLevel = region.dstMipLevel;
 		copyRegion.imageSubresource.baseArrayLayer = region.dstArrayLayer;
 		copyRegion.imageSubresource.layerCount = 1;
-		//copyRegion.imageOffset = { (int32_t)region.dstOffset.x, (int32_t)region.dstOffset.y, (int32_t)region.dstOffset.z };
-		//copyRegion.imageExtent = { region.dstOffset.x, region.dstOffset.y, region.z };
+		// copyRegion.imageOffset = { (int32_t)region.dstOffset.x, (int32_t)region.dstOffset.y, (int32_t)region.dstOffset.z };
+		// copyRegion.imageExtent = { region.dstOffset.x, region.dstOffset.y, region.z };
 
 		vkCmdCopyBufferToImage(
 			cmd,
 			staging.buffer,
-			texture->image,
+			dstTexture,
 			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 			1,
 			&copyRegion);
@@ -387,7 +370,6 @@ namespace RxVK {
 		// Recycle staging
 		m_Ctx.stagingAllocator->submit(UINT64_MAX);
 		m_Ctx.stagingAllocator->retire(UINT64_MAX);
-
 		return true;
 	}
 
@@ -404,7 +386,7 @@ namespace RxVK {
 	}
 
 	void VulkanImmediateUploader::uploadBufferBatched(
-		BufferHandle dstBuffer,
+		VkBuffer dstBuffer,
 		const void* data,
 		uint32_t size,
 		uint32_t dstOffset) {
@@ -412,11 +394,7 @@ namespace RxVK {
 			RENDERX_ERROR("[ImmediateUploader] Must call beginBatch() first");
 			return;
 		}
-
-		VulkanBuffer* buffer = g_BufferPool.get(dstBuffer);
-		if (!buffer || !data || size == 0) {
-			return;
-		}
+		RENDERX_ASSERT_MSG(dstBuffer != VK_NULL_HANDLE, "dstBuffer is null handle");
 
 		// Allocate staging
 		StagingAllocation staging = m_Ctx.stagingAllocator->allocate(size);
@@ -431,17 +409,17 @@ namespace RxVK {
 		copyRegion.srcOffset = staging.offset;
 		copyRegion.dstOffset = dstOffset;
 		copyRegion.size = size;
- 
+
 		vkCmdCopyBuffer(
 			m_ImmediateCtx.commandBuffer,
 			staging.buffer,
-			buffer->buffer,
+			dstBuffer,
 			1,
 			&copyRegion);
 	}
 
 	void VulkanImmediateUploader::uploadTextureBatched(
-		TextureHandle dstTexture,
+		VkImage dstTexture,
 		const void* data,
 		uint32_t size,
 		const TextureCopyRegion& region) {
@@ -449,19 +427,13 @@ namespace RxVK {
 			RENDERX_ERROR("[ImmediateUploader] Must call beginBatch() first");
 			return;
 		}
-
-		VulkanTexture* texture = g_TexturePool.get(dstTexture);
-		if (!texture || !data || size == 0) {
-			return;
-		}
-
+		RENDERX_ASSERT_MSG(dstTexture != VK_NULL_HANDLE, "dstTexture  is VK_NULL_HANDLE")
 		StagingAllocation staging = m_Ctx.stagingAllocator->allocate(size);
 		if (!staging.mappedPtr) {
 			return;
 		}
-
 		std::memcpy(staging.mappedPtr, data, size);
-//TODO
+		// TODO
 	}
 
 	bool VulkanImmediateUploader::endBatch() {
@@ -470,9 +442,7 @@ namespace RxVK {
 		if (!m_ImmediateCtx.isRecording) {
 			return false;
 		}
-
 		VK_CHECK(vkEndCommandBuffer(m_ImmediateCtx.commandBuffer));
-
 		VkSubmitInfo submitInfo{};
 		submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 		submitInfo.commandBufferCount = 1;
@@ -494,7 +464,6 @@ namespace RxVK {
 	}
 
 	// VulkanDeferredUploader Implementation
-
 	VulkanDeferredUploader::VulkanDeferredUploader(VulkanContext& ctx)
 		: m_Ctx(ctx) {
 	}
@@ -591,13 +560,13 @@ namespace RxVK {
 			copyRegion.dstOffset = upload.dstOffset;
 			copyRegion.size = upload.size;
 
-            //TODO
-			// vkCmdCopyBuffer(
-			// 	vkCmd->m_CommandBuffer,
-			// 	upload.staging.buffer,
-			// 	buffer->buffer,
-			// 	1,
-			// 	&copyRegion);
+			// TODO
+			//  vkCmdCopyBuffer(
+			//  	vkCmd->m_CommandBuffer,
+			//  	upload.staging.buffer,
+			//  	buffer->buffer,
+			//  	1,
+			//  	&copyRegion);
 		}
 
 		// Record all texture copies

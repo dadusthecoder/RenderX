@@ -3,30 +3,30 @@
 namespace Rx {
 namespace RxGL {
 	// Helper to get OpenGL buffer target from BufferFlags
-	GLenum ToGLBufferTarget(BUfferUsage flags) {
+	GLenum ToGLBufferTarget(BufferUsage flags) {
 		// OpenGL requires you to bind a buffer to a specific target
 		// Priority order: more specific targets first
 
-		if (Has(flags, BUfferUsage::Uniform))
+		if (Has(flags, BufferUsage::Uniform))
 			return GL_UNIFORM_BUFFER;
 
-		if (Has(flags, BUfferUsage::Storage))
+		if (Has(flags, BufferUsage::Storage))
 			return GL_SHADER_STORAGE_BUFFER;
 
-		if (Has(flags, BUfferUsage::Indirect))
+		if (Has(flags, BufferUsage::Indirect))
 			return GL_DRAW_INDIRECT_BUFFER;
 
-		if (Has(flags, BUfferUsage::Index))
+		if (Has(flags, BufferUsage::Index))
 			return GL_ELEMENT_ARRAY_BUFFER;
 
-		if (Has(flags, BUfferUsage::Vertex))
+		if (Has(flags, BufferUsage::Vertex))
 			return GL_ARRAY_BUFFER;
 
 		// Transfer-only buffers
-		if (Has(flags, BUfferUsage::TransferSrc))
+		if (Has(flags, BufferUsage::TransferSrc))
 			return GL_COPY_READ_BUFFER;
 
-		if (Has(flags, BUfferUsage::TransferDst))
+		if (Has(flags, BufferUsage::TransferDst))
 			return GL_COPY_WRITE_BUFFER;
 
 		// Fallback
@@ -34,7 +34,7 @@ namespace RxGL {
 	}
 
 	// Convert to glBufferData usage hint (for mutable buffers)
-	GLenum ToGLBufferUsage(BUfferUsage flags) {
+	GLenum ToGLBufferUsage(BufferUsage flags) {
 		// OpenGL usage hints: <frequency>_<nature>
 		// Frequency: STREAM (modified once, used few times)
 		//           STATIC (modified once, used many times)
@@ -43,10 +43,10 @@ namespace RxGL {
 		//        READ (modified by GL, read by app)
 		//        COPY (modified by GL, used by GL)
 
-		bool isDynamic = Has(flags, BUfferUsage::Dynamic);
-		bool isStatic = Has(flags, BUfferUsage::Static);
-		bool isTransferSrc = Has(flags, BUfferUsage::TransferSrc);
-		bool isTransferDst = Has(flags, BUfferUsage::TransferDst);
+		bool isDynamic = Has(flags, BufferUsage::Dynamic);
+		bool isStatic = Has(flags, BufferUsage::Static);
+		bool isTransferSrc = Has(flags, BufferUsage::TransferSrc);
+		bool isTransferDst = Has(flags, BufferUsage::TransferDst);
 
 		// Determine nature
 		if (isTransferSrc && !isTransferDst) {
@@ -68,14 +68,14 @@ namespace RxGL {
 	}
 
 	// Convert to glBufferStorage flags (for immutable buffers - preferred in modern GL)
-	GLbitfield ToGLStorageFlags(BUfferUsage flags) {
+	GLbitfield ToGLStorageFlags(BufferUsage flags) {
 		// glBufferStorage creates immutable storage (GL 4.4+, more efficient)
 		// Unlike glBufferData, you specify access patterns up front
 
 		GLbitfield glFlags = 0;
 
 		// Map access flags
-		if (Has(flags, BUfferUsage::Dynamic)) {
+		if (Has(flags, BufferUsage::Dynamic)) {
 			// Dynamic = CPU will write to this buffer
 			glFlags |= GL_MAP_WRITE_BIT;
 			glFlags |= GL_DYNAMIC_STORAGE_BIT; // Allow updates
@@ -85,12 +85,12 @@ namespace RxGL {
 			// glFlags |= GL_MAP_COHERENT_BIT;
 		}
 
-		if (Has(flags, BUfferUsage::TransferSrc)) {
+		if (Has(flags, BufferUsage::TransferSrc)) {
 			// Will be read back by CPU
 			glFlags |= GL_MAP_READ_BIT;
 		}
 
-		if (Has(flags, BUfferUsage::TransferDst)) {
+		if (Has(flags, BufferUsage::TransferDst)) {
 			// Will receive data from CPU or GPU
 			glFlags |= GL_DYNAMIC_STORAGE_BIT;
 		}
@@ -109,10 +109,10 @@ namespace RxGL {
 		bool useBufferStorage;		  // Use glBufferStorage vs glBufferData
 	};
 
-	GLBufferHints ToGLBufferHints(MemoryType type, BUfferUsage flags) {
+	GLBufferHints ToGLBufferHints(MemoryType type, BufferUsage flags) {
 		GLBufferHints hints = {};
 
-		bool isDynamic = Has(flags, BUfferUsage::Dynamic);
+		bool isDynamic = Has(flags, BufferUsage::Dynamic);
 
 		switch (type) {
 		case MemoryType::GpuOnly:
@@ -161,7 +161,7 @@ namespace RxGL {
 		GLBufferHints hints;
 	};
 
-	GLBufferInfo ToGLBufferInfo(BUfferUsage flags, MemoryType memory) {
+	GLBufferInfo ToGLBufferInfo(BufferUsage flags, MemoryType memory) {
 		GLBufferInfo info = {};
 		info.target = ToGLBufferTarget(flags);
 		info.usage = ToGLBufferUsage(flags);
@@ -184,7 +184,7 @@ namespace RxGL {
 			// Modern path: immutable storage (GL 4.4+)
 			GLbitfield storageFlags = info.storageFlags;
 
-			if (info.hints.preferPersistentMapping && Has(desc.usage, BUfferUsage::Dynamic)) {
+			if (info.hints.preferPersistentMapping && Has(desc.usage, BufferUsage::Dynamic)) {
 				storageFlags |= GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT;
 			}
 

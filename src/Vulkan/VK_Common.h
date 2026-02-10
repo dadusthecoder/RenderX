@@ -105,6 +105,7 @@ namespace RxVK {
 		return true;
 	}
 
+#define ALIGNUP(size, alignment) ((((size + alignment) - 1) / alignment) * alignment)
 	// Constants
 
 	constexpr std::array<VkDynamicState, 2> g_DynamicStates{
@@ -217,7 +218,7 @@ namespace RxVK {
 		VmaAllocationInfo allocInfo = {};
 		VkDeviceSize size = 0;
 		uint32_t bindingCount = 1;
-		BUfferUsage flags;
+		BufferUsage flags;
 
 #ifdef RENDERX_DEBUG
 		const char* debugName = nullptr;
@@ -650,21 +651,13 @@ namespace RxVK {
 		// Suballocate from this chunk
 		StagingAllocation allocate(uint32_t requestedSize, uint32_t alignment = 256) {
 			StagingAllocation alloc{};
-
-			// Align the offset
 			uint32_t alignedOffset = (currentOffset + alignment - 1) & ~(alignment - 1);
-
-			if (alignedOffset + requestedSize > size) {
-				return alloc; // Invalid allocation
-			}
-
+			RENDERX_ASSERT_MSG(alignedOffset + requestedSize < size, "Invalid Allocation");
 			alloc.buffer = buffer;
 			alloc.offset = alignedOffset;
 			alloc.size = requestedSize;
 			alloc.mappedPtr = mappedPtr + alignedOffset;
-
 			currentOffset = alignedOffset + requestedSize;
-
 			return alloc;
 		}
 	};
@@ -702,11 +695,11 @@ namespace RxVK {
 	public:
 		VulkanImmediateUploader(VulkanContext& ctx);
 		~VulkanImmediateUploader();
-		bool uploadBuffer(BufferHandle dstBuffer,const void* data,uint32_t size,uint32_t dstOffset = 0);
-		bool uploadTexture(TextureHandle dstTexture,const void* data,uint32_t size,const TextureCopyRegion& region);
+		bool uploadBuffer(VkBuffer dstBuffer, const void* data, uint32_t size, uint32_t dstOffset = 0, uint32_t alignment = 256);
+		bool uploadTexture(VkImage dstTexture, const void* data, uint32_t size, const TextureCopyRegion& region);
 		void beginBatch();
-		void uploadBufferBatched(BufferHandle dstBuffer,const void* data,uint32_t size,uint32_t dstOffset = 0);
-		void uploadTextureBatched(TextureHandle dstTexture, const void* data, uint32_t size, const TextureCopyRegion& region);
+		void uploadBufferBatched(VkBuffer dstBuffer, const void* data, uint32_t size, uint32_t dstOffset = 0);
+		void uploadTextureBatched(VkImage dstTexture, const void* data, uint32_t size, const TextureCopyRegion& region);
 		bool endBatch(); // Returns true if successful
 	private:
 		void ensureContext();
@@ -738,8 +731,8 @@ namespace RxVK {
 	public:
 		VulkanDeferredUploader(VulkanContext& ctx);
 		~VulkanDeferredUploader();
-		void uploadBuffer(BufferHandle dstBuffer,const void* data,uint32_t size,uint32_t dstOffset = 0);
-		void uploadTexture(TextureHandle dstTexture,const void* data,uint32_t size,const TextureCopyRegion& region);
+		void uploadBuffer(BufferHandle dstBuffer, const void* data, uint32_t size, uint32_t dstOffset = 0);
+		void uploadTexture(TextureHandle dstTexture, const void* data, uint32_t size, const TextureCopyRegion& region);
 		Timeline flush();
 		void retire(uint64_t completedSubmission);
 	private:
@@ -898,6 +891,8 @@ namespace RxVK {
 		std::unique_ptr<VulkanDescriptorManager> descriptorSetManager;
 		std::unique_ptr<VulkanDescriptorPoolManager> descriptorPoolManager;
 		std::unique_ptr<VulkanStagingAllocator> stagingAllocator;
+		std::unique_ptr<VulkanImmediateUploader> immediateUploader;
+		std::unique_ptr<VulkanDeferredUploader> deferredUploader;
 	};
 
 	// Global Resource Pools
@@ -956,10 +951,10 @@ namespace RxVK {
 
 	// VMA Memory Allocation Conversion
 	/// Convert RenderX MemoryType to VMA allocation info
-	inline VmaAllocationCreateInfo ToVmaAllocationCreateInfo(MemoryType type, BUfferUsage flags) {
+	inline VmaAllocationCreateInfo ToVmaAllocationCreateInfo(MemoryType type, BufferUsage flags) {
 		VmaAllocationCreateInfo allocInfo = {};
-		bool isDynamic = Has(flags, BUfferUsage::DYNAMIC);
-		bool isStreaming = Has(flags, BUfferUsage::STREAMING);
+		bool isDynamic = Has(flags, BufferUsage::DYNAMIC);
+		bool isStreaming = Has(flags, BufferUsage::STREAMING);
 
 		switch (type) {
 		case MemoryType::GPU_ONLY:
@@ -969,7 +964,8 @@ namespace RxVK {
 
 		case MemoryType::CPU_TO_GPU:
 			allocInfo.usage = VMA_MEMORY_USAGE_AUTO;
-			allocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+			allocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
+							  VMA_ALLOCATION_CREATE_MAPPED_BIT;
 
 			if (isDynamic || isStreaming) {
 				allocInfo.flags |= VMA_ALLOCATION_CREATE_MAPPED_BIT;
@@ -1042,7 +1038,7 @@ namespace RxVK {
 	/// Extended allocation info with priority and dedicated allocation support
 	inline VmaAllocationCreateInfo ToVmaAllocationCreateInfoEx(
 		MemoryType type,
-		BUfferUsage flags,
+		BufferUsage flags,
 		float priority = 0.5f,
 		bool dedicatedAllocation = false) {
 		VmaAllocationCreateInfo allocInfo = ToVmaAllocationCreateInfo(type, flags);
@@ -1151,9 +1147,9 @@ namespace RxVK {
 	}
 
 	/// Check if a memory type should be persistently mapped
-	inline bool ShouldBePersistentlyMapped(MemoryType type, BUfferUsage flags) {
-		bool isDynamic = Has(flags, BUfferUsage::DYNAMIC);
-		bool isStreaming = Has(flags, BUfferUsage::STREAMING);
+	inline bool ShouldBePersistentlyMapped(MemoryType type, BufferUsage flags) {
+		bool isDynamic = Has(flags, BufferUsage::DYNAMIC);
+		bool isStreaming = Has(flags, BufferUsage::STREAMING);
 
 		return IsHostVisible(type) && (isDynamic || isStreaming);
 	}
@@ -1171,11 +1167,11 @@ namespace RxVK {
 	}
 
 	/// Get recommended memory type based on usage pattern
-	inline MemoryType GetRecommendedMemoryType(BUfferUsage flags) {
-		if (Has(flags, BUfferUsage::DYNAMIC) || Has(flags, BUfferUsage::STREAMING)) {
+	inline MemoryType GetRecommendedMemoryType(BufferUsage flags) {
+		if (Has(flags, BufferUsage::DYNAMIC) || Has(flags, BufferUsage::STREAMING)) {
 			return MemoryType::CPU_TO_GPU;
 		}
-		else if (Has(flags, BUfferUsage::STATIC)) {
+		else if (Has(flags, BufferUsage::STATIC)) {
 			return MemoryType::GPU_ONLY;
 		}
 
@@ -1443,22 +1439,22 @@ namespace RxVK {
 
 
 	// Buffer Usage Flags Conversion
-	inline VkBufferUsageFlags ToVulkanBufferUsage(BUfferUsage flags) {
+	inline VkBufferUsageFlags ToVulkanBufferUsage(BufferUsage flags) {
 		VkBufferUsageFlags usage = 0;
 
-		if (Has(flags, BUfferUsage::VERTEX))
+		if (Has(flags, BufferUsage::VERTEX))
 			usage |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-		if (Has(flags, BUfferUsage::INDEX))
+		if (Has(flags, BufferUsage::INDEX))
 			usage |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
-		if (Has(flags, BUfferUsage::UNIFORM))
+		if (Has(flags, BufferUsage::UNIFORM))
 			usage |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-		if (Has(flags, BUfferUsage::STORAGE))
+		if (Has(flags, BufferUsage::STORAGE))
 			usage |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-		if (Has(flags, BUfferUsage::INDIRECT))
+		if (Has(flags, BufferUsage::INDIRECT))
 			usage |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
-		if (Has(flags, BUfferUsage::TRANSFER_SRC))
+		if (Has(flags, BufferUsage::TRANSFER_SRC))
 			usage |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-		if (Has(flags, BUfferUsage::TRANSFER_DST))
+		if (Has(flags, BufferUsage::TRANSFER_DST))
 			usage |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 
 		return usage;
@@ -1483,7 +1479,7 @@ namespace RxVK {
 		}
 	}
 
-	inline VmaAllocationCreateFlags ToVmaAllocationFlags(MemoryType type, BUfferUsage bufferFlags) {
+	inline VmaAllocationCreateFlags ToVmaAllocationFlags(MemoryType type, BufferUsage bufferFlags) {
 		VmaAllocationCreateFlags flags = 0;
 
 		// Memory type specific flags
@@ -1508,7 +1504,7 @@ namespace RxVK {
 		}
 
 		// Buffer-specific flags
-		if (Has(bufferFlags, BUfferUsage::DYNAMIC)) {
+		if (Has(bufferFlags, BufferUsage::DYNAMIC)) {
 			flags |= VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
 			flags |= VMA_ALLOCATION_CREATE_MAPPED_BIT;
 		}
@@ -1573,7 +1569,6 @@ namespace RxVK {
 
 
 	// Pipeline Stage Flags (for synchronization)
-
 	inline VkPipelineStageFlags ShaderStageToPipelineStage(ShaderStage stages) {
 		VkPipelineStageFlags flags = 0;
 
@@ -1592,6 +1587,23 @@ namespace RxVK {
 
 		return flags;
 	}
+
+	inline uint32_t GetMinVulkanAlignment(BufferUsage usages) {
+		auto& ctx = GetVulkanContext();
+		const auto& limits = ctx.device->limits();
+		uint32_t alignment = 1; // default: no special requirement
+		if (Has(usages, BufferUsage::UNIFORM)) {
+			alignment = std::max(alignment, static_cast<uint32_t>(limits.minUniformBufferOffsetAlignment));
+		}
+		if (Has(usages, BufferUsage::STORAGE)) {
+			alignment = std::max(alignment, static_cast<uint32_t>(limits.minStorageBufferOffsetAlignment));
+		}
+		// VERTEX / INDEX / INDIRECT / TRANSFER*
+		// no Vulkan-mandated offset alignment
+		// allocator handles natural alignment
+		return alignment;
+	}
+
 
 } // namespace VulkanConversion
 } // namespace Rx

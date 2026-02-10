@@ -292,7 +292,7 @@ namespace Rx {
 		(handle))                                                         \
                                                                           \
 	X(TextureViewHandle, CreateTextureView,                               \
-		(const TextureViewDesc & desc),                                         \
+		(const TextureViewDesc& desc),                                    \
 		(desc))                                                           \
 	X(void, DestroyTextureView,                                           \
 		(TextureViewHandle & handle),                                     \
@@ -315,12 +315,6 @@ namespace Rx {
 		Handle(ValueType key) : id(key) {}
 		Handle() = default;
 
-		uint32_t generation() const {
-			return static_cast<uint32_t>(id >> 32);
-		}
-		uint32_t index() const {
-			return static_cast<uint32_t>(id & 0xFFFFFFFFu);
-		}
 		bool IsValid() const { return id != INVALID; }
 
 		// operators
@@ -544,7 +538,7 @@ namespace Rx {
 	};
 	ENABLE_BITMASK_OPERATORS(ResourceGroupFlags)
 
-	enum class BUfferUsage : uint16_t {
+	enum class BufferUsage : uint16_t {
 		VERTEX = 1 << 0,
 		INDEX = 1 << 1,
 		UNIFORM = 1 << 2,
@@ -556,7 +550,7 @@ namespace Rx {
 		DYNAMIC = 1 << 9,
 		STREAMING = 1 << 10
 	};
-	ENABLE_BITMASK_OPERATORS(BUfferUsage)
+	ENABLE_BITMASK_OPERATORS(BufferUsage)
 
 
 	struct Viewport {
@@ -631,22 +625,21 @@ namespace Rx {
 	};
 
 
-	inline bool IsValidBufferFlags(BUfferUsage flags) {
-
-		bool hasStatic = Has(flags, BUfferUsage::STATIC);
-		bool hasDynamic = Has(flags, BUfferUsage::DYNAMIC);
+	inline bool IsValidBufferFlags(BufferUsage flags) {
+		bool hasStatic = Has(flags, BufferUsage::STATIC);
+		bool hasDynamic = Has(flags, BufferUsage::DYNAMIC);
 
 		if (hasStatic && hasDynamic) {
-			return false; 
+			return false;
 		}
 
 		// Must have at least one usage flag (not just Static/Dynamic)
-		BUfferUsage usageMask = BUfferUsage::VERTEX | BUfferUsage::INDEX |
-								BUfferUsage::UNIFORM | BUfferUsage::STORAGE |
-								BUfferUsage::INDIRECT | BUfferUsage::TRANSFER_SRC |
-								BUfferUsage::TRANSFER_DST;
+		BufferUsage usageMask = BufferUsage::VERTEX | BufferUsage::INDEX |
+								BufferUsage::UNIFORM | BufferUsage::STORAGE |
+								BufferUsage::INDIRECT | BufferUsage::TRANSFER_SRC |
+								BufferUsage::TRANSFER_DST;
 
-		if (!Has(usageMask,flags)) {
+		if (!Has(usageMask, flags)) {
 			return false; // Must have at least one usage
 		}
 
@@ -654,7 +647,7 @@ namespace Rx {
 	}
 
 	struct BufferDesc {
-		BUfferUsage usage;
+		BufferUsage usage;
 		MemoryType memoryType;
 		size_t size;
 		uint32_t bindingCount;
