@@ -240,6 +240,8 @@ namespace Rx::RxVK {
 			RENDERX_WARN("Invalid input, using recommended device [{}]");
 			return recommendedIndex;
 		}
+		RENDERX_WARN("Check This out you just made a mistake somewhere");
+		return -1;
 #endif
 	}
 
@@ -329,6 +331,7 @@ namespace Rx::RxVK {
 		VkPhysicalDeviceFeatures features{};
 		VkPhysicalDeviceDescriptorIndexingFeatures indexing{};
 		VkPhysicalDeviceTimelineSemaphoreFeatures timelineFeatures{};
+		VkPhysicalDeviceBufferDeviceAddressFeatures bufferAddressFeatures{};
 
 		indexing.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
 		indexing.pNext = &timelineFeatures;
@@ -338,8 +341,11 @@ namespace Rx::RxVK {
 		indexing.descriptorBindingVariableDescriptorCount = VK_TRUE;
 
 		timelineFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES;
-		timelineFeatures.pNext = nullptr;
+		timelineFeatures.pNext = &bufferAddressFeatures;
 		timelineFeatures.timelineSemaphore = VK_TRUE;
+
+		bufferAddressFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
+		bufferAddressFeatures.bufferDeviceAddress = VK_TRUE;
 
 		VkDeviceCreateInfo info{};
 		info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;

@@ -12,6 +12,35 @@ struct Frame {
 	Rx::Timeline T = Rx::Timeline(0);
 };
 
+float cubeVertices[] = {
+	// positions          // colors
+	-0.5f, -0.5f, -0.5f, 1, 0, 0,
+	0.5f, -0.5f, -0.5f, 0, 1, 0,
+	0.5f, 0.5f, -0.5f, 0, 0, 1,
+	-0.5f, 0.5f, -0.5f, 1, 1, 0,
+
+	-0.5f, -0.5f, 0.5f, 1, 0, 1,
+	0.5f, -0.5f, 0.5f, 0, 1, 1,
+	0.5f, 0.5f, 0.5f, 1, 1, 1,
+	-0.5f, 0.5f, 0.5f, 0, 0, 0
+};
+
+unsigned int cubeIndices[] = {
+	// back
+	0, 1, 2, 2, 3, 0,
+	// front
+	4, 5, 6, 6, 7, 4,
+	// left
+	4, 7, 3, 3, 0, 4,
+	// right
+	1, 5, 6, 6, 2, 1,
+	// bottom
+	4, 5, 1, 1, 0, 4,
+	// top
+	3, 2, 6, 6, 7, 3
+};
+
+
 int main() {
 	glfwInit();
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
@@ -34,10 +63,20 @@ int main() {
 	rxWindow.displayHandle = GetModuleHandle(nullptr);
 	Rx::Init(rxWindow);
 
+
+
 	Rx::CommandQueue* graphics = Rx::GetGpuQueue(Rx::QueueType::GRAPHICS);
 	Rx::CommandQueue* compute = Rx::GetGpuQueue(Rx::QueueType::COMPUTE);
 
-	
+	Rx::BufferDesc vertexbufferinfo{};
+	vertexbufferinfo.usage = Rx::BUfferUsage::VERTEX | Rx::BUfferUsage::TRANSFER_DST;
+	vertexbufferinfo.initialData = cubeIndices;
+	vertexbufferinfo.memoryType = Rx::MemoryType::GPU_ONLY;
+	vertexbufferinfo.size = sizeof(cubeVertices);
+
+
+	auto vertexbuffer = Rx::CreateBuffer(vertexbufferinfo);
+
 	Frame frames[3];
 	for (auto& frame : frames) {
 		frame.graphicsAlloc = graphics->CreateCommandAllocator();
@@ -45,14 +84,12 @@ int main() {
 		frame.graphicslist = frame.graphicsAlloc->Allocate();
 		frame.computelist = frame.computeAlloc->Allocate();
 	}
+
 	uint32_t currentFrame = 0;
-
 	while (!glfwWindowShouldClose(window)) {
-
-		//look out for missing reference operator !!!
+		// look out for missing reference operator !!!
 		auto& frame = frames[currentFrame];
 		graphics->Wait(frame.T);
-
 		frame.computelist->open();
 		// Compute work
 		frame.computelist->close();

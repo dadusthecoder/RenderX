@@ -35,21 +35,20 @@ namespace RxVK {
 		}
 
 		VulkanContext& ctx = GetVulkanContext();
-		if (ctx.allocator == VK_NULL_HANDLE) {
+		if (ctx.allocator->handle() == VK_NULL_HANDLE) {
 			RENDERX_ERROR("VKCreateBuffer: VMA allocator is VK_NULL_HANDLE");
 			return BufferHandle{};
 		}
 
-
-		RENDERX_ASSERT_MSG(IsValidBufferFlags(desc.flags), "The Buffer Flag Combination is Invalid \n Try")
+		RENDERX_ASSERT_MSG(IsValidBufferFlags(desc.usage), "The Buffer Flag Combination is Invalid")
 		// Create buffer
 		VulkanBuffer vulkanBuffer{};
 		vulkanBuffer.size = desc.size;
-		vulkanBuffer.flags = desc.flags;
-		auto memFlags = ToVmaAllocationCreateInfo(desc.memoryType, desc.flags);
+		vulkanBuffer.flags = desc.usage;
+		auto memFlags = ToVmaAllocationCreateInfo(desc.memoryType, desc.usage);
 
 		if (!ctx.allocator->createBuffer(desc.size,
-				ToVulkanBufferUsage(desc.flags),
+				ToVulkanBufferUsage(desc.usage),
 				memFlags.usage,
 				memFlags.flags,
 				vulkanBuffer.buffer,
@@ -60,7 +59,10 @@ namespace RxVK {
 		// Upload initial data if provided
 		if (desc.initialData) {
 			if (desc.memoryType == MemoryType::GPU_ONLY) {
-				//	UploadViaStagingBufferVK(vulkanBuffer, desc.initialData, desc.size);
+				// TODO	
+
+
+
 			}
 			else {
 				// Direct upload for dynamic and stream buffers
@@ -122,7 +124,6 @@ namespace RxVK {
 		}
 	}
 
-
 	BufferViewHandle VKCreateBufferView(const BufferViewDesc& desc) {
 		if (!desc.buffer.IsValid()) {
 			RENDERX_ERROR("VKCreateBufferView: invalid buffer handle");
@@ -166,6 +167,17 @@ namespace RxVK {
 
 	void VKDestroyBufferView(BufferViewHandle& handle) {
 		g_BufferViewPool.free(handle);
+	}
+
+	void* VKMapBuffer(BufferHandle handle) {
+		auto* buffer = g_BufferPool.get(handle);
+		RENDERX_ASSERT_MSG(buffer, "Invalid BufferHandle");
+		RENDERX_ASSERT_MSG(buffer->allocation != VK_NULL_HANDLE, "Buffer has no allocation");
+		if (buffer->allocInfo.pMappedData) {
+			return buffer->allocInfo.pMappedData;
+		}
+		RENDERX_WARN("Failed to map buffer: id: {}", handle.id);
+		return nullptr;
 	}
 
 } // namespace RxVk

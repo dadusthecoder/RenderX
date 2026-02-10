@@ -15,6 +15,7 @@ namespace Rx {
 	void Init(const Window& window) {
 #ifdef RENDERX_DEBUG
 		LOG_INIT();
+		RENDERX_TRACE("mahesh");
 		Debug::ConfigureDetailedProfiling();
 #else
 		ProLog::ProfilerConfig config;

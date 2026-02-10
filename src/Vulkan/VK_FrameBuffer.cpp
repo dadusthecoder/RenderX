@@ -8,14 +8,7 @@ namespace Rx::RxVK {
 	FramebufferHandle VKCreateFramebuffer(const FramebufferDesc& desc) {
 		auto& ctx = GetVulkanContext();
 		RENDERX_ASSERT_MSG(ctx.device != VK_NULL_HANDLE, "VKCreateFramebuffer: device is VK_NULL_HANDLE");
-		RENDERX_ASSERT(desc.renderPass.IsValid());
 		RENDERX_ASSERT(desc.width > 0 && desc.height > 0);
-
-		auto* rp = g_RenderPassPool.get(desc.renderPass);
-		if (rp == nullptr || rp->renderPass == VK_NULL_HANDLE) {
-			RENDERX_WARN("VKCreateFramebuffer: invalid render pass handle");
-			return FramebufferHandle{};
-		}
 
 		const bool hasDepth = desc.depthStencilAttachment.IsValid();
 		std::vector<VkImageView> attachments;
@@ -23,20 +16,19 @@ namespace Rx::RxVK {
 
 		for (const auto& tex : desc.colorAttachments) {
 			RENDERX_ASSERT(tex.IsValid());
-			auto* vkTex = g_TexturePool.get(tex);
-			RENDERX_ASSERT(vkTex != nullptr && vkTex->view != VK_NULL_HANDLE);
-			attachments.push_back(vkTex->view);
+			auto* vkTexView = g_TextureViewPool.get(tex);
+			RENDERX_ASSERT(vkTexView != nullptr && vkTexView->view != VK_NULL_HANDLE);
+			attachments.push_back(vkTexView->view);
 		}
 
 		if (hasDepth) {
-			auto* vkDepth = g_TexturePool.get(desc.depthStencilAttachment);
-			RENDERX_ASSERT(vkDepth != nullptr && vkDepth->view != VK_NULL_HANDLE);
-			attachments.push_back(vkDepth->view);
+			auto* vkDepthView = g_TextureViewPool.get(desc.depthStencilAttachment);
+			RENDERX_ASSERT(vkDepthView != nullptr && vkDepthView->view != VK_NULL_HANDLE);
+			attachments.push_back(vkDepthView->view);
 		}
 
 		VkFramebufferCreateInfo ci{};
 		ci.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-		ci.renderPass = rp->renderPass;
 		ci.attachmentCount = static_cast<uint32_t>(attachments.size());
 		ci.pAttachments = attachments.data();
 		ci.width = desc.width;
