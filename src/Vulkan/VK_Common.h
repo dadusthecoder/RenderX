@@ -217,7 +217,7 @@ namespace RxVK {
 		VmaAllocationInfo allocInfo = {};
 		VkDeviceSize size = 0;
 		uint32_t bindingCount = 1;
-		BufferFlags flags;
+		BUfferUsage flags;
 
 #ifdef RENDERX_DEBUG
 		const char* debugName = nullptr;
@@ -234,13 +234,23 @@ namespace RxVK {
 
 	struct VulkanTexture {
 		VkImage image = VK_NULL_HANDLE;
-		VkImageView view = VK_NULL_HANDLE;
-		VkDeviceMemory memory = VK_NULL_HANDLE;
+		VmaAllocation allocation = nullptr;
 		VkFormat format = VK_FORMAT_UNDEFINED;
 		uint32_t width = 0;
 		uint32_t height = 0;
 		uint32_t mipLevels = 1;
 		bool isValid = false;
+	};
+
+	struct VulkanTextureView {
+		VkImageView view;
+		TextureType viewType;
+		Format format;
+		uint32_t baseMipLevel;
+		uint32_t mipLevelCount;
+		uint32_t baseArrayLayer;
+		uint32_t arrayLayerCount;
+		const char* debugName;
 	};
 
 	struct VulkanShader {
@@ -418,6 +428,7 @@ namespace RxVK {
 	class VulkanCommandQueue;
 	class VulkanDescriptorPoolManager;
 	class VulkanDescriptorManager;
+	class VulkanStagingAllocator;
 
 	// Class Declarations
 
@@ -607,7 +618,136 @@ namespace RxVK {
 		VulkanContext& m_Ctx;
 	};
 
+	// Per-frame staging allocation
+	struct StagingAllocation {
+		VkBuffer buffer = VK_NULL_HANDLE;
+		uint32_t offset = 0;
+		uint32_t size = 0;
+		uint8_t* mappedPtr = nullptr;
+		uint64_t submissionID = 0; // Track when it was submitted
+	};
 
+	// Large staging buffer chunk
+	struct StagingChunk {
+		VkBuffer buffer = VK_NULL_HANDLE;
+		VmaAllocation allocation = VK_NULL_HANDLE;
+		uint8_t* mappedPtr = nullptr;
+		uint32_t size = 0;
+		uint32_t currentOffset = 0;
+		uint64_t lastSubmissionID = 0; // Last submission that used this chunk
+
+		// Reset for reuse
+		void reset() {
+			currentOffset = 0;
+		}
+
+		// Check if there's enough space for an allocation
+		bool canAllocate(uint32_t requestedSize, uint32_t alignment = 256) const {
+			uint32_t alignedOffset = (currentOffset + alignment - 1) & ~(alignment - 1);
+			return (alignedOffset + requestedSize) <= size;
+		}
+
+		// Suballocate from this chunk
+		StagingAllocation allocate(uint32_t requestedSize, uint32_t alignment = 256) {
+			StagingAllocation alloc{};
+
+			// Align the offset
+			uint32_t alignedOffset = (currentOffset + alignment - 1) & ~(alignment - 1);
+
+			if (alignedOffset + requestedSize > size) {
+				return alloc; // Invalid allocation
+			}
+
+			alloc.buffer = buffer;
+			alloc.offset = alignedOffset;
+			alloc.size = requestedSize;
+			alloc.mappedPtr = mappedPtr + alignedOffset;
+
+			currentOffset = alignedOffset + requestedSize;
+
+			return alloc;
+		}
+	};
+
+	class VulkanStagingAllocator {
+	public:
+		VulkanStagingAllocator(VulkanContext& ctx, uint32_t chunkSize = 64 * 1024 * 1024); // 64MB default
+		~VulkanStagingAllocator();
+		StagingAllocation allocate(uint32_t size, uint32_t alignment = 256);
+		void submit(uint64_t submissionID);
+		void retire(uint64_t completedSubmissionID);
+		void cleanup();
+	private:
+		StagingChunk* getOrCreateChunk(uint32_t requiredSize);
+		StagingChunk createChunk(uint32_t size);
+		void destroyChunk(StagingChunk& chunk);
+	private:
+		VulkanContext& m_Ctx;
+		uint32_t m_ChunkSize;
+		StagingChunk* m_CurrentChunk = nullptr;
+		std::deque<StagingChunk> m_InFlightChunks;
+		std::vector<StagingChunk> m_FreeChunks;
+		std::vector<StagingChunk> m_AllChunks;
+		std::mutex m_Mutex;
+	};
+
+	struct ImmediateUploadContext {
+		VkCommandPool commandPool = VK_NULL_HANDLE;
+		VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
+		VkFence fence = VK_NULL_HANDLE;
+		bool isRecording = false;
+	};
+
+	class VulkanImmediateUploader {
+	public:
+		VulkanImmediateUploader(VulkanContext& ctx);
+		~VulkanImmediateUploader();
+		bool uploadBuffer(BufferHandle dstBuffer,const void* data,uint32_t size,uint32_t dstOffset = 0);
+		bool uploadTexture(TextureHandle dstTexture,const void* data,uint32_t size,const TextureCopyRegion& region);
+		void beginBatch();
+		void uploadBufferBatched(BufferHandle dstBuffer,const void* data,uint32_t size,uint32_t dstOffset = 0);
+		void uploadTextureBatched(TextureHandle dstTexture, const void* data, uint32_t size, const TextureCopyRegion& region);
+		bool endBatch(); // Returns true if successful
+	private:
+		void ensureContext();
+		void resetContext();
+		VkCommandBuffer beginSingleTimeCommands();
+		void endSingleTimeCommands(VkCommandBuffer cmd);
+	private:
+		VulkanContext& m_Ctx;
+		ImmediateUploadContext m_ImmediateCtx;
+		std::mutex m_Mutex; // Protect immediate uploads
+	};
+
+	struct DeferredUpload {
+		StagingAllocation staging;
+		BufferHandle dstBuffer;
+		uint32_t dstOffset;
+		uint32_t size;
+		uint64_t submissionID;
+	};
+
+	struct DeferredTextureUpload {
+		StagingAllocation staging;
+		TextureHandle dstTexture;
+		TextureCopyRegion region;
+		uint64_t submissionID;
+	};
+
+	class VulkanDeferredUploader {
+	public:
+		VulkanDeferredUploader(VulkanContext& ctx);
+		~VulkanDeferredUploader();
+		void uploadBuffer(BufferHandle dstBuffer,const void* data,uint32_t size,uint32_t dstOffset = 0);
+		void uploadTexture(TextureHandle dstTexture,const void* data,uint32_t size,const TextureCopyRegion& region);
+		Timeline flush();
+		void retire(uint64_t completedSubmission);
+	private:
+		VulkanContext& m_Ctx;
+		std::vector<DeferredUpload> m_PendingBufferUploads;
+		std::vector<DeferredTextureUpload> m_PendingTextureUploads;
+		std::mutex m_Mutex;
+	};
 
 	class VulkanCommandList : public CommandList {
 	public:
@@ -650,6 +790,32 @@ namespace RxVK {
 		void setResourceGroup(
 			const ResourceGroupHandle& handle) override;
 
+		void setFramebuffer(
+			FramebufferHandle handle) override;
+
+		void copyBufferToTexture(
+			BufferHandle srcBuffer,
+			TextureHandle dstTexture,
+			const TextureCopyRegion& region) override;
+
+		/// Copy between textures
+		void copyTexture(
+			TextureHandle srcTexture,
+			TextureHandle dstTexture,
+			const TextureCopyRegion& region) override;
+
+		// coyp buffer to buffer
+		void copyBuffer(BufferHandle src,
+			BufferHandle dst,
+			const BufferCopyRegion& region) override;
+
+		/// Copy from texture to buffer (readback)
+		void copyTextureToBuffer(
+			TextureHandle srcTexture,
+			BufferHandle dstBuffer,
+			const TextureCopyRegion& region) override;
+
+		// friends
 		friend class VulkanCommandAllocator;
 		friend class VulkanCommandQueue;
 	private:
@@ -731,12 +897,14 @@ namespace RxVK {
 		std::unique_ptr<VulkanAllocator> allocator;
 		std::unique_ptr<VulkanDescriptorManager> descriptorSetManager;
 		std::unique_ptr<VulkanDescriptorPoolManager> descriptorPoolManager;
+		std::unique_ptr<VulkanStagingAllocator> stagingAllocator;
 	};
 
 	// Global Resource Pools
 	extern ResourcePool<VulkanBuffer, BufferHandle> g_BufferPool;
 	extern ResourcePool<VulkanBufferView, BufferViewHandle> g_BufferViewPool;
 	extern ResourcePool<VulkanTexture, TextureHandle> g_TexturePool;
+	extern ResourcePool<VulkanTextureView, TextureViewHandle> g_TextureViewPool;
 	extern ResourcePool<VulkanShader, ShaderHandle> g_ShaderPool;
 	extern ResourcePool<VulkanPipeline, PipelineHandle> g_PipelinePool;
 	extern ResourcePool<VulkanPipelineLayout, PipelineLayoutHandle> g_PipelineLayoutPool;
@@ -788,10 +956,10 @@ namespace RxVK {
 
 	// VMA Memory Allocation Conversion
 	/// Convert RenderX MemoryType to VMA allocation info
-	inline VmaAllocationCreateInfo ToVmaAllocationCreateInfo(MemoryType type, BufferFlags flags) {
+	inline VmaAllocationCreateInfo ToVmaAllocationCreateInfo(MemoryType type, BUfferUsage flags) {
 		VmaAllocationCreateInfo allocInfo = {};
-		bool isDynamic = Has(flags, BufferFlags::DYNAMIC);
-		bool isStreaming = Has(flags, BufferFlags::STREAMING);
+		bool isDynamic = Has(flags, BUfferUsage::DYNAMIC);
+		bool isStreaming = Has(flags, BUfferUsage::STREAMING);
 
 		switch (type) {
 		case MemoryType::GPU_ONLY:
@@ -874,7 +1042,7 @@ namespace RxVK {
 	/// Extended allocation info with priority and dedicated allocation support
 	inline VmaAllocationCreateInfo ToVmaAllocationCreateInfoEx(
 		MemoryType type,
-		BufferFlags flags,
+		BUfferUsage flags,
 		float priority = 0.5f,
 		bool dedicatedAllocation = false) {
 		VmaAllocationCreateInfo allocInfo = ToVmaAllocationCreateInfo(type, flags);
@@ -983,9 +1151,9 @@ namespace RxVK {
 	}
 
 	/// Check if a memory type should be persistently mapped
-	inline bool ShouldBePersistentlyMapped(MemoryType type, BufferFlags flags) {
-		bool isDynamic = Has(flags, BufferFlags::DYNAMIC);
-		bool isStreaming = Has(flags, BufferFlags::STREAMING);
+	inline bool ShouldBePersistentlyMapped(MemoryType type, BUfferUsage flags) {
+		bool isDynamic = Has(flags, BUfferUsage::DYNAMIC);
+		bool isStreaming = Has(flags, BUfferUsage::STREAMING);
 
 		return IsHostVisible(type) && (isDynamic || isStreaming);
 	}
@@ -1003,11 +1171,11 @@ namespace RxVK {
 	}
 
 	/// Get recommended memory type based on usage pattern
-	inline MemoryType GetRecommendedMemoryType(BufferFlags flags) {
-		if (Has(flags, BufferFlags::DYNAMIC) || Has(flags, BufferFlags::STREAMING)) {
+	inline MemoryType GetRecommendedMemoryType(BUfferUsage flags) {
+		if (Has(flags, BUfferUsage::DYNAMIC) || Has(flags, BUfferUsage::STREAMING)) {
 			return MemoryType::CPU_TO_GPU;
 		}
-		else if (Has(flags, BufferFlags::STATIC)) {
+		else if (Has(flags, BUfferUsage::STATIC)) {
 			return MemoryType::GPU_ONLY;
 		}
 
@@ -1275,22 +1443,22 @@ namespace RxVK {
 
 
 	// Buffer Usage Flags Conversion
-	inline VkBufferUsageFlags ToVulkanBufferUsage(BufferFlags flags) {
+	inline VkBufferUsageFlags ToVulkanBufferUsage(BUfferUsage flags) {
 		VkBufferUsageFlags usage = 0;
 
-		if (Has(flags, BufferFlags::VERTEX))
+		if (Has(flags, BUfferUsage::VERTEX))
 			usage |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-		if (Has(flags, BufferFlags::INDEX))
+		if (Has(flags, BUfferUsage::INDEX))
 			usage |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
-		if (Has(flags, BufferFlags::UNIFORM))
+		if (Has(flags, BUfferUsage::UNIFORM))
 			usage |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-		if (Has(flags, BufferFlags::STORAGE))
+		if (Has(flags, BUfferUsage::STORAGE))
 			usage |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-		if (Has(flags, BufferFlags::INDIRECT))
+		if (Has(flags, BUfferUsage::INDIRECT))
 			usage |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
-		if (Has(flags, BufferFlags::TRANSFER_SRC))
+		if (Has(flags, BUfferUsage::TRANSFER_SRC))
 			usage |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-		if (Has(flags, BufferFlags::TRANSFER_DST))
+		if (Has(flags, BUfferUsage::TRANSFER_DST))
 			usage |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 
 		return usage;
@@ -1315,7 +1483,7 @@ namespace RxVK {
 		}
 	}
 
-	inline VmaAllocationCreateFlags ToVmaAllocationFlags(MemoryType type, BufferFlags bufferFlags) {
+	inline VmaAllocationCreateFlags ToVmaAllocationFlags(MemoryType type, BUfferUsage bufferFlags) {
 		VmaAllocationCreateFlags flags = 0;
 
 		// Memory type specific flags
@@ -1340,7 +1508,7 @@ namespace RxVK {
 		}
 
 		// Buffer-specific flags
-		if (Has(bufferFlags, BufferFlags::DYNAMIC)) {
+		if (Has(bufferFlags, BUfferUsage::DYNAMIC)) {
 			flags |= VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
 			flags |= VMA_ALLOCATION_CREATE_MAPPED_BIT;
 		}
@@ -1388,6 +1556,19 @@ namespace RxVK {
 			return VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
 		}
 		return VK_IMAGE_ASPECT_COLOR_BIT;
+	}
+
+	inline VkImageViewType ToVulkanViewType(TextureType type) {
+		switch (type) {
+		case TextureType::TEXTURE_1D: return VK_IMAGE_VIEW_TYPE_1D;
+		case TextureType::TEXTURE_2D: return VK_IMAGE_VIEW_TYPE_2D;
+		case TextureType::TEXTURE_3D: return VK_IMAGE_VIEW_TYPE_3D;
+		case TextureType::TEXTURE_CUBE: return VK_IMAGE_VIEW_TYPE_CUBE;
+		case TextureType::TEXTURE_1D_ARRAY: return VK_IMAGE_VIEW_TYPE_1D_ARRAY;
+		case TextureType::TEXTURE_2D_ARRAY: return VK_IMAGE_VIEW_TYPE_2D_ARRAY;
+		// case TextureType::T: return VK_IMAGE_VIEW_TYPE_CUBE_ARRAY;
+		default: return VK_IMAGE_VIEW_TYPE_2D;
+		}
 	}
 
 

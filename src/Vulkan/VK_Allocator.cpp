@@ -10,7 +10,7 @@ namespace Rx::RxVK {
 		VmaAllocatorCreateInfo info{};
 		info.instance = instance;
 		info.physicalDevice = physicalDevice;
-		info.device = device;
+		info.device = device;	
 		info.flags =
 			VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT |
 			VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;

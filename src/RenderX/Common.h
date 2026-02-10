@@ -7,6 +7,15 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <iostream>
+
+#include <spdlog/fmt/fmt.h>
+#include <spdlog/spdlog.h>
+#include <spdlog/fmt/ostr.h>
+#include <spdlog/sinks/stdout_color_sinks.h>
+#include <spdlog/sinks/basic_file_sink.h>
+#include <spdlog/async.h>
+
 #include "Flags.h"
 
 #if defined(_MSC_VER)
@@ -69,6 +78,10 @@
 #endif
 #endif
 
+#define STRFY(s) #s
+#define XSTRFY(X) STRFY(X)
+#define PRINT(msg, ...) std::cout << XSTRFY(__VA_ARGS__) << std::endl
+
 
 #define RENDERX_DEFINE_HANDLE(Name) \
 	namespace HandleType {          \
@@ -76,86 +89,118 @@
 	}                               \
 	using Name##Handle = Handle<HandleType::Name>;
 
-
-#pragma once
-#include <memory>
-#include <spdlog/spdlog.h>
-#include <spdlog/fmt/ostr.h> // allows logging custom structs via operator<<
-
-
-
-#pragma once
-#include <memory>
-#include <string>
-
 namespace spdlog {
 	class logger;
 }
 
 namespace Rx {
-
-	class Log {
+	// Frame-based logging accumulator
+	class RENDERX_EXPORT FrameLogger {
 	public:
-		RENDERX_EXPORT static void Init();
-		RENDERX_EXPORT static void Shutdown();
-
-		RENDERX_EXPORT static std::shared_ptr<spdlog::logger>& Core();
-		RENDERX_EXPORT static std::shared_ptr<spdlog::logger>& Client();
-
-		// Same-line console status (NO newline)
-		RENDERX_EXPORT static void Status(const std::string& msg);
+		struct LogEntry {
+			std::string message;
+			spdlog::level::level_enum level;
+			uint32_t count = 1;
+			std::chrono::steady_clock::time_point last_time;
+		};
+		void AddMessage(const std::string& key, const std::string& msg, spdlog::level::level_enum level);
+		void FlushFrame(std::shared_ptr<spdlog::logger>& logger);
+		void Clear();
 	private:
-		RENDERX_EXPORT static std::shared_ptr<spdlog::logger> s_CoreLogger;
-		RENDERX_EXPORT static std::shared_ptr<spdlog::logger> s_ClientLogger;
+		std::unordered_map<std::string, LogEntry> frame_logs_;
+		std::mutex mutex_;
 	};
 
+	class RENDERX_EXPORT Log {
+	public:
+		static void Init();
+		static void Shutdown();
+
+		static std::shared_ptr<spdlog::logger>& Core();
+		static std::shared_ptr<spdlog::logger>& Client();
+
+		// Frame-based logging
+		static void BeginFrame();
+		static void EndFrame();
+		static void FrameLog(const std::string& key, const std::string& msg,
+			spdlog::level::level_enum level = spdlog::level::info);
+
+		static void Status(const std::string& msg);
+	private:
+		static std::shared_ptr<spdlog::logger> s_CoreLogger;
+		static std::shared_ptr<spdlog::logger> s_ClientLogger;
+		static std::unique_ptr<FrameLogger> s_FrameLogger;
+	};
 }
 
-
+// Frame logging macros
 #ifdef RENDERX_DEBUG
-#define RX_CORE_TRACE(...) ::Rx::Log::Core()->trace(__VA_ARGS__)
-#define RX_CORE_INFO(...) ::Rx::Log::Core()->info(__VA_ARGS__)
-#define RX_CORE_WARN(...) ::Rx::Log::Core()->warn(__VA_ARGS__)
-#define RX_CORE_ERROR(...) ::Rx::Log::Core()->error(__VA_ARGS__)
-#define RX_CORE_CRITICAL(...) ::Rx::Log::Core()->critical(__VA_ARGS__)
-#define RX_CLIENT_TRACE(...) ::Rx::Log::Client()->trace(__VA_ARGS__)
-#define RX_CLIENT_INFO(...) ::Rx::Log::Client()->info(__VA_ARGS__)
-#define RX_CLIENT_WARN(...) ::Rx::Log::Client()->warn(__VA_ARGS__)
-#define RX_CLIENT_ERROR(...) ::Rx::Log::Client()->error(__VA_ARGS__)
-#define RX_CLIENT_CRITICAL(...) ::Rx::Log::Client()->critical(__VA_ARGS__)
-#define RX_STATUS(msg) ::Rx::Log::Status(msg)
+#define RX_FRAME_TRACE(key, msg, ...) ::Rx::Log::FrameLog(key, fmt::format("[{}:{}] " msg, __func__, __LINE__, ##__VA_ARGS__), spdlog::level::trace)
+#define RX_FRAME_INFO(key, msg, ...) ::Rx::Log::FrameLog(key, fmt::format("[{}] " msg, __func__, ##__VA_ARGS__), spdlog::level::info)
+#define RX_FRAME_WARN(key, msg, ...) ::Rx::Log::FrameLog(key, fmt::format("[{}:{}] " msg, __func__, __LINE__, ##__VA_ARGS__), spdlog::level::warn)
+
+#define RX_BEGIN_FRAME() ::Rx::Log::BeginFrame()
+#define RX_END_FRAME() ::Rx::Log::EndFrame()
 #else
-#define RX_CORE_TRACE(...)
-#define RX_CORE_INFO(...)
-#define RX_CORE_WARN(...)
-#define RX_CORE_ERROR(...)
-#define RX_CORE_CRITICAL(...)
+#define RX_FRAME_TRACE(key, msg, ...)
+#define RX_FRAME_INFO(key, msg, ...)
+#define RX_FRAME_WARN(key, msg, ...)
+#define RX_BEGIN_FRAME()
+#define RX_END_FRAME()
+#endif
+
+// Regular logging macros (same as before)
+#ifdef RENDERX_DEBUG
+#define RX_CORE_TRACE(msg, ...) ::Rx::Log::Core()->trace("[{}:{}] " msg, __func__, __LINE__, ##__VA_ARGS__)
+#define RX_CORE_INFO(msg, ...) ::Rx::Log::Core()->info("[{}] " msg, __func__, ##__VA_ARGS__)
+#define RX_CORE_WARN(msg, ...) ::Rx::Log::Core()->warn("[{}:{}] " msg, __func__, __LINE__, ##__VA_ARGS__)
+#define RX_CORE_ERROR(msg, ...) ::Rx::Log::Core()->error("[{}:{}] " msg, __func__, __LINE__, ##__VA_ARGS__)
+#define RX_CORE_CRITICAL(msg, ...) ::Rx::Log::Core()->critical("[{}:{}] " msg, __func__, __LINE__, ##__VA_ARGS__)
+
+#define RX_CLIENT_TRACE(msg, ...) ::Rx::Log::Client()->trace("[{}:{}] " msg, __func__, __LINE__, ##__VA_ARGS__)
+#define RX_CLIENT_INFO(msg, ...) ::Rx::Log::Client()->info("[{}] " msg, __func__, ##__VA_ARGS__)
+#define RX_CLIENT_WARN(msg, ...) ::Rx::Log::Client()->warn("[{}:{}] " msg, __func__, __LINE__, ##__VA_ARGS__)
+#define RX_CLIENT_ERROR(msg, ...) ::Rx::Log::Client()->error("[{}:{}] " msg, __func__, __LINE__, ##__VA_ARGS__)
+#define RX_CLIENT_CRITICAL(msg, ...) ::Rx::Log::Client()->critical("[{}:{}] " msg, __func__, __LINE__, ##__VA_ARGS__)
+
+#define RX_STATUS(msg, ...) ::Rx::Log::Status(fmt::format(msg, ##__VA_ARGS__))
+#else
+#define RX_CORE_TRACE(msg, ...)
+#define RX_CORE_INFO(msg, ...)
+#define RX_CORE_WARN(msg, ...)
+#define RX_CORE_ERROR(msg, ...)
+#define RX_CORE_CRITICAL(msg, ...)
+#define RX_CLIENT_TRACE(msg, ...)
+#define RX_CLIENT_INFO(msg, ...)
+#define RX_CLIENT_WARN(msg, ...)
+#define RX_CLIENT_ERROR(msg, ...)
+#define RX_CLIENT_CRITICAL(msg, ...)
 #define RX_STATUS(msg)
 #endif
 
 // for backward compatibility
 #ifdef RENDERX_DEBUG
 #define LOG_INIT() ::Rx::Log::Init()
-#define RENDERX_TRACE(...) ::Rx::Log::Core()->trace(__VA_ARGS__)
+#define RENDERX_TRACE(msg, ...) ::Rx::Log::Core()->trace("[{}]: " msg, __func__, ##__VA_ARGS__)
 #define RENDERX_INFO(...) ::Rx::Log::Core()->info(__VA_ARGS__)
-#define RENDERX_WARN(...) ::Rx::Log::Core()->warn(__VA_ARGS__)
-#define RENDERX_ERROR(...) ::Rx::Log::Core()->error(__VA_ARGS__)
-#define RENDERX_CRITICAL(...) ::Rx::Log::Core()->critical(__VA_ARGS__)
+#define RENDERX_WARN(msg, ...) ::Rx::Log::Core()->warn("[{}]: " msg, __func__, ##__VA_ARGS__)
+#define RENDERX_ERROR(msg, ...) ::Rx::Log::Core()->error("[{}]: " msg, __func__, ##__VA_ARGS__)
+#define RENDERX_CRITICAL(msg, ...) ::Rx::Log::Core()->critical("[{}]: " msg, __func__, ##__VA_ARGS__)
 #define LOG_SHUTDOWN() ::Rx::Log::Shutdown();
 #else
 #define LOG_INIT()
-#define RENDERX_TRACE(...)
-#define RENDERX_INFO(...)
-#define RENDERX_WARN(...)
-#define RENDERX_ERROR(...)
-#define RENDERX_CRITICAL(...)
+#define RENDERX_TRACE(msg, ...)
+#define RENDERX_INFO(msg, ...)
+#define RENDERX_WARN(msg, ...)
+#define RENDERX_ERROR(msg, ...)
+#define RENDERX_CRITICAL(msg, ...)
 #define LOG_SHUTDOWN()
 #endif
-#define CLIENT_TRACE(...) ::Rx::Log::Client()->trace(__VA_ARGS__)
-#define CLIENT_INFO(...) ::Rx::Log::Client()->info(__VA_ARGS__)
-#define CLIENT_WARN(...) ::Rx::Log::Client()->warn(__VA_ARGS__)
-#define CLIENT_ERROR(...) ::Rx::Log::Client()->error(__VA_ARGS__)
-#define CLIENT_CRITICAL(...) ::Rx::Log::Client()->critical(__VA_ARGS__)
+#define CLIENT_TRACE(msg, ...) ::Rx::Log::Client()->trace("[{}]: " msg, __func__, ##__VA_ARGS__)
+#define CLIENT_INFO(msg, ...) ::Rx::Log::Client()->info("[{}]: " msg, __func__, ##__VA_ARGS__)
+#define CLIENT_WARN(msg, ...) ::Rx::Log::Client()->warn("[{}]: " msg, __func__, ##__VA_ARGS__)
+#define CLIENT_ERROR(msg, ...) ::Rx::Log::Client()->error("[{}]: " msg, __func__, ##__VA_ARGS__)
+#define CLIENT_CRITICAL(msg, ...) ::Rx::Log::Client()->critical("[{}]: " msg, __func__, ##__VA_ARGS__)
 
 namespace Rx {
 
@@ -235,9 +280,29 @@ namespace Rx {
 		(const ResourceGroupLayout& desc),                                \
 		(desc))                                                           \
                                                                           \
+	X(void*, MapBuffer,                                                   \
+		(BufferHandle handle),                                            \
+		(handle))                                                         \
+                                                                          \
+	X(TextureHandle, CreateTexture,                                       \
+		(const TextureDesc& desc),                                        \
+		(desc))                                                           \
+	X(void, DestroyTexture,                                               \
+		(TextureHandle & handle),                                         \
+		(handle))                                                         \
+                                                                          \
+	X(TextureViewHandle, CreateTextureView,                               \
+		(const TextureViewDesc & desc),                                         \
+		(desc))                                                           \
+	X(void, DestroyTextureView,                                           \
+		(TextureViewHandle & handle),                                     \
+		(handle))                                                         \
+                                                                          \
 	X(CommandQueue*, GetGpuQueue,                                         \
 		(QueueType type),                                                 \
 		(type))
+
+
 
 
 	// Base Handle Template
@@ -322,9 +387,11 @@ namespace Rx {
 	};
 
 	enum class TextureType {
+		TEXTURE_1D,
 		TEXTURE_2D,
 		TEXTURE_3D,
 		TEXTURE_CUBE,
+		TEXTURE_1D_ARRAY,
 		TEXTURE_2D_ARRAY
 	};
 
@@ -477,7 +544,7 @@ namespace Rx {
 	};
 	ENABLE_BITMASK_OPERATORS(ResourceGroupFlags)
 
-	enum class BufferFlags : uint16_t {
+	enum class BUfferUsage : uint16_t {
 		VERTEX = 1 << 0,
 		INDEX = 1 << 1,
 		UNIFORM = 1 << 2,
@@ -489,7 +556,7 @@ namespace Rx {
 		DYNAMIC = 1 << 9,
 		STREAMING = 1 << 10
 	};
-	ENABLE_BITMASK_OPERATORS(BufferFlags)
+	ENABLE_BITMASK_OPERATORS(BUfferUsage)
 
 
 	struct Viewport {
@@ -564,22 +631,22 @@ namespace Rx {
 	};
 
 
-	inline bool IsValidBufferFlags(BufferFlags flags) {
-		// Can't be both static and dynamic
-		bool hasStatic = Has(flags, BufferFlags::STATIC);
-		bool hasDynamic = Has(flags, BufferFlags::DYNAMIC);
+	inline bool IsValidBufferFlags(BUfferUsage flags) {
+
+		bool hasStatic = Has(flags, BUfferUsage::STATIC);
+		bool hasDynamic = Has(flags, BUfferUsage::DYNAMIC);
 
 		if (hasStatic && hasDynamic) {
-			return false; // Invalid combination
+			return false; 
 		}
 
 		// Must have at least one usage flag (not just Static/Dynamic)
-		BufferFlags usageMask = BufferFlags::VERTEX | BufferFlags::INDEX |
-								BufferFlags::UNIFORM | BufferFlags::STORAGE |
-								BufferFlags::INDIRECT | BufferFlags::TRANSFER_SRC |
-								BufferFlags::TRANSFER_DST;
+		BUfferUsage usageMask = BUfferUsage::VERTEX | BUfferUsage::INDEX |
+								BUfferUsage::UNIFORM | BUfferUsage::STORAGE |
+								BUfferUsage::INDIRECT | BUfferUsage::TRANSFER_SRC |
+								BUfferUsage::TRANSFER_DST;
 
-		if (Has(flags, usageMask)) {
+		if (!Has(usageMask,flags)) {
 			return false; // Must have at least one usage
 		}
 
@@ -587,11 +654,17 @@ namespace Rx {
 	}
 
 	struct BufferDesc {
-		BufferFlags flags;
+		BUfferUsage usage;
 		MemoryType memoryType;
 		size_t size;
 		uint32_t bindingCount;
 		const void* initialData;
+	};
+
+	struct BufferCopyRegion {
+		uint32_t srcOffset = 0;
+		uint32_t dstOffset = 0;
+		uint32_t size = 0;
 	};
 
 	struct BufferViewDesc {
@@ -619,26 +692,71 @@ namespace Rx {
 		}
 	};
 
+	enum class TextureUsageFlags : uint32_t {
+		NONE = 0,
+		TRANSFER_SRC = 1 << 0,	// Can be copied from
+		TRANSFER_DST = 1 << 1,	// Can be copied to
+		SAMPLED = 1 << 2,		// Shader sampling
+		STORAGE = 1 << 3,		// Read/write in compute
+		RENDER_TARGET = 1 << 4, // Color attachment
+		DEPTH_STENCIL = 1 << 5, // Depth/stencil attachment
+	};
+	ENABLE_BITMASK_OPERATORS(TextureUsageFlags);
+
 	struct TextureDesc {
 		TextureType type;
-		int width, height, depth;
-		int mipLevels;
+		uint32_t width;
+		uint32_t height;
+		uint32_t depth;
+		uint32_t mipLevels;
+		uint32_t arrayLayers; // Add this for texture arrays
+		uint32_t sampleCount; // Add this for MSAA
 		Format format;
-		const void* initialData;
-		size_t dataSize;
+		TextureUsageFlags usage;
+		MemoryType memoryType;
 		bool generateMips;
+		const char* debugName;
 
-		TextureDesc(int w, int h, Format fmt,
+		// Constructors
+		TextureDesc(uint32_t w, uint32_t h, Format fmt,
 			TextureType t = TextureType::TEXTURE_2D)
-			: type(t), width(w), height(h), depth(1), mipLevels(1), format(fmt),
-			  initialData(nullptr), dataSize(0), generateMips(false) {
-		}
+			: type(t), width(w), height(h), depth(1),
+			  mipLevels(1), arrayLayers(1), sampleCount(1),
+			  format(fmt), usage(TextureUsageFlags::SAMPLED),
+			  memoryType(MemoryType::GPU_ONLY), generateMips(false),
+			  debugName(nullptr) {}
 
 		TextureDesc(const IVec2& size, Format fmt,
 			TextureType t = TextureType::TEXTURE_2D)
-			: type(t), width(size.x), height(size.y), depth(1), mipLevels(1),
-			  format(fmt), initialData(nullptr), dataSize(0), generateMips(false) {
-		}
+			: TextureDesc(size.x, size.y, fmt, t) {}
+	};
+
+	struct TextureViewDesc {
+		TextureHandle texture;
+		TextureType viewType; // Can differ from base texture
+		Format format;		  // Can reinterpret format
+		uint32_t baseMipLevel;
+		uint32_t mipLevelCount;
+		uint32_t baseArrayLayer;
+		uint32_t arrayLayerCount;
+		const char* debugName;
+
+		TextureViewDesc()
+			: baseMipLevel(0), mipLevelCount(1),
+			  baseArrayLayer(0), arrayLayerCount(1),
+			  debugName(nullptr) {}
+	};
+
+	struct TextureCopyRegion {
+		uint32_t srcMipLevel = 0;
+		uint32_t srcArrayLayer = 0;
+		IVec3 srcOffset = IVec3(0);
+
+		uint32_t dstMipLevel = 0;
+		uint32_t dstArrayLayer = 0;
+		IVec3 dstOffset = IVec3(0);
+
+		IVec3 extent = IVec3(0);
 	};
 
 	struct ShaderDesc {
@@ -916,22 +1034,17 @@ namespace Rx {
 
 	// Framebuffer description
 	struct FramebufferDesc {
-		RenderPassHandle renderPass;
-
-		std::vector<TextureHandle> colorAttachments;
-		TextureHandle depthStencilAttachment;
-
+		std::vector<TextureViewHandle> colorAttachments;
+		TextureViewHandle depthStencilAttachment;
 		uint32_t width = 0;
 		uint32_t height = 0;
 		uint32_t layers = 1;
-
 		FramebufferDesc(int w, int h)
-			: renderPass(0), depthStencilAttachment(0),
+			: depthStencilAttachment(0),
 			  width(w), height(h) {
 		}
-
 		FramebufferDesc(const IVec2& size)
-			: renderPass(0), depthStencilAttachment(0),
+			: depthStencilAttachment(0),
 			  width(size.x), height(size.y) {
 		}
 	};
@@ -1009,6 +1122,9 @@ namespace Rx {
 		}
 	};
 
+
+
+
 	class RENDERX_EXPORT CommandList {
 	public:
 		virtual void open() = 0;
@@ -1046,6 +1162,30 @@ namespace Rx {
 
 		virtual void setResourceGroup(
 			const ResourceGroupHandle& handle) = 0;
+
+		virtual void setFramebuffer(
+			FramebufferHandle handle) = 0;
+
+		virtual void copyBuffer(BufferHandle src,
+			BufferHandle dst,
+			const BufferCopyRegion& region) = 0;
+
+		virtual void copyBufferToTexture(
+			BufferHandle srcBuffer,
+			TextureHandle dstTexture,
+			const TextureCopyRegion& region) = 0;
+
+		/// Copy between textures
+		virtual void copyTexture(
+			TextureHandle srcTexture,
+			TextureHandle dstTexture,
+			const TextureCopyRegion& region) = 0;
+
+		/// Copy from texture to buffer (readback)
+		virtual void copyTextureToBuffer(
+			TextureHandle srcTexture,
+			BufferHandle dstBuffer,
+			const TextureCopyRegion& region) = 0;
 	};
 
 

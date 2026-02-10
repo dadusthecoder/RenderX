@@ -35,6 +35,7 @@ namespace RxVK {
 
 		ctx.transferQueue = std::make_unique<VulkanCommandQueue>(ctx.device->logical(), ctx.device->transferQueue(),
 			ctx.device->transferFamily(), QueueType::TRANSFER);
+		ctx.allocator = std::make_unique<VulkanAllocator>(ctx.instance->getInstance(), ctx.device->physical(), ctx.device->logical());
 
 		ctx.descriptorPoolManager = std::make_unique<VulkanDescriptorPoolManager>(ctx);
 		ctx.descriptorSetManager = std::make_unique<VulkanDescriptorManager>(ctx);

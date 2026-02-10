@@ -141,6 +141,23 @@ namespace RxVK {
 		ctx.descriptorSetManager->bind(m_CommandBuffer, layout->layout, 0, *group);
 	}
 
+	void VulkanCommandList::setFramebuffer(FramebufferHandle handle) {
+		VulkanFramebuffer* framebuffer = g_Framebufferpool.get(handle);
+		RENDERX_ASSERT_MSG(framebuffer, "Framebuffer Is nullptr - Handle : {} ,\n Did you forgot to create one ,if not please report this issue to the github repo", handle.id);
+	}
+
+	void VulkanCommandList::copyBufferToTexture(BufferHandle srcBuffer, TextureHandle dstTexture, const TextureCopyRegion& region) {
+	}
+
+	void VulkanCommandList::copyTexture(TextureHandle srcTexture, TextureHandle dstTexture, const TextureCopyRegion& region) {
+	}
+
+	void VulkanCommandList::copyBuffer(BufferHandle src, BufferHandle dst, const BufferCopyRegion& region) {
+	}
+
+	void VulkanCommandList::copyTextureToBuffer(TextureHandle srcTexture, BufferHandle dstBuffer, const TextureCopyRegion& region) {
+	}
+
 } // namespace RxVK
 
 } // namespace Rx

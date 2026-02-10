@@ -23,24 +23,15 @@ namespace RxVK {
 
 	// ResourcePool instances for resource management
 	ResourcePool<VulkanTexture, TextureHandle> g_TexturePool;
+	ResourcePool<VulkanTextureView, TextureViewHandle> g_TextureViewPool;
 	ResourcePool<VulkanBuffer, BufferHandle> g_BufferPool;
 	ResourcePool<VulkanShader, ShaderHandle> g_ShaderPool;
 	ResourcePool<VulkanRenderPass, RenderPassHandle> g_RenderPassPool;
-
-	// // Legacy unordered_map declarations (deprecated, kept for compatibility)
-	// std::unordered_map<uint64_t, VulkanBuffer> g_Buffers;
-	// std::unordered_map<uint64_t, VulkanShader> g_Shaders;
-	// std::unordered_map<uint64_t, VkRenderPass> g_RenderPasses;
-
-	uint32_t g_CurrentFrame = 0;
+	ResourcePool<VulkanFramebuffer, FramebufferHandle> g_Framebufferpool;
 
 	VulkanContext& GetVulkanContext() {
 		static VulkanContext g_Context;
 		return g_Context;
-	}
-
-	FrameContex& GetFrameContex(uint32_t index) {
-		return g_Frames[index];
 	}
 
 	void freeAllVulkanResources() {
@@ -64,21 +55,10 @@ namespace RxVK {
 		});
 
 		g_TexturePool.ForEach([&](VulkanTexture& texture) {
-			if (texture.view != VK_NULL_HANDLE) {
-				vkDestroyImageView(g_Device, texture.view, nullptr);
-				texture.view = VK_NULL_HANDLE;
-			}
-
 			if (texture.image != VK_NULL_HANDLE) {
-				vkDestroyImage(g_Device, texture.image, nullptr);
+				ctx.allocator->destroyImage(texture.image, texture.allocation);
 				texture.image = VK_NULL_HANDLE;
 			}
-
-			if (texture.memory != VK_NULL_HANDLE) {
-				vkFreeMemory(g_Device, texture.memory, nullptr);
-				texture.memory = VK_NULL_HANDLE;
-			}
-
 			texture.format = VK_FORMAT_UNDEFINED;
 			texture.width = 0;
 			texture.height = 0;

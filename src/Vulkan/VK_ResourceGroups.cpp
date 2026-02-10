@@ -596,6 +596,8 @@ namespace RxVK {
 		RENDERX_ASSERT_MSG(Layout.layout != VK_NULL_HANDLE, "Failed to create Resource group layout");
 		auto handle = g_ResourceGroupLayoutPool.allocate(Layout);
 		if (handle.IsValid()) return handle;
+		RENDERX_CRITICAL("Failed to create ResourceGroupLayout handle:Report this issue to the github repo");
+		return ResourceGroupLayoutHandle(0);
 	}
 
 	ResourceGroupHandle VKCreateResourceGroup(const ResourceGroupDesc& desc) {
