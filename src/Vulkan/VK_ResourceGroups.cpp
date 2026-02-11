@@ -593,10 +593,10 @@ namespace RxVK {
 	ResourceGroupLayoutHandle VKCreateResourceGroupLayout(const ResourceGroupLayout& desc) {
 		auto& ctx = GetVulkanContext();
 		auto Layout = ctx.descriptorSetManager->createLayout(desc);
-		RENDERX_ASSERT_MSG(Layout.layout != VK_NULL_HANDLE, "Failed to create Resource group layout");
+		RENDERX_ASSERT_MSG(Layout.layout != VK_NULL_HANDLE, "Failed to create resource group layout");
 		auto handle = g_ResourceGroupLayoutPool.allocate(Layout);
 		if (handle.IsValid()) return handle;
-		RENDERX_CRITICAL("Failed to create ResourceGroupLayout handle:Report this issue to the github repo");
+		RENDERX_CRITICAL("Failed to allocate ResourceGroupLayout handle; please report this issue");
 		return ResourceGroupLayoutHandle(0);
 	}
 

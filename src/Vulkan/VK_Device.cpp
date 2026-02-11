@@ -213,7 +213,7 @@ namespace Rx::RxVK {
 		std::getline(std::cin, input);
 
 		if (input.empty()) {
-			RENDERX_INFO("Using recommended device [{}]");
+			RENDERX_INFO("Using recommended device [{}]", devices[recommendedIndex].properties.deviceName);
 			return recommendedIndex;
 		}
 
@@ -228,19 +228,20 @@ namespace Rx::RxVK {
 			}
 
 			if (valid) {
+				RENDERX_INFO("Using selected device [{}]", devices[selectedIndex].properties.deviceName);
 				return selectedIndex;
-				RENDERX_INFO("Using device [{}]", devices[selectedIndex].properties.deviceName);
 			}
 			else {
-				RENDERX_WARN("Invalid selection, using recommended device [{}]");
+				RENDERX_WARN("Invalid device selection. Falling back to recommended device [{}]",
+					devices[recommendedIndex].properties.deviceName);
 				return recommendedIndex;
 			}
 		}
 		catch (const std::exception& e) {
-			RENDERX_WARN("Invalid input, using recommended device [{}]");
+			RENDERX_WARN("Invalid device selection input. Falling back to recommended device [{}]",
+				devices[recommendedIndex].properties.deviceName);
 			return recommendedIndex;
 		}
-		RENDERX_WARN("Check This out you just made a mistake somewhere");
 		return -1;
 #endif
 	}
@@ -328,24 +329,28 @@ namespace Rx::RxVK {
 			queues.push_back(q);
 		}
 
-		VkPhysicalDeviceFeatures features{};
-		VkPhysicalDeviceDescriptorIndexingFeatures indexing{};
-		VkPhysicalDeviceTimelineSemaphoreFeatures timelineFeatures{};
-		VkPhysicalDeviceBufferDeviceAddressFeatures bufferAddressFeatures{};
+		// add here 
+		VkPhysicalDeviceSynchronization2Features sync2{};
+		sync2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES;
+		sync2.synchronization2 = VK_TRUE;
 
+		VkPhysicalDeviceBufferDeviceAddressFeatures bufferAddressFeatures{};
+		bufferAddressFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
+		bufferAddressFeatures.bufferDeviceAddress = VK_TRUE;
+		bufferAddressFeatures.pNext = &sync2;
+
+		VkPhysicalDeviceTimelineSemaphoreFeatures timelineFeatures{};
+		timelineFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES;
+		timelineFeatures.pNext = &bufferAddressFeatures;
+		timelineFeatures.timelineSemaphore = VK_TRUE;
+
+		VkPhysicalDeviceDescriptorIndexingFeatures indexing{};
 		indexing.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
 		indexing.pNext = &timelineFeatures;
 		indexing.descriptorBindingPartiallyBound = VK_TRUE;
 		indexing.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE;
 		indexing.runtimeDescriptorArray = VK_TRUE;
 		indexing.descriptorBindingVariableDescriptorCount = VK_TRUE;
-
-		timelineFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES;
-		timelineFeatures.pNext = &bufferAddressFeatures;
-		timelineFeatures.timelineSemaphore = VK_TRUE;
-
-		bufferAddressFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
-		bufferAddressFeatures.bufferDeviceAddress = VK_TRUE;
 
 		VkDeviceCreateInfo info{};
 		info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -392,7 +397,7 @@ namespace Rx::RxVK {
 		for (uint32_t i = 0; i < count; i++) {
 			auto info = gatherDeviceInfo(devices[i]);
 			info.score = scoreDevice(info);
-			//logDeviceInfo(i, info);
+			// logDeviceInfo(i, info);
 			info.index = i;
 			infos.push_back(info);
 		}

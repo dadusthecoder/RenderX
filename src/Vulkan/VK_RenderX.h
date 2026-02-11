@@ -1,7 +1,4 @@
 #pragma once
-
-// BHai  eddthr  thoda adhura chod diya
-
 #include "RenderX/Common.h"
 
 namespace Rx {

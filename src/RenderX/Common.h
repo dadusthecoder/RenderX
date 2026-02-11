@@ -300,7 +300,15 @@ namespace Rx {
                                                                           \
 	X(CommandQueue*, GetGpuQueue,                                         \
 		(QueueType type),                                                 \
-		(type))
+		(type))                                                           \
+                                                                          \
+	X(Swapchain*, CreateSwapchain,                                        \
+		(const SwapchainDesc& desc),                                      \
+		(desc))                                                           \
+                                                                          \
+	X(void, DestroySwapchain,                                             \
+		(Swapchain * swapchain),                                          \
+		(swapchain))
 
 
 
@@ -339,8 +347,6 @@ namespace Rx {
 	RENDERX_DEFINE_HANDLE(ResourceGroup)
 	RENDERX_DEFINE_HANDLE(QueryPool)
 	RENDERX_DEFINE_HANDLE(ResourceGroupLayout)
-
-
 
 	// GLM type aliases for consistency Temp (only using them for the testing/debug)
 	using Vec2 = glm::vec2;
@@ -983,7 +989,11 @@ namespace Rx {
 		RasterizerState rasterizer;
 		DepthStencilState depthStencil;
 		BlendState blend;
+		//[deprecated]
 		RenderPassHandle renderPass;
+
+		std::vector<Format> colorFromats;
+		Format depthFormat = Format::UNDEFINED;
 		PipelineLayoutHandle layout;
 
 		PipelineDesc()
@@ -999,13 +1009,14 @@ namespace Rx {
 
 	// Render pass description
 	struct AttachmentDesc {
-		Format format;
+		Format format = Format::BGRA8_SRGB;
 		LoadOp loadOp = LoadOp::CLEAR;
 		StoreOp storeOp = StoreOp::STORE;
-		AttachmentDesc(Format format = Format::RGBA8_SRGB) : format(format) {}
+		TextureViewHandle handle;
+		AttachmentDesc(Format fmt = Format::BGRA8_SRGB) : format(fmt) {}
 	};
-
 	struct DepthStencilAttachmentDesc {
+		TextureViewHandle handle;
 		Format format = Format::D24_UNORM_S8_UINT;
 		LoadOp depthLoadOp = LoadOp::CLEAR;
 		StoreOp depthStoreOp = StoreOp::STORE;
@@ -1014,6 +1025,8 @@ namespace Rx {
 		DepthStencilAttachmentDesc(Format format) : format(format) {}
 	};
 
+
+	//[deprecated]
 	struct RenderPassDesc {
 		std::vector<AttachmentDesc> colorAttachments;
 		DepthStencilAttachmentDesc depthStencilAttachment;
@@ -1025,6 +1038,7 @@ namespace Rx {
 		}
 	};
 
+	//[deprecated]
 	// Framebuffer description
 	struct FramebufferDesc {
 		std::vector<TextureViewHandle> colorAttachments;
@@ -1042,6 +1056,13 @@ namespace Rx {
 		}
 	};
 
+	struct RenderingDesc {
+		int width;
+		int height;
+		std::vector<AttachmentDesc> colorAttachments;
+		DepthStencilAttachmentDesc depthStencilAttachment{Format::D24_UNORM_S8_UINT};
+		bool hasDepthStencil;
+	};
 
 	// Statistics and debug info for a single frame.
 	struct RenderStats {
@@ -1115,9 +1136,6 @@ namespace Rx {
 		}
 	};
 
-
-
-
 	class RENDERX_EXPORT CommandList {
 	public:
 		virtual void open() = 0;
@@ -1126,67 +1144,150 @@ namespace Rx {
 		virtual void setPipeline(const PipelineHandle& pipeline) = 0;
 		virtual void setVertexBuffer(const BufferHandle& buffer, uint64_t offset = 0) = 0;
 		virtual void setIndexBuffer(const BufferHandle& buffer, uint64_t offset = 0) = 0;
+		virtual void setResourceGroup(const ResourceGroupHandle& handle) = 0;
+		virtual void setFramebuffer(FramebufferHandle handle) = 0;
 
-		virtual void draw(
-			uint32_t vertexCount,
-			uint32_t instanceCount = 1,
-			uint32_t firstVertex = 0,
-			uint32_t firstInstance = 0) = 0;
+		virtual void draw(uint32_t vertexCount, uint32_t instanceCount = 1, uint32_t firstVertex = 0, uint32_t firstInstance = 0) = 0;
+		virtual void drawIndexed(uint32_t indexCount, int32_t vertexOffset = 0, uint32_t instanceCount = 1, uint32_t firstIndex = 0, uint32_t firstInstance = 0) = 0;
 
-		virtual void drawIndexed(
-			uint32_t indexCount,
-			int32_t vertexOffset = 0,
-			uint32_t instanceCount = 1,
-			uint32_t firstIndex = 0,
-			uint32_t firstInstance = 0) = 0;
-
-		virtual void beginRenderPass(
-			RenderPassHandle pass,
-			const void* clearValues,
-			uint32_t clearCount) = 0;
-
+		virtual void beginRenderPass(RenderPassHandle pass, const void* clearValues, uint32_t clearCount) = 0;
 		virtual void endRenderPass() = 0;
 
-		virtual void writeBuffer(
-			BufferHandle handle,
-			const void* data,
-			uint32_t offset,
-			uint32_t size) = 0;
+		virtual void beginRendering(const RenderingDesc& desc) = 0;
+		virtual void endRendering() = 0;
 
-		virtual void setResourceGroup(
-			const ResourceGroupHandle& handle) = 0;
+		virtual void writeBuffer(BufferHandle handle, const void* data, uint32_t offset, uint32_t size) = 0;
+		virtual void copyBuffer(BufferHandle src, BufferHandle dst, const BufferCopyRegion& region) = 0;
+		virtual void copyBufferToTexture(BufferHandle srcBuffer, TextureHandle dstTexture, const TextureCopyRegion& region) = 0;
+		virtual void copyTexture(TextureHandle srcTexture, TextureHandle dstTexture, const TextureCopyRegion& region) = 0;
+		virtual void copyTextureToBuffer(TextureHandle srcTexture, BufferHandle dstBuffer, const TextureCopyRegion& region) = 0;
 
-		virtual void setFramebuffer(
-			FramebufferHandle handle) = 0;
 
-		virtual void copyBuffer(BufferHandle src,
-			BufferHandle dst,
-			const BufferCopyRegion& region) = 0;
-
-		virtual void copyBufferToTexture(
-			BufferHandle srcBuffer,
-			TextureHandle dstTexture,
-			const TextureCopyRegion& region) = 0;
-
-		/// Copy between textures
-		virtual void copyTexture(
-			TextureHandle srcTexture,
-			TextureHandle dstTexture,
-			const TextureCopyRegion& region) = 0;
-
-		/// Copy from texture to buffer (readback)
-		virtual void copyTextureToBuffer(
-			TextureHandle srcTexture,
-			BufferHandle dstBuffer,
-			const TextureCopyRegion& region) = 0;
+		/*
+func
+open
+func
+close
+func
+clearState
+func
+clearTextureFloat
+func
+clearDepthStencilTexture
+func
+clearTextureUInt
+func
+copyTexture
+func
+copyTexture
+func
+copyTexture
+func
+writeTexture
+func
+resolveTexture
+func
+writeBuffer
+func
+clearBufferUInt
+func
+copyBuffer
+func
+clearSamplerFeedbackTexture
+func
+decodeSamplerFeedbackTexture
+func
+setSamplerFeedbackTextureState
+func
+setPushConstants
+func
+setGraphicsState
+func
+draw
+func
+drawIndexed
+func
+drawIndirect
+func
+drawIndexedIndirect
+func
+drawIndexedIndirectCount
+func
+setComputeState
+func
+dispatch
+func
+dispatchIndirect
+func
+setMeshletState
+func
+dispatchMesh
+func
+setRayTracingState
+func
+dispatchRays
+func
+buildOpacityMicromap
+func
+buildBottomLevelAccelStruct
+func
+compactBottomLevelAccelStructs
+func
+buildTopLevelAccelStruct
+func
+executeMultiIndirectClusterOperation
+func
+buildTopLevelAccelStructFromBuffer
+func
+convertCoopVecMatrices
+func
+beginTimerQuery
+func
+endTimerQuery
+func
+beginMarker
+func
+endMarker
+func
+setEnableAutomaticBarriers
+func
+setResourceStatesForBindingSet
+func
+setResourceStatesForFramebuffer
+func
+setEnableUavBarriersForTexture
+func
+setEnableUavBarriersForBuffer
+func
+beginTrackingTextureState
+func
+beginTrackingBufferState
+func
+setTextureState
+func
+setBufferState
+func
+setAccelStructState
+func
+setPermanentTextureState
+func
+setPermanentBufferState
+func
+commitBarriers
+func
+getTextureSubresourceState
+func
+getBufferState
+type
+CommandListHandle
+class
+AftermathCrashDumpHelper*/
 	};
-
 
 	// Synchronization dependency between queues
 	struct QueueDependency {
 		QueueType waitQueue; // Queue that needs to wait
 		Timeline waitValue;	 // Timeline value to wait for
-
 		QueueDependency(QueueType queue, Timeline value)
 			: waitQueue(queue), waitValue(value) {}
 	};
@@ -1214,7 +1315,14 @@ namespace Rx {
 	struct SubmitInfo {
 		// Command list to submit
 		CommandList* commandList = nullptr;
-		uint32_t commandListCount;
+		uint32_t commandListCount = 0;
+		// TEMP
+		// TODO
+		// When ResourceTracking is implemented , track the swapchain resources and determine which submition wrote last;
+		// wait on that last submition :: This is just a theory DONTKNOW if this will work or not
+
+		// if this is set true then the present operation waits on this submition to complete
+		bool writesToSwapchain = false;
 		// Dependencies - wait for these timeline values before executing
 		std::vector<QueueDependency> waitDependencies;
 		SubmitInfo() = default;
@@ -1285,6 +1393,26 @@ namespace Rx {
 		/// Features
 		/// Get GPU timestamp frequency (ticks per second)
 		virtual float TimestampFrequency() const = 0;
+	};
+
+	struct SwapchainDesc {
+		uint32_t width;
+		uint32_t height;
+		uint32_t preferredImageCount = 3;
+		Format preferredFromat = Format::BGRA8_SRGB;
+		uint32_t maxFramesInFlight = 3;
+	};
+
+	class RENDERX_EXPORT Swapchain {
+	public:
+		virtual uint32_t AcquireNextImage() = 0;
+		virtual void Present(uint32_t imageIndex) = 0;
+		virtual void Resize(uint32_t width, uint32_t height) = 0;
+		virtual TextureViewHandle GetImageView(uint32_t imageindex) const = 0;
+		virtual Format GetFormat() const = 0;
+		virtual uint32_t GetWidth() const = 0;
+		virtual uint32_t GetHeight() const = 0;
+		virtual uint32_t GetImageCount() const = 0;
 	};
 
 } // namespace  RenderX

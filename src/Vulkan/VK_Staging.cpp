@@ -427,7 +427,7 @@ namespace RxVK {
 			RENDERX_ERROR("[ImmediateUploader] Must call beginBatch() first");
 			return;
 		}
-		RENDERX_ASSERT_MSG(dstTexture != VK_NULL_HANDLE, "dstTexture  is VK_NULL_HANDLE")
+		RENDERX_ASSERT_MSG(dstTexture != VK_NULL_HANDLE, "VulkanImmediateUploader::uploadTextureBatched: dstTexture is VK_NULL_HANDLE");
 		StagingAllocation staging = m_Ctx.stagingAllocator->allocate(size);
 		if (!staging.mappedPtr) {
 			return;

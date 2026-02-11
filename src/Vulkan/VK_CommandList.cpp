@@ -48,7 +48,7 @@ namespace RxVK {
 		PROFILE_FUNCTION();
 		auto* p = g_PipelinePool.get(pipeline);
 		if (p == nullptr || p->pipeline == VK_NULL_HANDLE) {
-			RENDERX_WARN("VulkanCommandList::setPipeline: invalid pipeline");
+			RENDERX_WARN("VulkanCommandList::setPipeline: invalid pipeline handle");
 			return;
 		}
 		vkCmdBindPipeline(m_CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, p->pipeline);
@@ -63,7 +63,7 @@ namespace RxVK {
 
 		auto* vb = g_BufferPool.get(buffer);
 		if (vb == nullptr || vb->buffer == VK_NULL_HANDLE) {
-			RENDERX_WARN("VulkanCommandList::setVertexBuffer: invalid buffer");
+			RENDERX_WARN("VulkanCommandList::setVertexBuffer: invalid vertex buffer handle");
 			return;
 		}
 
@@ -79,7 +79,7 @@ namespace RxVK {
 
 		auto* ib = g_BufferPool.get(buffer);
 		if (ib == nullptr || ib->buffer == VK_NULL_HANDLE) {
-			RENDERX_WARN("VulkanCommandList::setIndexBuffer: invalid buffer");
+			RENDERX_WARN("VulkanCommandList::setIndexBuffer: invalid index buffer handle");
 			return;
 		}
 
@@ -99,21 +99,71 @@ namespace RxVK {
 
 	void VulkanCommandList::beginRenderPass(RenderPassHandle pass, const void* clearValues, uint32_t clearCount) {
 		PROFILE_FUNCTION();
-		// Renderpass/framebuffer creation and framebuffer lookup are handled elsewhere.
-		// This is a placeholder; a full implementation should lookup the framebuffer
-		// and call vkCmdBeginRenderPass with the correct VkRenderPassBeginInfo.m
+		RENDERX_ERROR("VulkanCommandList::beginRenderPass is not implemented for the Vulkan backend yet");
 	}
 
 	void VulkanCommandList::endRenderPass() {
 		PROFILE_FUNCTION();
-		// Placeholder - see beginRenderPass
+		RENDERX_ERROR("VulkanCommandList::endRenderPass is not implemented for the Vulkan backend yet");
+	}
+
+	void VulkanCommandList::beginRendering(const RenderingDesc& desc) {
+		VkRenderingInfo renderingInfo{};
+		renderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
+
+		std::vector<VkRenderingAttachmentInfo> atts;
+		for (auto& rxAtt : desc.colorAttachments) {
+			VkRenderingAttachmentInfo attinfo{};
+			attinfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+
+			attinfo.storeOp = ToVulkanStoreOp(rxAtt.storeOp);
+			attinfo.loadOp = ToVulkanLoadOp(rxAtt.loadOp);
+			auto* view = g_TextureViewPool.get(rxAtt.handle);
+			RENDERX_ASSERT_MSG(view, "VulkanCommandList::beginRendering: color attachment texture view is null");
+			attinfo.imageView = view->view;
+			attinfo.imageLayout = view->layout;
+
+			attinfo.clearValue = { 1.0f, 1.0f, 1.0f, 1.0f };
+			// TODO MSAA
+			// attinfo.resolveImageView
+			// attinfo.resolveImageLayout
+			atts.push_back(attinfo);
+		}
+
+		VkRenderingAttachmentInfo depthinfo{};
+		if (desc.hasDepthStencil) {
+			depthinfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+			depthinfo.storeOp = ToVulkanStoreOp(desc.depthStencilAttachment.depthStoreOp);
+			depthinfo.loadOp = ToVulkanLoadOp(desc.depthStencilAttachment.depthLoadOp);
+			auto* depthview = g_TextureViewPool.get(desc.depthStencilAttachment.handle);
+			RENDERX_ASSERT_MSG(depthview, "VulkanCommandList::beginRendering: depth attachment texture view is null");
+			depthinfo.imageView = depthview->view;
+			depthinfo.imageLayout = depthview->layout;
+			depthinfo.clearValue = { 1.0f, 0.0f };
+		}
+		renderingInfo.colorAttachmentCount = static_cast<uint32_t>(atts.size());
+		renderingInfo.pColorAttachments = atts.data();
+
+		if (desc.hasDepthStencil)
+			renderingInfo.pDepthAttachment = &depthinfo;
+
+		renderingInfo.renderArea = { desc.width, desc.height };
+		// TODO
+		renderingInfo.viewMask = 0;
+		renderingInfo.layerCount = 1;
+
+		vkCmdBeginRendering(m_CommandBuffer, &renderingInfo);
+	}
+
+	void VulkanCommandList::endRendering() {
+		vkCmdEndRendering(m_CommandBuffer);
 	}
 
 	void VulkanCommandList::writeBuffer(BufferHandle handle, const void* data, uint32_t offset, uint32_t size) {
 		PROFILE_FUNCTION();
 		auto* buf = g_BufferPool.get(handle);
 		if (buf == nullptr || buf->buffer == VK_NULL_HANDLE) {
-			RENDERX_WARN("VulkanCommandList::writeBuffer: invalid buffer");
+			RENDERX_WARN("VulkanCommandList::writeBuffer: invalid destination buffer handle");
 			return;
 		}
 
@@ -124,38 +174,33 @@ namespace RxVK {
 	void VulkanCommandList::setResourceGroup(const ResourceGroupHandle& handle) {
 		PROFILE_FUNCTION();
 		if (!handle.IsValid()) return;
-
 		auto* group = g_ResourceGroupPool.get(handle);
-		if (group == nullptr) {
-			RENDERX_WARN("VulkanCommandList::setResourceGroup: invalid resource group");
-			return;
-		}
-
+		if (!group) return;
 		auto* layout = g_PipelineLayoutPool.get(m_CurrentPipelineLayout);
-		if (layout == nullptr) {
-			RENDERX_WARN("VulkanCommandList::setResourceGroup: no pipeline layout bound");
-			return;
-		}
-
+		if (!layout) return;
 		auto& ctx = GetVulkanContext();
 		ctx.descriptorSetManager->bind(m_CommandBuffer, layout->layout, 0, *group);
 	}
 
 	void VulkanCommandList::setFramebuffer(FramebufferHandle handle) {
 		VulkanFramebuffer* framebuffer = g_Framebufferpool.get(handle);
-		RENDERX_ASSERT_MSG(framebuffer, "Framebuffer Is nullptr - Handle : {} ,\n Did you forgot to create one ,if not please report this issue to the github repo", handle.id);
+		RENDERX_ASSERT_MSG(framebuffer, "VulkanCommandList::setFramebuffer: framebuffer handle {} is invalid or was not created", handle.id);
 	}
 
 	void VulkanCommandList::copyBufferToTexture(BufferHandle srcBuffer, TextureHandle dstTexture, const TextureCopyRegion& region) {
+		RENDERX_ERROR("VulkanCommandList::copyBufferToTexture is not implemented for the Vulkan backend yet");
 	}
 
 	void VulkanCommandList::copyTexture(TextureHandle srcTexture, TextureHandle dstTexture, const TextureCopyRegion& region) {
+		RENDERX_ERROR("VulkanCommandList::copyTexture is not implemented for the Vulkan backend yet");
 	}
 
 	void VulkanCommandList::copyBuffer(BufferHandle src, BufferHandle dst, const BufferCopyRegion& region) {
+		RENDERX_ERROR("VulkanCommandList::copyBuffer is not implemented for the Vulkan backend yet");
 	}
 
 	void VulkanCommandList::copyTextureToBuffer(TextureHandle srcTexture, BufferHandle dstBuffer, const TextureCopyRegion& region) {
+		RENDERX_ERROR("VulkanCommandList::copyTextureToBuffer is not implemented for the Vulkan backend yet");
 	}
 
 } // namespace RxVK

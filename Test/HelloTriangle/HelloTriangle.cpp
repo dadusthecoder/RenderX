@@ -77,6 +77,12 @@ int main() {
 
 	auto vertexbuffer = Rx::CreateBuffer(vertexbufferinfo);
 
+	Rx::SwapchainDesc swapchianinfo{};
+	glfwGetWindowSize(window, (int*)&swapchianinfo.width, (int*)&swapchianinfo.height);
+	swapchianinfo.preferredFromat = Rx::Format::RGBA8_SRGB;
+	auto* swapchain = Rx::CreateSwapchain(swapchianinfo);
+
+
 	Frame frames[3];
 	for (auto& frame : frames) {
 		frame.graphicsAlloc = graphics->CreateCommandAllocator();
@@ -86,10 +92,23 @@ int main() {
 	}
 
 	uint32_t currentFrame = 0;
+	uint32_t currentImageIndex = 0;
+	int currentWidth = swapchianinfo.width;
+	int currentHeight = swapchianinfo.height;
+
 	while (!glfwWindowShouldClose(window)) {
 		// look out for missing reference operator !!!
 		auto& frame = frames[currentFrame];
+		glfwGetWindowSize(window, &currentWidth, &currentHeight);
+		if (swapchianinfo.width != currentWidth || swapchianinfo.height != currentHeight) {
+			swapchianinfo.width = currentWidth;
+			swapchianinfo.height = currentHeight;
+			swapchain->Resize(currentWidth, currentHeight);
+		}
 		graphics->Wait(frame.T);
+
+		currentImageIndex = swapchain->AcquireNextImage();
+
 		frame.computelist->open();
 		// Compute work
 		frame.computelist->close();
@@ -98,19 +117,24 @@ int main() {
 		// Graphics Work
 		frame.graphicslist->close();
 
+
 		auto t0 = compute->Submit(frame.computelist);
 		Rx::SubmitInfo submitInfo{};
 		submitInfo.commandList = frame.graphicslist;
+
 		submitInfo.commandListCount = 1;
+		submitInfo.writesToSwapchain = true;
 		submitInfo.waitDependencies.push_back({ Rx::QueueType::COMPUTE, t0 });
 		frame.T = graphics->Submit(submitInfo);
 
+		swapchain->Present(currentImageIndex);
 		currentFrame = (currentFrame + 1) % 3;
 		glfwPollEvents();
 	}
 
 	graphics->WaitIdle();
 	compute->WaitIdle();
+
 	for (auto& frame : frames) {
 		frame.computeAlloc->Free(frame.computelist);
 		frame.graphicsAlloc->Free(frame.graphicslist);

@@ -63,7 +63,6 @@ namespace RxVK {
 			texture.width = 0;
 			texture.height = 0;
 			texture.mipLevels = 1;
-			texture.isValid = false;
 		});
 
 		g_ShaderPool.ForEach([&](VulkanShader& shader) {

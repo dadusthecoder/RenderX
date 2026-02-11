@@ -10,17 +10,6 @@ RenderX is a cross‑API Rendering Hardware Interface (RHI) written in modern C+
 - **Resource State Tracking** — explicit tracking of resource states to enable correct and efficient barriers when targeting APIs that require them (e.g., Vulkan).
 - **Bindless resources (behind a single flag)** — bindless-style resource access will be available behind a single build/runtime toggle so engines can opt into bindless semantics with minimal integration changes.
 
----
-
-## Features
-
-- Unified RHI for common GPU concepts:
-  - Devices, command buffers, render passes
-  - Buffers (vertex / index / uniform)
-  - Textures, samplers, shaders, pipelines, swapchains
-- Clear separation between API‑agnostic interfaces and backend implementations
-
----
 
 ## Dependencies
 

@@ -105,8 +105,7 @@ namespace RxVK {
 		return true;
 	}
 
-#define ALIGNUP(size, alignment) ((((size + alignment) - 1) / alignment) * alignment)
-	// Constants
+#define ALIGNUP(size, alignment) (((((size) + (alignment)) - 1) / (alignment)) * (alignment))	// Constants
 
 	constexpr std::array<VkDynamicState, 2> g_DynamicStates{
 		VK_DYNAMIC_STATE_VIEWPORT,
@@ -201,11 +200,6 @@ namespace RxVK {
 		bool isBound = false;
 	};
 
-	struct SwapchainImageSync {
-		VkSemaphore imageAvailableSemaphore = VK_NULL_HANDLE;
-		VkSemaphore renderFinishedSemaphore = VK_NULL_HANDLE;
-	};
-
 	struct VulkanBufferConfig {
 		VkBufferUsageFlags usage;
 		VmaMemoryUsage vmaUsage;
@@ -240,18 +234,18 @@ namespace RxVK {
 		uint32_t width = 0;
 		uint32_t height = 0;
 		uint32_t mipLevels = 1;
-		bool isValid = false;
 	};
 
 	struct VulkanTextureView {
 		VkImageView view;
-		TextureType viewType;
-		Format format;
+		VkImageViewType viewType;
+		VkImageLayout layout;
+		VkFormat format;
 		uint32_t baseMipLevel;
 		uint32_t mipLevelCount;
 		uint32_t baseArrayLayer;
 		uint32_t arrayLayerCount;
-		const char* debugName;
+		const char* debugName = nullptr;
 	};
 
 	struct VulkanShader {
@@ -273,13 +267,11 @@ namespace RxVK {
 	};
 
 	struct SwapchainCreateInfo {
-		VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
-		VkDevice device = VK_NULL_HANDLE;
-		VkSurfaceKHR surface = VK_NULL_HANDLE;
 		uint32_t width = 0;
 		uint32_t height = 0;
 		uint32_t imageCount = 3;
-		VkFormat preferredFormat = VK_FORMAT_B8G8R8A8_UNORM;
+		uint32_t maxFramesInFlight = 3;
+		VkFormat preferredFormat = VK_FORMAT_B8G8R8A8_SRGB;
 		VkColorSpaceKHR preferredColorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
 		VkPresentModeKHR preferredPresentMode = VK_PRESENT_MODE_MAILBOX_KHR;
 	};
@@ -331,7 +323,7 @@ namespace RxVK {
 
 		void free(Tag& handle) {
 			RENDERX_ASSERT_MSG(handle.IsValid(),
-				"ResourcePool::free : Trying to free invalid handle");
+				"ResourcePool::free: trying to free an invalid handle");
 
 			uint64_t raw = Decrypt(handle.id);
 			auto index = static_cast<ValueType>(raw & 0xFFFFFFFF);
@@ -339,7 +331,7 @@ namespace RxVK {
 
 			RENDERX_ASSERT_MSG(
 				index < _My_resource.size() && _My_generation[index] == gen,
-				"ResourcePool::free : Stale or foreign handle detected");
+				"ResourcePool::free: stale or foreign handle detected");
 
 			handle.id = 0;
 			_My_resource[index] = ResourceType{};
@@ -355,7 +347,7 @@ namespace RxVK {
 			auto gen = static_cast<ValueType>(raw >> 32);
 
 			if (!(index < _My_resource.size() && _My_generation[index] == gen)) {
-				RENDERX_WARN("ResourcePool::get : Stale or foreign handle detected");
+				RENDERX_WARN("ResourcePool::get: stale or foreign handle detected");
 				return nullptr;
 			}
 
@@ -433,38 +425,51 @@ namespace RxVK {
 
 	// Class Declarations
 
-	class VulkanSwapchain {
+	class VulkanSwapchain : public Swapchain {
 	public:
-		VulkanSwapchain() = default;
+		VulkanSwapchain();
 		~VulkanSwapchain();
 
+		// backend only
 		bool create(const SwapchainCreateInfo& info);
 		void destroy();
-		bool acquireNextImage(VkSemaphore signalSemaphore, uint32_t* outImageIndex);
-		bool present(VkQueue presentQueue, VkSemaphore waitSemaphore, uint32_t imageIndex);
 		void recreate(uint32_t width, uint32_t height);
 
-		VkFormat format() const { return m_Format; }
-		VkExtent2D extent() const { return m_Extent; }
-		uint32_t imageCount() const { return uint32_t(m_Images.size()); }
-		VkImage image(uint32_t index) const { return m_Images[index]; }
-		VkImageView imageView(uint32_t index) const { return m_ImageViews[index]; }
+		// renderx public api functions
+		TextureViewHandle GetImageView(uint32_t imageindex) const override { return m_ImageViewsHandles[imageindex]; };
+		Format GetFormat() const override ;
+		uint32_t GetWidth() const override { return m_Extent.width; }
+		uint32_t GetHeight() const override { return m_Extent.height; };
+		uint32_t GetImageCount() const override { return m_ImageCount; };
+		uint32_t AcquireNextImage() override;
+		void Present(uint32_t imageIndex) override;
+		void Resize(uint32_t width, uint32_t height) override;
 	private:
+		friend class VulkanCommandQueue;
+
+		VkSemaphore renderComplete() { return m_WaitSemaphores[m_CurrentImageIndex]; }
+		VkSemaphore imageAvail() { return m_SignalSemaphores[m_currentSemaphoreIndex]; }
+
 		void createSwapchain(uint32_t width, uint32_t height);
 		void destroySwapchain();
 		VkSurfaceFormatKHR chooseSurfaceFormat() const;
 		VkPresentModeKHR choosePresentMode() const;
 		VkExtent2D chooseExtent(uint32_t width, uint32_t height) const;
 	private:
-		VkPhysicalDevice m_PhysicalDevice = VK_NULL_HANDLE;
-		VkDevice m_Device = VK_NULL_HANDLE;
-		VkSurfaceKHR m_Surface = VK_NULL_HANDLE;
 		VkSwapchainKHR m_Swapchain = VK_NULL_HANDLE;
 		VkFormat m_Format = VK_FORMAT_UNDEFINED;
 		VkExtent2D m_Extent{};
+
 		uint32_t m_ImageCount = 0;
+		uint32_t m_CurrentImageIndex = 0;
+		uint32_t m_currentSemaphoreIndex = 0;
+
 		std::vector<VkImage> m_Images;
 		std::vector<VkImageView> m_ImageViews;
+		std::vector<TextureViewHandle> m_ImageViewsHandles;
+
+		std::vector<VkSemaphore> m_WaitSemaphores;
+		std::vector<VkSemaphore> m_SignalSemaphores;
 		SwapchainCreateInfo m_Info{};
 	};
 
@@ -652,7 +657,7 @@ namespace RxVK {
 		StagingAllocation allocate(uint32_t requestedSize, uint32_t alignment = 256) {
 			StagingAllocation alloc{};
 			uint32_t alignedOffset = (currentOffset + alignment - 1) & ~(alignment - 1);
-			RENDERX_ASSERT_MSG(alignedOffset + requestedSize < size, "Invalid Allocation");
+			RENDERX_ASSERT_MSG(alignedOffset + requestedSize <= size, "Staging allocation exceeds chunk size");
 			alloc.buffer = buffer;
 			alloc.offset = alignedOffset;
 			alloc.size = requestedSize;
@@ -774,6 +779,10 @@ namespace RxVK {
 
 		void endRenderPass() override;
 
+
+
+		void beginRendering(const RenderingDesc& desc) override;
+		void endRendering() override;
 		void writeBuffer(
 			BufferHandle handle,
 			const void* data,
@@ -850,6 +859,8 @@ namespace RxVK {
 		~VulkanCommandQueue();
 	private:
 		void addWait(VkSemaphore semaphore, uint64_t value, VkPipelineStageFlags stage);
+		void addWait2(VkSemaphore semaphore, uint64_t value, VkPipelineStageFlags2 stage);
+		void addSignal2(VkSemaphore semaphore, uint64_t value, VkPipelineStageFlags2 stage);
 		VkQueue Queue();
 		VkSemaphore Semaphore() { return m_TimelineSemaphore; }
 
@@ -859,13 +870,25 @@ namespace RxVK {
 		QueueType m_Type = QueueType::GRAPHICS;
 
 		VkSemaphore m_TimelineSemaphore = VK_NULL_HANDLE;
+		VkSemaphore m_RenderCompleteSemaphore = VK_NULL_HANDLE;
+
 		uint64_t m_Submitted = 0;
 		uint64_t m_Completed = 0;
 
-		VkSemaphore m_WaitSemaphores[3];
-		uint64_t m_WaitValues[3];
-		VkPipelineStageFlags m_WaitStages[3];
 		uint32_t m_WaitCount = 0;
+		uint64_t m_WaitValues[4];
+		VkSemaphore m_WaitSemaphores[4];
+		VkPipelineStageFlags m_WaitStages[4];
+		VkSemaphoreSubmitInfo m_WaitInfos[4];
+
+		VkSemaphore m_SignalSemaphores[2];
+		uint64_t m_SignalValues[2];
+		VkSemaphoreSubmitInfo m_SignalInfos[2];
+		uint64_t m_SignalValue = 0;
+		uint32_t m_SignalCount = 0;
+
+
+		friend class VulkanSwapchain;
 	public:
 		CommandAllocator* CreateCommandAllocator(const char* debugName = nullptr) override;
 		void DestroyCommandAllocator(CommandAllocator* allocator) override;
@@ -908,7 +931,8 @@ namespace RxVK {
 	extern ResourcePool<VulkanFramebuffer, FramebufferHandle> g_Framebufferpool;
 	extern ResourcePool<VulkanResourceGroup, ResourceGroupHandle> g_ResourceGroupPool;
 
-	// Global Hash Storage (Only for now :TODO implement better cache managenet )
+	// Global Hash Storage
+	// TODO implement better cache managenet
 	extern std::unordered_map<Hash64, BufferViewHandle> g_BufferViewCache;
 	extern std::unordered_map<Hash64, ResourceGroupHandle> g_ResourceGroupCache;
 
@@ -1602,6 +1626,77 @@ namespace RxVK {
 		// no Vulkan-mandated offset alignment
 		// allocator handles natural alignment
 		return alignment;
+	}
+
+	inline const char* FormatToString(Format format) {
+		switch (format) {
+		case Format::UNDEFINED: return "UNDEFINED";
+		case Format::R8_UNORM: return "R8_UNORM";
+		case Format::RG8_UNORM: return "RG8_UNORM";
+		case Format::RGBA8_UNORM: return "RGBA8_UNORM";
+		case Format::RGBA8_SRGB: return "RGBA8_SRGB";
+		case Format::BGRA8_UNORM: return "BGRA8_UNORM";
+		case Format::BGRA8_SRGB: return "BGRA8_SRGB";
+		case Format::R16_SFLOAT: return "R16_SFLOAT";
+		case Format::RG16_SFLOAT: return "RG16_SFLOAT";
+		case Format::RGBA16_SFLOAT: return "RGBA16_SFLOAT";
+		case Format::R32_SFLOAT: return "R32_SFLOAT";
+		case Format::RG32_SFLOAT: return "RG32_SFLOAT";
+		case Format::RGB32_SFLOAT: return "RGB32_SFLOAT";
+		case Format::RGBA32_SFLOAT: return "RGBA32_SFLOAT";
+		case Format::D24_UNORM_S8_UINT: return "D24_UNORM_S8_UINT";
+		case Format::D32_SFLOAT: return "D32_SFLOAT";
+		case Format::BC1_RGBA_UNORM: return "BC1_RGBA_UNORM";
+		case Format::BC1_RGBA_SRGB: return "BC1_RGBA_SRGB";
+		case Format::BC3_UNORM: return "BC3_UNORM";
+		case Format::BC3_SRGB: return "BC3_SRGB";
+		}
+
+		return "UNKNOWN_FORMAT";
+	}
+
+	inline Format VkFormatToFormat(VkFormat format) {
+		switch (format) {
+		case VK_FORMAT_UNDEFINED: return Format::UNDEFINED;
+		case VK_FORMAT_R8_UNORM: return Format::R8_UNORM;
+		case VK_FORMAT_R8G8_UNORM: return Format::RG8_UNORM;
+		case VK_FORMAT_R8G8B8A8_UNORM: return Format::RGBA8_UNORM;
+		case VK_FORMAT_R8G8B8A8_SRGB: return Format::RGBA8_SRGB;
+		case VK_FORMAT_B8G8R8A8_UNORM: return Format::BGRA8_UNORM;
+		case VK_FORMAT_B8G8R8A8_SRGB: return Format::BGRA8_SRGB;
+		case VK_FORMAT_R16_SFLOAT: return Format::R16_SFLOAT;
+		case VK_FORMAT_R16G16_SFLOAT: return Format::RG16_SFLOAT;
+		case VK_FORMAT_R16G16B16A16_SFLOAT: return Format::RGBA16_SFLOAT;
+		case VK_FORMAT_R32_SFLOAT: return Format::R32_SFLOAT;
+		case VK_FORMAT_R32G32_SFLOAT: return Format::RG32_SFLOAT;
+		case VK_FORMAT_R32G32B32_SFLOAT: return Format::RGB32_SFLOAT;
+		case VK_FORMAT_R32G32B32A32_SFLOAT: return Format::RGBA32_SFLOAT;
+		case VK_FORMAT_D24_UNORM_S8_UINT: return Format::D24_UNORM_S8_UINT;
+		case VK_FORMAT_D32_SFLOAT: return Format::D32_SFLOAT;
+		case VK_FORMAT_BC1_RGBA_UNORM_BLOCK: return Format::BC1_RGBA_UNORM;
+		case VK_FORMAT_BC1_RGBA_SRGB_BLOCK: return Format::BC1_RGBA_SRGB;
+		case VK_FORMAT_BC3_UNORM_BLOCK: return Format::BC3_UNORM;
+		case VK_FORMAT_BC3_SRGB_BLOCK: return Format::BC3_SRGB;
+		}
+
+		return Format::UNDEFINED;
+	}
+
+	inline const char* VkColorSpaceToString(VkColorSpaceKHR cs) {
+		switch (cs) {
+		case VK_COLOR_SPACE_SRGB_NONLINEAR_KHR:
+			return "SRGB_NONLINEAR";
+		case VK_COLOR_SPACE_DISPLAY_P3_NONLINEAR_EXT:
+			return "DISPLAY_P3";
+		case VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT:
+			return "EXTENDED_SRGB_LINEAR";
+		case VK_COLOR_SPACE_HDR10_ST2084_EXT:
+			return "HDR10_ST2084";
+		case VK_COLOR_SPACE_BT2020_LINEAR_EXT:
+			return "BT2020_LINEAR";
+		default:
+			return "UNKNOWN_COLOR_SPACE";
+		}
 	}
 
 

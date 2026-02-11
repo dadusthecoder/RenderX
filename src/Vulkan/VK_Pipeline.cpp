@@ -56,7 +56,7 @@ namespace RxVK {
 			// auto layout = g_Re
 		}
 
-		//  Pipeline Layout 
+		//  Pipeline Layout
 		VkPipelineLayout pipelinelayout;
 		VkPipelineLayoutCreateInfo lci{};
 		lci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -88,11 +88,11 @@ namespace RxVK {
 		return handle;
 	}
 
-	// GRAPHICS PIPELINE 
+	// GRAPHICS PIPELINE
 	PipelineHandle VKCreateGraphicsPipeline(PipelineDesc& desc) {
 		auto& ctx = GetVulkanContext();
 
-		//  Shader Stages 
+		//  Shader Stages
 		std::vector<VkPipelineShaderStageCreateInfo> stages;
 		for (auto& sh : desc.shaders) {
 			// Try ResourcePool first
@@ -110,7 +110,7 @@ namespace RxVK {
 			stages.push_back(stage);
 		}
 
-		//  Vertex Input 
+		//  Vertex Input
 		std::vector<VkVertexInputBindingDescription> vertexBindings;
 		for (auto& b : desc.vertexInputState.vertexBindings) {
 			vertexBindings.push_back({ b.binding,
@@ -133,21 +133,21 @@ namespace RxVK {
 		vertexInput.vertexAttributeDescriptionCount = (uint32_t)attrs.size();
 		vertexInput.pVertexAttributeDescriptions = attrs.data();
 
-		//  Input Assembly 
+		//  Input Assembly
 		VkPipelineInputAssemblyStateCreateInfo inputAsm{};
 		inputAsm.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
 		inputAsm.topology = ToVulkanTopology(desc.primitiveType);
 
 		// temp
-		//   Viewport 
+		//   Viewport
 		VkViewport viewport{};
-		viewport.width = (float)ctx.swapchain->extent().width;
-		viewport.height = (float)ctx.swapchain->extent().height;
+		viewport.width = (float)ctx.swapchain->GetWidth();
+		viewport.height = (float)ctx.swapchain->GetHeight();
 		viewport.maxDepth = 1.0f;
 
 		VkRect2D scissor{};
 		scissor.offset = { 0, 0 };
-		scissor.extent = ctx.swapchain->extent();
+		scissor.extent = { ctx.swapchain->GetWidth(), ctx.swapchain->GetHeight() };
 
 		VkPipelineViewportStateCreateInfo vp{};
 		vp.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
@@ -156,7 +156,7 @@ namespace RxVK {
 		vp.scissorCount = 1;
 		vp.pScissors = &scissor;
 
-		//  Rasterizer 
+		//  Rasterizer
 		VkPipelineRasterizationStateCreateInfo rast{};
 		rast.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
 		rast.polygonMode = ToVulkanPolygonMode(desc.rasterizer.fillMode);
@@ -166,12 +166,12 @@ namespace RxVK {
 							 : VK_FRONT_FACE_CLOCKWISE;
 		rast.lineWidth = 1.0f;
 
-		//  Multisample 
+		//  Multisample
 		VkPipelineMultisampleStateCreateInfo ms{};
 		ms.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
 		ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 
-		//  Depth 
+		//  Depth
 		VkPipelineDepthStencilStateCreateInfo depth{};
 		depth.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
 		depth.depthTestEnable = desc.depthStencil.depthEnable;
@@ -209,7 +209,7 @@ namespace RxVK {
 		cb.blendConstants[2] = b.blendFactor.b;
 		cb.blendConstants[3] = b.blendFactor.a;
 
-		//  Create Pipeline 
+		//  Create Pipeline
 		VkGraphicsPipelineCreateInfo pci{};
 		pci.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
 		pci.stageCount = (uint32_t)stages.size();

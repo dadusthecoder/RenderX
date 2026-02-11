@@ -17,40 +17,22 @@ namespace RxVK {
 		VulkanContext& ctx = GetVulkanContext();
 		ctx.window = window.nativeHandle;
 		MAX_FRAMES_IN_FLIGHT = window.maxFramesInFlight;
-
 		ctx.instance = std::make_unique<VulkanInstance>(window);
-		ctx.device = std::make_unique<VulkanDevice>(
-			ctx.instance->getInstance(),
-			ctx.instance->getSurface(),
-			std::vector<const char*>(g_RequestedDeviceExtensions.begin(), g_RequestedDeviceExtensions.end()),
-			std::vector<const char*>(g_RequestedValidationLayers.begin(), g_RequestedValidationLayers.end()));
-
+		ctx.device = std::make_unique<VulkanDevice>(ctx.instance->getInstance(),ctx.instance->getSurface(),std::vector<const char*>(g_RequestedDeviceExtensions.begin(), g_RequestedDeviceExtensions.end()),std::vector<const char*>(g_RequestedValidationLayers.begin(), g_RequestedValidationLayers.end()));
 		ctx.swapchain = std::make_unique<VulkanSwapchain>();
-
-		ctx.graphicsQueue = std::make_unique<VulkanCommandQueue>(ctx.device->logical(), ctx.device->graphicsQueue(),
-			ctx.device->graphicsFamily(), QueueType::GRAPHICS);
-
-		ctx.computeQueue = std::make_unique<VulkanCommandQueue>(ctx.device->logical(), ctx.device->computeQueue(),
-			ctx.device->computeFamily(), QueueType::COMPUTE);
-
-		ctx.transferQueue = std::make_unique<VulkanCommandQueue>(ctx.device->logical(), ctx.device->transferQueue(),
-			ctx.device->transferFamily(), QueueType::TRANSFER);
-
+		ctx.graphicsQueue = std::make_unique<VulkanCommandQueue>(ctx.device->logical(), ctx.device->graphicsQueue(),ctx.device->graphicsFamily(), QueueType::GRAPHICS);
+		ctx.computeQueue = std::make_unique<VulkanCommandQueue>(ctx.device->logical(), ctx.device->computeQueue(),ctx.device->computeFamily(), QueueType::COMPUTE);
+		ctx.transferQueue = std::make_unique<VulkanCommandQueue>(ctx.device->logical(), ctx.device->transferQueue(),ctx.device->transferFamily(), QueueType::TRANSFER);
 		ctx.allocator = std::make_unique<VulkanAllocator>(ctx.instance->getInstance(), ctx.device->physical(), ctx.device->logical());
-
 		ctx.descriptorPoolManager = std::make_unique<VulkanDescriptorPoolManager>(ctx);
-
 		ctx.descriptorSetManager = std::make_unique<VulkanDescriptorManager>(ctx);
-
 		ctx.stagingAllocator = std::make_unique<VulkanStagingAllocator>(ctx);
-
 		ctx.immediateUploader = std::make_unique<VulkanImmediateUploader>(ctx);
-
 		ctx.deferredUploader = std::make_unique<VulkanDeferredUploader>(ctx);
 	}
 
 	void VKBackendShutdown() {
-		RENDERX_WARN("Destroying all vulkan resource");
+		RENDERX_INFO("Shutting down Vulkan backend resources");
 		VKShutdownCommon();
 	}
 

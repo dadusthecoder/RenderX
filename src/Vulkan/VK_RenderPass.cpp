@@ -89,7 +89,7 @@ namespace RxVK {
 			g_RenderPassPool.free(handle);
 			return;
 		}
-		RENDERX_ASSERT_MSG(false, "Invalid FramebufferHandle")
+		RENDERX_ASSERT_MSG(false, "VKDestroyRenderPass: invalid RenderPassHandle");
 	} // namespace  RxVK
 
 

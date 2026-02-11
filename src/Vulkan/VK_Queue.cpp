@@ -22,84 +22,87 @@ namespace Rx::RxVK {
 		info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 		info.pNext = &typeInfo;
 		VK_CHECK(vkCreateSemaphore(m_Device, &info, nullptr, &m_TimelineSemaphore));
+		VkSemaphoreCreateInfo info1{};
+		info1.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+		VK_CHECK(vkCreateSemaphore(m_Device, &info1, nullptr, &m_RenderCompleteSemaphore));
+
+		m_SignalSemaphores[0] = m_TimelineSemaphore;	   // timeline
+		m_SignalSemaphores[1] = m_RenderCompleteSemaphore; // binary
 	}
 
 	VulkanCommandQueue::~VulkanCommandQueue() {
 		WaitIdle();
 		if (m_TimelineSemaphore != VK_NULL_HANDLE)
 			vkDestroySemaphore(m_Device, m_TimelineSemaphore, nullptr);
+		if (m_RenderCompleteSemaphore != VK_NULL_HANDLE)
+			vkDestroySemaphore(m_Device, m_RenderCompleteSemaphore, nullptr);
 	}
 
 	VkQueue VulkanCommandQueue::Queue() {
 		return m_Queue;
 	}
 
-
 	Timeline VulkanCommandQueue::Submit(const SubmitInfo& submitInfo) {
 		m_WaitCount = 0;
+		m_SignalCount = 0;
 
 		auto& ctx = GetVulkanContext();
 
 		for (const auto& dep : submitInfo.waitDependencies) {
 			switch (dep.waitQueue) {
 			case QueueType::GRAPHICS:
-				addWait(
+				addWait2(
 					ctx.graphicsQueue->Semaphore(),
 					dep.waitValue.value,
-					VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+					VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT);
 				break;
 
 			case QueueType::COMPUTE:
-				addWait(
+				addWait2(
 					ctx.computeQueue->Semaphore(),
 					dep.waitValue.value,
-					VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+					VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT);
 				break;
 
 			case QueueType::TRANSFER:
-				addWait(
+				addWait2(
 					ctx.transferQueue->Semaphore(),
 					dep.waitValue.value,
-					VK_PIPELINE_STAGE_TRANSFER_BIT);
+					VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT);
 				break;
 
 			default:
-				addWait(
+				addWait2(
 					ctx.graphicsQueue->Semaphore(),
 					dep.waitValue.value,
-					VK_PIPELINE_STAGE_ALL_COMMANDS_BIT);
+					VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT);
 				break;
 			}
 		}
+		uint64_t signalValue = ++m_Submitted;
+		addSignal2(m_TimelineSemaphore, signalValue, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT);
 
-		VulkanCommandList* list =
-			static_cast<VulkanCommandList*>(submitInfo.commandList);
+		if (submitInfo.writesToSwapchain) {
+			addWait2(ctx.swapchain->imageAvail(), 0, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
+			addSignal2(ctx.swapchain->renderComplete(), 0, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT);
+		}
 
-		const uint64_t signalValue = ++m_Submitted;
+		VulkanCommandList* list = static_cast<VulkanCommandList*>(submitInfo.commandList);
 
-		VkTimelineSemaphoreSubmitInfo timeline{};
-		timeline.sType = VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO;
-		timeline.waitSemaphoreValueCount = m_WaitCount;
-		timeline.pWaitSemaphoreValues = m_WaitValues;
-		timeline.signalSemaphoreValueCount = 1;
-		timeline.pSignalSemaphoreValues = &signalValue;
+		VkCommandBufferSubmitInfo cmdInfo{};
+		cmdInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
+		cmdInfo.commandBuffer = list->m_CommandBuffer;
 
-		VkSubmitInfo submit{};
-		submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-		submit.pNext = &timeline;
+		VkSubmitInfo2 submit2{};
+		submit2.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
+		submit2.waitSemaphoreInfoCount = m_WaitCount;
+		submit2.pWaitSemaphoreInfos = m_WaitInfos;
+		submit2.signalSemaphoreInfoCount = m_SignalCount;
+		submit2.pSignalSemaphoreInfos = m_SignalInfos;
+		submit2.commandBufferInfoCount = 1;
+		submit2.pCommandBufferInfos = &cmdInfo;
 
-		submit.waitSemaphoreCount = m_WaitCount;
-		submit.pWaitSemaphores = m_WaitSemaphores;
-		submit.pWaitDstStageMask = m_WaitStages;
-
-		submit.commandBufferCount = 1;
-		submit.pCommandBuffers = &list->m_CommandBuffer;
-
-		submit.signalSemaphoreCount = 1;
-		submit.pSignalSemaphores = &m_TimelineSemaphore;
-
-		VK_CHECK(vkQueueSubmit(m_Queue, 1, &submit, VK_NULL_HANDLE));
-
+		VK_CHECK(vkQueueSubmit2(m_Queue, 1, &submit2, VK_NULL_HANDLE));
 		return Timeline(signalValue);
 	}
 
@@ -146,13 +149,32 @@ namespace Rx::RxVK {
 	}
 
 	void VulkanCommandQueue::addWait(VkSemaphore semaphore, uint64_t value, VkPipelineStageFlags stage) {
-		RENDERX_ASSERT_MSG(semaphore != VK_NULL_HANDLE, " vulkanQueue : semaphore id VK_NULL_HANDLE");
+		RENDERX_ASSERT_MSG(semaphore != VK_NULL_HANDLE, "VulkanCommandQueue::addWait: semaphore is VK_NULL_HANDLE");
 		RENDERX_ASSERT(m_WaitCount < 2);
 		m_WaitSemaphores[m_WaitCount] = semaphore;
 		m_WaitValues[m_WaitCount] = value;
 		m_WaitStages[m_WaitCount] = stage;
-		++m_WaitCount;
+		m_WaitCount++;
 	}
+
+	void VulkanCommandQueue::addWait2(VkSemaphore sem, uint64_t value, VkPipelineStageFlags2 stage) {
+		m_WaitInfos[m_WaitCount].sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+		m_WaitInfos[m_WaitCount].pNext = nullptr;
+		m_WaitInfos[m_WaitCount].semaphore = sem;
+		m_WaitInfos[m_WaitCount].value = value;
+		m_WaitInfos[m_WaitCount].stageMask = stage;
+		m_WaitInfos[m_WaitCount].deviceIndex = 0;
+		m_WaitCount++;
+	}
+	void VulkanCommandQueue::addSignal2(VkSemaphore semaphore, uint64_t value, VkPipelineStageFlags2 stage) {
+		m_SignalInfos[m_SignalCount].sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+		m_SignalInfos[m_SignalCount].pNext = nullptr;
+		m_SignalInfos[m_SignalCount].semaphore = semaphore;
+		m_SignalInfos[m_SignalCount].value = value;
+		m_SignalInfos[m_SignalCount].stageMask = stage;
+		m_SignalInfos[m_SignalCount].deviceIndex = 0;
+		m_SignalCount++;
+	};
 
 	bool VulkanCommandQueue::Wait(Timeline value, uint64_t timeout) {
 		PROFILE_FUNCTION();
@@ -204,7 +226,7 @@ namespace Rx::RxVK {
 		case QueueType::TRANSFER:
 			return GetVulkanContext().transferQueue.get();
 		default: {
-			RENDERX_ERROR("Unknown Queue Type");
+			RENDERX_ERROR("VKGetGpuQueue: unknown queue type");
 			return nullptr;
 		}
 		}
