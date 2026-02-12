@@ -38,19 +38,25 @@ jobs:
           ninja-build \
           libx11-dev libxrandr-dev libxinerama-dev \
           libxcursor-dev libxi-dev \
-          libvulkan-dev vulkan-validationlayers-dev
+          libvulkan-dev vulkan-utility-libraries-dev
+
+    - name: Install Vulkan SDK (Windows)
+      if: runner.os == 'Windows'
+      run: |
+        choco install vulkan-sdk --yes
+        refreshenv
 
     - name: Configure
       run: |
-        cmake -S . -B build \
-              -G "${{ matrix.generator }}" \
-              ${{ matrix.arch }} \
+        cmake -S . -B build ^
+              -G "${{ matrix.generator }}" ^
+              ${{ matrix.arch }} ^
               ${{ runner.os == 'Linux' && format('-DCMAKE_BUILD_TYPE={0}', matrix.build-type) || '' }}
 
     - name: Build
       run: |
-        cmake --build build \
-              --config ${{ matrix.build-type }} \
+        cmake --build build ^
+              --config ${{ matrix.build-type }} ^
               --parallel
 
     - name: Test
