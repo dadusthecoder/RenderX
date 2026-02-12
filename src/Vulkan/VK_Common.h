@@ -214,7 +214,7 @@ namespace RxVK {
 		uint32_t bindingCount = 1;
 		BufferUsage flags;
 
-#ifdef RENDERX_DEBUG
+#ifdef RX_DEBUG_BUILD
 		const char* debugName = nullptr;
 #endif
 	};

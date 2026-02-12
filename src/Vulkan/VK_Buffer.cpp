@@ -64,7 +64,7 @@ namespace RxVK {
 				// to future me : Try to use the deffered uploader after you figure out the how to sync that with the users frame loop
 				// may i should keep the beginframe and endframe api for rendering usage
 				ctx.immediateUploader->uploadBuffer(vulkanBuffer.buffer,
-					desc.initialData, desc.size, 0, GetMinVulkanAlignment(desc.usage));
+					desc.initialData,(uint32_t)desc.size, 0, GetMinVulkanAlignment(desc.usage));
 			}
 			else {
 				// Direct upload for dynamic and stream buffers

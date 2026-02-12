@@ -1,10 +1,17 @@
 #include "RenderX/RenderX.h"
 #include "RenderX/Core.h"
 #include "RenderX/DebugProfiler.h"
-#include "OpenGL/GL_RenderX.h"
-#include "Vulkan/VK_RenderX.h"
+
 #include "ProLog/ProLog.h"
 #include <cstring>
+
+#ifdef RX_ENABLE_OPENGL
+#include "OpenGL/GL_RenderX.h"
+#endif
+
+#ifdef RX_ENABLE_VULKAN
+#include "Vulkan/VK_RenderX.h"
+#endif
 
 namespace Rx {
 
@@ -12,10 +19,10 @@ namespace Rx {
 	RenderDispatchTable g_DispatchTable;
 	GraphicsAPI API = GraphicsAPI::NONE;
 
+
 	void Init(const InitDesc& window) {
-#ifdef RENDERX_DEBUG
+#ifdef RX_DEBUG_BUILD
 		LOG_INIT();
-		RENDERX_TRACE("mahesh");
 		Debug::ConfigureDetailedProfiling();
 #else
 		ProLog::ProfilerConfig config;
@@ -36,30 +43,32 @@ namespace Rx {
 
 		switch (window.api) {
 		case GraphicsAPI::OPENGL: {
+#ifdef RX_ENABLE_OPENGL
 			RENDERX_INFO("Initializing OpenGL backend...");
-#define X(_ret, _name, ...) g_DispatchTable._name = RxGL::GL##_name;
-			// RENDERX_API(X)
+#define RX_BIND_FUNC(_ret, _name, ...) g_DispatchTable._name = RxGL::GL##_name;
+			RENDERX_FUNC(RX_BIND_FUNC)
 #undef X
-
 			if (g_DispatchTable.BackendInit) g_DispatchTable.BackendInit(window);
-
 			API = window.api;
 			RENDERX_INFO("OpenGL backend loaded successfully.");
 			break;
+#endif
 		}
 
+		// vulkan backend
 		case GraphicsAPI::VULKAN: {
+#ifdef RX_ENABLE_VULKAN
 			RENDERX_INFO("Initializing Vulkan backend...");
 #define RX_BIND_FUNC(_ret, _name, _parms, _args) g_DispatchTable._name = RxVK::VK##_name;
 			RENDERX_FUNC(RX_BIND_FUNC)
 #undef X
-
 			if (g_DispatchTable.BackendInit)
 				g_DispatchTable.BackendInit(window);
 
 			API = window.api;
 			RENDERX_INFO("Vulkan backend loaded successfully.");
 			break;
+#endif
 		}
 
 		case GraphicsAPI::NONE:
@@ -87,7 +96,7 @@ namespace Rx {
 
 #define RX_FORWARD_FUNC(_ret, _name, _parms, _args) \
 	_ret _name _parms { return g_DispatchTable._name _args; }
-    RENDERX_FUNC(RX_FORWARD_FUNC)
+	RENDERX_FUNC(RX_FORWARD_FUNC)
 #undef RX_FORWARD
 
 } // namespace Rx
