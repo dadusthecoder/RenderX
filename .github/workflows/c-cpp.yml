@@ -39,27 +39,26 @@ jobs:
           libx11-dev libxrandr-dev libxinerama-dev \
           libxcursor-dev libxi-dev \
           libvulkan-dev vulkan-utility-libraries-dev
+          
+    - name: Configure (Linux)
+      if: runner.os == 'Linux'
+      run: |
+        cmake -S . -B build \
+          -G "${{ matrix.generator }}" \
+          -DGLFW_BUILD_WAYLAND=OFF \
+          -DCMAKE_BUILD_TYPE=${{ matrix.build-type }}
 
-    - name: Install Vulkan SDK (Windows)
+    - name: Configure (Windows)
       if: runner.os == 'Windows'
       run: |
-        choco install vulkan-sdk --yes
-        refreshenv
-
-    - name: Configure
-      run: |
-        cmake -S . -B build ^
-              -G "${{ matrix.generator }}" ^
-              ${{ matrix.arch }} ^
-              ${{ runner.os == 'Linux' && format('-DCMAKE_BUILD_TYPE={0}', matrix.build-type) || '' }}
+        cmake -S . -B build `
+          -G "${{ matrix.generator }}" `
+          ${{ matrix.arch }} `
+          -DGLFW_BUILD_WAYLAND=OFF 
 
     - name: Build
-      run: |
-        cmake --build build ^
-              --config ${{ matrix.build-type }} ^
-              --parallel
+      run: cmake --build build --config ${{ matrix.build-type }} --parallel
 
     - name: Test
       working-directory: build
-      run: |
-        ctest --build-config ${{ matrix.build-type }} --output-on-failure
+      run: ctest --build-config ${{ matrix.build-type }} --output-on-failure
