@@ -3,7 +3,14 @@
 #include "RenderX/Common.h"
 
 #include <vulkan/vulkan.h>
-#include <vulkan/vulkan.hpp>
+#if defined(_WIN32)
+#include <windows.h>
+#include <vulkan/vulkan_win32.h>
+#elif defined(__linux__)
+#include <vulkan/vulkan_xlib.h>
+#include <X11/Xlib.h>
+#endif
+
 #include "vk_mem_alloc.h"
 
 #include <vector>
