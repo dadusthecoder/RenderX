@@ -1,15 +1,9 @@
 #pragma once
-#include <iostream>
 #include <string>
-#include <windows.h>
-#include <commdlg.h>
-#include <locale>
-#include <codecvt>
 #include <vector>
 #include <cstdint>
 
-
-namespace Files{
+namespace Files {
 
     // ----- Basic File Operations -----
     bool Exists(const std::string& path);
@@ -30,6 +24,5 @@ namespace Files{
     // ----- Directory Listing -----
     std::vector<std::string> ListFiles(const std::string& directory, const std::string& extension = "");
 
-    std::string WideToString(const std::wstring& wstr);
     std::string OpenFile();
 }
