@@ -50,7 +50,7 @@ namespace RxVK {
 			RENDERX_WARN("playouts pointer is null");
 		auto& ctx = GetVulkanContext();
 		std::vector<VkDescriptorSetLayout> setLayouts;
-		for (int i = 0; i < resourceGroupLayoutCount; ++i) {
+		for (uint32_t i = 0; i < resourceGroupLayoutCount; ++i) {
 			auto layout = g_ResourceGroupLayoutPool.get(playouts[i]);
 			if (!layout) continue;
 			setLayouts.push_back(layout->layout);

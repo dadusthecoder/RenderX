@@ -10,13 +10,7 @@ namespace Debug {
 }
 }
 
-// ============================================================================
-// DEBUG PROFILING MACROS FOR DETAILED INSTRUMENTATION
-// ============================================================================
-// These macros provide fine-grained profiling with metadata capture
-// Automatically disabled in Release builds via ProLog config
-
-#ifdef RENDERX_DEBUG
+#ifdef RX_DEBUG_BUILD
 
 #define PROFILE_GPU_CALL(name) \
 	PROFILE_SCOPE_CAT(name, "GPU")
@@ -92,7 +86,7 @@ namespace Debug {
 namespace Rx {
 namespace Debug {
 	inline void ConfigureDetailedProfiling() {
-#ifdef RENDERX_DEBUG
+#ifdef RX_DEBUG_BUILD
 		ProLog::ProfilerConfig config;
 		config.enableProfiling = true;
 		config.enableLogging = true;
@@ -103,7 +97,7 @@ namespace Debug {
 	}
 
 	inline void PrintProfileReport() {
-#ifdef RENDERX_DEBUG
+#ifdef RX_DEBUG_BUILD
 		PROFILE_PRINT_STATS();
 #endif
 	}

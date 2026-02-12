@@ -9,7 +9,7 @@
 namespace Rx::RxVK {
 
 	static std::vector<const char*> GetValidationLayers() {
-#ifdef RENDERX_DEBUG
+#ifdef RX_DEBUG_BUILD
 		return { "VK_LAYER_KHRONOS_validation" };
 #else
 		return {};
@@ -55,7 +55,7 @@ namespace Rx::RxVK {
 	}
 
 	void VulkanInstance::createSurface(const InitDesc& window) {
-#if defined(RENDERX_PLATFORM_WINDOWS)
+#if defined(RX_PLATFORM_WINDOWS)
 
 		VkWin32SurfaceCreateInfoKHR ci{};
 		ci.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
@@ -63,7 +63,7 @@ namespace Rx::RxVK {
 		ci.hinstance = static_cast<HINSTANCE>(window.displayHandle);
 		VK_CHECK(vkCreateWin32SurfaceKHR(m_Instance, &ci, nullptr, &m_Surface));
 
-#elif defined(RENDERX_PLATFORM_LINUX_X11)
+#elif defined(RX_PLATFORM_LINUX_X11)
 
 		VkXlibSurfaceCreateInfoKHR ci{};
 		ci.sType = VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR;
@@ -72,7 +72,7 @@ namespace Rx::RxVK {
 
 		VK_CHECK(vkCreateXlibSurfaceKHR(m_Instance, &ci, nullptr, &m_Surface));
 
-#elif defined(RENDERX_PLATFORM_LINUX_WAYLAND)
+#elif defined(RX_PLATFORM_LINUX_WAYLAND)
 
 		VkWaylandSurfaceCreateInfoKHR ci{};
 		ci.sType = VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR;
@@ -81,7 +81,7 @@ namespace Rx::RxVK {
 
 		VK_CHECK(vkCreateWaylandSurfaceKHR(m_Instance, &ci, nullptr, &m_Surface));
 
-#elif defined(RENDERX_PLATFORM_MACOS)
+#elif defined(RX_PLATFORM_MACOS)
 
 		// MoltenVK path
 		VkMetalSurfaceCreateInfoEXT ci{};
@@ -90,7 +90,7 @@ namespace Rx::RxVK {
 
 		VK_CHECK(vkCreateMetalSurfaceEXT(m_Instance, &ci, nullptr, &m_Surface));
 
-#elif defined(RENDERX_PLATFORM_HEADLESS)
+#elif defined(RX_PLATFORM_HEADLESS)
 
 		// Optional: no surface (compute / offscreen)
 		m_Surface = VK_NULL_HANDLE;

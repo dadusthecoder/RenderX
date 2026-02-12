@@ -176,14 +176,14 @@ namespace Rx::RxVK {
 
 
 	int VulkanDevice::selectDevice(const std::vector<DeviceInfo>& devices) const {
-#ifndef RENDERX_DEBUG
-		int bestIndex = suitableIndices[0];
+#ifndef RX_DEBUG_BUILD
+		int bestIndex = devices[0].index;
 		uint32_t bestScore = devices[bestIndex].score;
 
-		for (int idx : suitableIndices) {
-			if (devices[idx].score > bestScore) {
-				bestScore = devices[idx].score;
-				bestIndex = idx;
+		for (auto device : devices) {
+			if (device.score > bestScore) {
+				bestScore = device.score;
+				bestIndex = device.index;
 			}
 		}
 

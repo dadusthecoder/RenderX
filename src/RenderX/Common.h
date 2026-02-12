@@ -27,7 +27,7 @@
 #endif
 
 // === Assert Macros ===
-#ifdef RENDERX_DEBUG
+#ifdef RX_DEBUG_BUILD
 #define RENDERX_ASSERT(expr)                                    \
 	{                                                           \
 		if (!(expr)) {                                          \
@@ -49,28 +49,18 @@
 #define RENDERX_ASSERT_MSG(expr, msg, ...)
 #endif
 
-// PLATFORM DETECTION
-#if defined(_WIN32) || defined(_WIN64)
-#define RENDERX_PLATFORM_WINDOWS
-#elif defined(__APPLE__) || defined(__MACH__)
-#define RENDERX_PLATFORM_MACOS
-#elif defined(__linux__)
-#define RENDERX_PLATFORM_LINUX
-#else
-#define RENDERX_PLATFORM_UNKNOWN
-#endif
 
 // EXPORT / IMPORT MACROS
-#if defined(RENDERX_STATIC)
+#ifndef RX_BUILD_DLL
 #define RENDERX_EXPORT
 #else
-#if defined(RENDERX_PLATFORM_WINDOWS)
-#if defined(RENDERX_BUILD_DLL)
+#if defined(RX_PLATFORM_WINDOWS)
+#if defined(RX_BUILD_DLL)
 #define RENDERX_EXPORT __declspec(dllexport)
 #else
 #define RENDERX_EXPORT __declspec(dllimport)
 #endif
-#elif defined(__GNUC__) || defined(__clang__)
+#elif defined(RX_PLATFORM_LINUX) || defined(__GNUC__) || defined(__clang__)
 #define RENDERX_EXPORT __attribute__((visibility("default")))
 #else
 #define RENDERX_EXPORT
@@ -81,7 +71,6 @@
 #define STRFY(s) #s
 #define XSTRFY(X) STRFY(X)
 #define PRINT(msg, ...) std::cout << XSTRFY(__VA_ARGS__) << std::endl
-
 
 #define RENDERX_DEFINE_HANDLE(Name) \
 	namespace HandleType {          \
@@ -95,6 +84,7 @@ namespace spdlog {
 
 namespace Rx {
 	// Frame-based logging accumulator
+	#pragma warning(disable: 4251)
 	class RENDERX_EXPORT FrameLogger {
 	public:
 		struct LogEntry {
@@ -111,30 +101,30 @@ namespace Rx {
 		std::mutex mutex_;
 	};
 
-	class RENDERX_EXPORT Log {
+	class  Log {
 	public:
-		static void Init();
-		static void Shutdown();
+		RENDERX_EXPORT static void Init();
+		RENDERX_EXPORT static void Shutdown();
 
-		static std::shared_ptr<spdlog::logger>& Core();
-		static std::shared_ptr<spdlog::logger>& Client();
+		RENDERX_EXPORT static std::shared_ptr<spdlog::logger>& Core();
+		RENDERX_EXPORT static std::shared_ptr<spdlog::logger>& Client();
 
 		// Frame-based logging
-		static void BeginFrame();
-		static void EndFrame();
-		static void FrameLog(const std::string& key, const std::string& msg,
+		RENDERX_EXPORT static void BeginFrame();
+		RENDERX_EXPORT static void EndFrame();
+		RENDERX_EXPORT static void FrameLog(const std::string& key, const std::string& msg,
 			spdlog::level::level_enum level = spdlog::level::info);
 
-		static void Status(const std::string& msg);
+		RENDERX_EXPORT static void Status(const std::string& msg);
 	private:
-		static std::shared_ptr<spdlog::logger> s_CoreLogger;
-		static std::shared_ptr<spdlog::logger> s_ClientLogger;
-		static std::unique_ptr<FrameLogger> s_FrameLogger;
+		RENDERX_EXPORT static std::shared_ptr<spdlog::logger> s_CoreLogger;
+		RENDERX_EXPORT static std::shared_ptr<spdlog::logger> s_ClientLogger;
+		RENDERX_EXPORT static std::unique_ptr<FrameLogger> s_FrameLogger;
 	};
 }
 
 // Frame logging macros
-#ifdef RENDERX_DEBUG
+#ifdef RX_DEBUG_BUILD
 #define RX_FRAME_TRACE(key, msg, ...) ::Rx::Log::FrameLog(key, fmt::format("[{}:{}] " msg, __func__, __LINE__, ##__VA_ARGS__), spdlog::level::trace)
 #define RX_FRAME_INFO(key, msg, ...) ::Rx::Log::FrameLog(key, fmt::format("[{}] " msg, __func__, ##__VA_ARGS__), spdlog::level::info)
 #define RX_FRAME_WARN(key, msg, ...) ::Rx::Log::FrameLog(key, fmt::format("[{}:{}] " msg, __func__, __LINE__, ##__VA_ARGS__), spdlog::level::warn)
@@ -150,7 +140,7 @@ namespace Rx {
 #endif
 
 // Regular logging macros (same as before)
-#ifdef RENDERX_DEBUG
+#ifdef RX_DEBUG_BUILD
 #define RX_CORE_TRACE(msg, ...) ::Rx::Log::Core()->trace("[{}:{}] " msg, __func__, __LINE__, ##__VA_ARGS__)
 #define RX_CORE_INFO(msg, ...) ::Rx::Log::Core()->info("[{}] " msg, __func__, ##__VA_ARGS__)
 #define RX_CORE_WARN(msg, ...) ::Rx::Log::Core()->warn("[{}:{}] " msg, __func__, __LINE__, ##__VA_ARGS__)
@@ -179,7 +169,7 @@ namespace Rx {
 #endif
 
 // for backward compatibility
-#ifdef RENDERX_DEBUG
+#ifdef RX_DEBUG_BUILD
 #define LOG_INIT() ::Rx::Log::Init()
 #define RENDERX_TRACE(msg, ...) ::Rx::Log::Core()->trace("[{}]: " msg, __func__, ##__VA_ARGS__)
 #define RENDERX_INFO(...) ::Rx::Log::Core()->info(__VA_ARGS__)
@@ -196,11 +186,20 @@ namespace Rx {
 #define RENDERX_CRITICAL(msg, ...)
 #define LOG_SHUTDOWN()
 #endif
+
+#ifdef RX_DEBUG_BUILD
 #define CLIENT_TRACE(msg, ...) ::Rx::Log::Client()->trace("[{}]: " msg, __func__, ##__VA_ARGS__)
 #define CLIENT_INFO(msg, ...) ::Rx::Log::Client()->info("[{}]: " msg, __func__, ##__VA_ARGS__)
 #define CLIENT_WARN(msg, ...) ::Rx::Log::Client()->warn("[{}]: " msg, __func__, ##__VA_ARGS__)
 #define CLIENT_ERROR(msg, ...) ::Rx::Log::Client()->error("[{}]: " msg, __func__, ##__VA_ARGS__)
 #define CLIENT_CRITICAL(msg, ...) ::Rx::Log::Client()->critical("[{}]: " msg, __func__, ##__VA_ARGS__)
+#else
+#define CLIENT_TRACE(msg, ...)
+#define CLIENT_INFO(msg, ...)
+#define CLIENT_WARN(msg, ...)
+#define CLIENT_ERROR(msg, ...)
+#define CLIENT_CRITICAL(msg, ...)
+#endif
 
 namespace Rx {
 
@@ -209,7 +208,7 @@ namespace Rx {
                                                                           \
 	/* RenderX Lifetime */                                                \
 	X(void, BackendInit,                                                  \
-		(const InitDesc& window),                                           \
+		(const InitDesc& window),                                         \
 		(window))                                                         \
                                                                           \
 	X(void, BackendShutdown,                                              \

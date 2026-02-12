@@ -9,7 +9,7 @@
 #define VMA_IMPLEMENTATION
 #include "vk_mem_alloc.h"
 
-#ifdef RENDERX_DEBUG
+#ifdef RX_DEBUG_BUILD
 constexpr bool enableValidationLayers = true;
 #else
 constexpr bool enableValidationLayers = false;
