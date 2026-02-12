@@ -44,15 +44,14 @@ jobs:
           libvulkan-dev vulkan-utility-libraries-dev
 
     # =========================
-    # Setup vcpkg (Windows)
+    # Install vcpkg manually (Windows)
     # =========================
-    - name: Setup vcpkg
+    - name: Setup vcpkg (Windows)
       if: runner.os == 'Windows'
-      uses: lukka/run-vcpkg@v11
-
-    - name: Install Vulkan (Windows)
-      if: runner.os == 'Windows'
-      run: vcpkg install vulkan:x64-windows
+      run: |
+        git clone https://github.com/microsoft/vcpkg.git C:\vcpkg
+        C:\vcpkg\bootstrap-vcpkg.bat
+        C:\vcpkg\vcpkg install vulkan:x64-windows
 
     # =========================
     # Configure (Linux)
@@ -70,7 +69,10 @@ jobs:
     # =========================
     - name: Configure (Windows)
       if: runner.os == 'Windows'
-      run: cmake -S . -B build -G "${{ matrix.generator }}" ${{ matrix.arch }} -DCMAKE_TOOLCHAIN_FILE=${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake -DGLFW_BUILD_WAYLAND=OFF
+      run: |
+        cmake -S . -B build -G "${{ matrix.generator }}" ${{ matrix.arch }} `
+          -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake `
+          -DGLFW_BUILD_WAYLAND=OFF
 
     # =========================
     # Build
@@ -84,4 +86,3 @@ jobs:
     - name: Test
       working-directory: build
       run: ctest --build-config ${{ matrix.build-type }} --output-on-failure
-
