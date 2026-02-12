@@ -1,6 +1,15 @@
+
+#define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
+
+#if defined(_WIN32)
 #define GLFW_EXPOSE_NATIVE_WIN32
 #include <GLFW/glfw3native.h>
+#elif defined(__linux__)
+#define GLFW_EXPOSE_NATIVE_X11
+#include <GLFW/glfw3native.h>
+#endif
+
 #include "RenderX/RenderX.h"
 #include "Files.h"
 
@@ -55,19 +64,36 @@ int main() {
 
 	Rx::InitDesc rxWindow{};
 	rxWindow.api = Rx::GraphicsAPI::VULKAN;
-	rxWindow.platform = Rx::Platform::WINDOWS;
 	rxWindow.windowWidth = width;
 	rxWindow.windowHeight = height;
 	rxWindow.instanceExtensions = glfwGetRequiredInstanceExtensions(&rxWindow.extensionCount);
+
+#if defined(_WIN32)
+
+	rxWindow.platform = Rx::Platform::WINDOWS;
 	rxWindow.nativeWindowHandle = glfwGetWin32Window(window);
 	rxWindow.displayHandle = GetModuleHandle(nullptr);
+
+#elif defined(__linux__)
+
+	rxWindow.platform = Rx::Platform::LINUX;
+
+	rxWindow.nativeWindowHandle =
+		reinterpret_cast<void*>(glfwGetX11Window(window));
+
+	rxWindow.displayHandle =
+		reinterpret_cast<void*>(glfwGetX11Display());
+
+#else
+#error Unsupported platform
+#endif
 	Rx::Init(rxWindow);
 
 	// Get GPU queues
 	Rx::CommandQueue* graphics = Rx::GetGpuQueue(Rx::QueueType::GRAPHICS);
 	Rx::CommandQueue* compute = Rx::GetGpuQueue(Rx::QueueType::COMPUTE);
 
-	// Create vertex buffer 
+	// Create vertex buffer
 	auto vertexbuffer = Rx::CreateBuffer(
 		Rx::BufferDesc::VertexBuffer(
 			sizeof(cubeVertices),
