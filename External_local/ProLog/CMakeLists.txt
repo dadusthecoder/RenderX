@@ -15,9 +15,11 @@ set(SPDLOG_ENABLE_PCH ON)
 
 add_library(ProLog STATIC src/ProLog.cpp)
 
-target_include_directories(ProLog PUBLIC include  
-  ${CMAKE_CURRENT_SOURCE_DIR}/spdlog/include
+target_include_directories(ProLog PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/Include
+    ${CMAKE_CURRENT_SOURCE_DIR}/spdlog/include
 )
+
 target_link_libraries(ProLog PRIVATE spdlog)
 
 
