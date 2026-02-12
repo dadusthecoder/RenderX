@@ -22,20 +22,12 @@ namespace Rx::RxVK {
 		info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 		info.pNext = &typeInfo;
 		VK_CHECK(vkCreateSemaphore(m_Device, &info, nullptr, &m_TimelineSemaphore));
-		VkSemaphoreCreateInfo info1{};
-		info1.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-		VK_CHECK(vkCreateSemaphore(m_Device, &info1, nullptr, &m_RenderCompleteSemaphore));
-
-		m_SignalSemaphores[0] = m_TimelineSemaphore;	   // timeline
-		m_SignalSemaphores[1] = m_RenderCompleteSemaphore; // binary
 	}
 
 	VulkanCommandQueue::~VulkanCommandQueue() {
 		WaitIdle();
 		if (m_TimelineSemaphore != VK_NULL_HANDLE)
 			vkDestroySemaphore(m_Device, m_TimelineSemaphore, nullptr);
-		if (m_RenderCompleteSemaphore != VK_NULL_HANDLE)
-			vkDestroySemaphore(m_Device, m_RenderCompleteSemaphore, nullptr);
 	}
 
 	VkQueue VulkanCommandQueue::Queue() {
@@ -79,6 +71,7 @@ namespace Rx::RxVK {
 				break;
 			}
 		}
+
 		uint64_t signalValue = ++m_Submitted;
 		addSignal2(m_TimelineSemaphore, signalValue, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT);
 
@@ -157,16 +150,20 @@ namespace Rx::RxVK {
 		m_WaitCount++;
 	}
 
-	void VulkanCommandQueue::addWait2(VkSemaphore sem, uint64_t value, VkPipelineStageFlags2 stage) {
+	void VulkanCommandQueue::addWait2(VkSemaphore semaphore, uint64_t value, VkPipelineStageFlags2 stage) {
+		RENDERX_ASSERT(semaphore != VK_NULL_HANDLE);
+		RENDERX_ASSERT(m_SignalCount <= 4);
 		m_WaitInfos[m_WaitCount].sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
 		m_WaitInfos[m_WaitCount].pNext = nullptr;
-		m_WaitInfos[m_WaitCount].semaphore = sem;
+		m_WaitInfos[m_WaitCount].semaphore = semaphore;
 		m_WaitInfos[m_WaitCount].value = value;
 		m_WaitInfos[m_WaitCount].stageMask = stage;
 		m_WaitInfos[m_WaitCount].deviceIndex = 0;
 		m_WaitCount++;
 	}
 	void VulkanCommandQueue::addSignal2(VkSemaphore semaphore, uint64_t value, VkPipelineStageFlags2 stage) {
+		RENDERX_ASSERT(semaphore != VK_NULL_HANDLE);
+		RENDERX_ASSERT(m_SignalCount <= 2);
 		m_SignalInfos[m_SignalCount].sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
 		m_SignalInfos[m_SignalCount].pNext = nullptr;
 		m_SignalInfos[m_SignalCount].semaphore = semaphore;

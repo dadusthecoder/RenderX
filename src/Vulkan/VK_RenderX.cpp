@@ -5,17 +5,17 @@
 namespace Rx {
 namespace RxVK {
 
-	void VKBackendInit(const Window& window) {
+	void VKBackendInit(const InitDesc& window) {
 		PROFILE_FUNCTION();
 
-		RENDERX_ASSERT_MSG(window.nativeHandle != nullptr, "VKInit: window.nativeHandle is null");
+		RENDERX_ASSERT_MSG(window.nativeWindowHandle != nullptr, "VKInit: window.nativeHandle is null");
 		RENDERX_ASSERT_MSG(window.extensionCount >= 0, "VKInit: extensionCount is negative");
 		if (window.extensionCount > 0) {
 			RENDERX_ASSERT_MSG(window.instanceExtensions != nullptr, "VKInit: instanceExtensions is null but extensionCount > 0");
 		}
 
 		VulkanContext& ctx = GetVulkanContext();
-		ctx.window = window.nativeHandle;
+		ctx.window = window.nativeWindowHandle;
 		MAX_FRAMES_IN_FLIGHT = window.maxFramesInFlight;
 		ctx.instance = std::make_unique<VulkanInstance>(window);
 		ctx.device = std::make_unique<VulkanDevice>(ctx.instance->getInstance(),ctx.instance->getSurface(),std::vector<const char*>(g_RequestedDeviceExtensions.begin(), g_RequestedDeviceExtensions.end()),std::vector<const char*>(g_RequestedValidationLayers.begin(), g_RequestedValidationLayers.end()));

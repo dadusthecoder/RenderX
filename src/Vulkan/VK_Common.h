@@ -105,7 +105,7 @@ namespace RxVK {
 		return true;
 	}
 
-#define ALIGNUP(size, alignment) (((((size) + (alignment)) - 1) / (alignment)) * (alignment))	// Constants
+#define ALIGNUP(size, alignment) (((((size) + (alignment)) - 1) / (alignment)) * (alignment)) // Constants
 
 	constexpr std::array<VkDynamicState, 2> g_DynamicStates{
 		VK_DYNAMIC_STATE_VIEWPORT,
@@ -339,15 +339,18 @@ namespace RxVK {
 		}
 
 		ResourceType* get(const Tag& handle) {
-			RENDERX_ASSERT_MSG(handle.IsValid(),
-				"ResourcePool::get : invalid handle");
+
+			if (!handle.IsValid()) {
+				RENDERX_WARN("ResourcePool::get : invalid handle");
+				return nullptr;
+			}
 
 			uint64_t raw = Decrypt(handle.id);
 			auto index = static_cast<ValueType>(raw & 0xFFFFFFFF);
 			auto gen = static_cast<ValueType>(raw >> 32);
 
 			if (!(index < _My_resource.size() && _My_generation[index] == gen)) {
-				RENDERX_WARN("ResourcePool::get: stale or foreign handle detected");
+				RENDERX_WARN("stale or foreign handle detected");
 				return nullptr;
 			}
 
@@ -437,7 +440,7 @@ namespace RxVK {
 
 		// renderx public api functions
 		TextureViewHandle GetImageView(uint32_t imageindex) const override { return m_ImageViewsHandles[imageindex]; };
-		Format GetFormat() const override ;
+		Format GetFormat() const override;
 		uint32_t GetWidth() const override { return m_Extent.width; }
 		uint32_t GetHeight() const override { return m_Extent.height; };
 		uint32_t GetImageCount() const override { return m_ImageCount; };
@@ -475,14 +478,14 @@ namespace RxVK {
 
 	class VulkanInstance {
 	public:
-		VulkanInstance(const Window& window);
+		VulkanInstance(const InitDesc& window);
 		~VulkanInstance();
 
 		VkInstance getInstance() const { return m_Instance; }
 		VkSurfaceKHR getSurface() const { return m_Surface; }
 	private:
-		void createInstance(const Window& window);
-		void createSurface(const Window& window);
+		void createInstance(const InitDesc& window);
+		void createSurface(const InitDesc& window);
 	private:
 		VkInstance m_Instance = VK_NULL_HANDLE;
 		VkSurfaceKHR m_Surface = VK_NULL_HANDLE;
@@ -610,7 +613,7 @@ namespace RxVK {
 		VulkanDescriptorManager(VulkanContext& ctx);
 		~VulkanDescriptorManager();
 
-		VulkanResourceGroupLayout createLayout(const ResourceGroupLayout& layout);
+		VulkanResourceGroupLayout createLayout(const ResourceGroupLayoutDesc& layout);
 		VulkanResourceGroup createGroup(
 			const ResourceGroupLayoutHandle& layout,
 			const ResourceGroupDesc& desc, uint64_t timelineValue = 0);
@@ -870,7 +873,6 @@ namespace RxVK {
 		QueueType m_Type = QueueType::GRAPHICS;
 
 		VkSemaphore m_TimelineSemaphore = VK_NULL_HANDLE;
-		VkSemaphore m_RenderCompleteSemaphore = VK_NULL_HANDLE;
 
 		uint64_t m_Submitted = 0;
 		uint64_t m_Completed = 0;
@@ -884,10 +886,7 @@ namespace RxVK {
 		VkSemaphore m_SignalSemaphores[2];
 		uint64_t m_SignalValues[2];
 		VkSemaphoreSubmitInfo m_SignalInfos[2];
-		uint64_t m_SignalValue = 0;
 		uint32_t m_SignalCount = 0;
-
-
 		friend class VulkanSwapchain;
 	public:
 		CommandAllocator* CreateCommandAllocator(const char* debugName = nullptr) override;
@@ -928,7 +927,7 @@ namespace RxVK {
 	extern ResourcePool<VulkanPipelineLayout, PipelineLayoutHandle> g_PipelineLayoutPool;
 	extern ResourcePool<VulkanResourceGroupLayout, ResourceGroupLayoutHandle> g_ResourceGroupLayoutPool;
 	extern ResourcePool<VulkanRenderPass, RenderPassHandle> g_RenderPassPool;
-	extern ResourcePool<VulkanFramebuffer, FramebufferHandle> g_Framebufferpool;
+	extern ResourcePool<VulkanFramebuffer, FramebufferHandle> g_FramebufferPool;
 	extern ResourcePool<VulkanResourceGroup, ResourceGroupHandle> g_ResourceGroupPool;
 
 	// Global Hash Storage

@@ -12,7 +12,7 @@ namespace Rx {
 	RenderDispatchTable g_DispatchTable;
 	GraphicsAPI API = GraphicsAPI::NONE;
 
-	void Init(const Window& window) {
+	void Init(const InitDesc& window) {
 #ifdef RENDERX_DEBUG
 		LOG_INIT();
 		RENDERX_TRACE("mahesh");

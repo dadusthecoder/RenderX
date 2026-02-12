@@ -16,7 +16,7 @@ namespace Rx::RxVK {
 #endif
 	}
 
-	VulkanInstance::VulkanInstance(const Window& window) {
+	VulkanInstance::VulkanInstance(const InitDesc& window) {
 		createInstance(window);
 		createSurface(window);
 	}
@@ -28,7 +28,7 @@ namespace Rx::RxVK {
 			vkDestroyInstance(m_Instance, nullptr);
 	}
 
-	void VulkanInstance::createInstance(const Window& window) {
+	void VulkanInstance::createInstance(const InitDesc& window) {
 		VkApplicationInfo app{};
 		app.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
 		app.pApplicationName = "RenderX";
@@ -54,12 +54,12 @@ namespace Rx::RxVK {
 		VK_CHECK(vkCreateInstance(&ci, nullptr, &m_Instance));
 	}
 
-	void VulkanInstance::createSurface(const Window& window) {
+	void VulkanInstance::createSurface(const InitDesc& window) {
 #if defined(RENDERX_PLATFORM_WINDOWS)
 
 		VkWin32SurfaceCreateInfoKHR ci{};
 		ci.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
-		ci.hwnd = static_cast<HWND>(window.nativeHandle);
+		ci.hwnd = static_cast<HWND>(window.nativeWindowHandle);
 		ci.hinstance = static_cast<HINSTANCE>(window.displayHandle);
 		VK_CHECK(vkCreateWin32SurfaceKHR(m_Instance, &ci, nullptr, &m_Surface));
 

@@ -15,17 +15,17 @@ namespace RxGL {
 	typedef BOOL(WINAPI* PFNWGLSWAPINTERVALEXTPROC)(int);
 	static PFNWGLSWAPINTERVALEXTPROC wglSwapIntervalEXT = nullptr;
 
-	void GLInit(const Window& window) {
+	void GLInit(const InitDesc& window) {
 		PROFILE_FUNCTION();
 
-		if (!window.nativeHandle) {
+		if (!window.nativeWindowHandle) {
 			RENDERX_CRITICAL("GLInit: Native window handle is required for OpenGL backend (no GLFW fallback)");
 			return;
 		}
 
-		s_WindowHandle = static_cast<HWND>(window.nativeHandle);
-		s_WindowWidth = window.width;
-		s_WindowHeight = window.height;
+		s_WindowHandle = static_cast<HWND>(window.nativeWindowHandle);
+		s_WindowWidth = window.windowWidth;
+		s_WindowHeight = window.windowHeight;
 		if (!IsWindow(s_WindowHandle)) {
 			RENDERX_CRITICAL("GLInit: Invalid window handle");
 			return;

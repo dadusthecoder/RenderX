@@ -4,14 +4,14 @@ namespace Rx {
 namespace RxGL {
 
 	// Simple in-memory store for pipeline layouts used by the OpenGL backend.
-	static std::unordered_map<uint64_t, ResourceGroupLayout> s_PipelineLayouts;
+	static std::unordered_map<uint64_t, ResourceGroupLayoutDesc> s_PipelineLayouts;
 	static uint32_t s_NextLayoutIndex = 1;
 
 	void GLCmdSetResourceGroup(const CommandList& list, const ResourceGroupHandle& handel) {
 		return;
 	}
 
-	PipelineLayoutHandle GLCreatePipelineLayout(const ResourceGroupLayout* pLayouts, uint32_t layoutCount) {
+	PipelineLayoutHandle GLCreatePipelineLayout(const ResourceGroupLayoutDesc* pLayouts, uint32_t layoutCount) {
 		PROFILE_FUNCTION();
 		PipelineLayoutHandle handle;
 		if (!pLayouts || layoutCount == 0) {

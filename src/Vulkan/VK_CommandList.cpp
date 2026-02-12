@@ -183,7 +183,7 @@ namespace RxVK {
 	}
 
 	void VulkanCommandList::setFramebuffer(FramebufferHandle handle) {
-		VulkanFramebuffer* framebuffer = g_Framebufferpool.get(handle);
+		VulkanFramebuffer* framebuffer = g_FramebufferPool.get(handle);
 		RENDERX_ASSERT_MSG(framebuffer, "VulkanCommandList::setFramebuffer: framebuffer handle {} is invalid or was not created", handle.id);
 	}
 

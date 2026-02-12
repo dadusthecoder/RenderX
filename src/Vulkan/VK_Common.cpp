@@ -27,7 +27,7 @@ namespace RxVK {
 	ResourcePool<VulkanBuffer, BufferHandle> g_BufferPool;
 	ResourcePool<VulkanShader, ShaderHandle> g_ShaderPool;
 	ResourcePool<VulkanRenderPass, RenderPassHandle> g_RenderPassPool;
-	ResourcePool<VulkanFramebuffer, FramebufferHandle> g_Framebufferpool;
+	ResourcePool<VulkanFramebuffer, FramebufferHandle> g_FramebufferPool;
 
 	VulkanContext& GetVulkanContext() {
 		static VulkanContext g_Context;
@@ -58,13 +58,13 @@ namespace RxVK {
 			if (texture.image != VK_NULL_HANDLE) {
 				ctx.allocator->destroyImage(texture.image, texture.allocation);
 				texture.image = VK_NULL_HANDLE;
+				texture.allocation = VK_NULL_HANDLE;
 			}
 			texture.format = VK_FORMAT_UNDEFINED;
 			texture.width = 0;
 			texture.height = 0;
 			texture.mipLevels = 1;
 		});
-
 		g_ShaderPool.ForEach([&](VulkanShader& shader) {
 			if (shader.shaderModule != VK_NULL_HANDLE) {
 				vkDestroyShaderModule(g_Device, shader.shaderModule, nullptr);
@@ -78,9 +78,7 @@ namespace RxVK {
 			if (layout.layout != VK_NULL_HANDLE && layout.setlayouts.size() != 0) {
 				for (auto setlayout : layout.setlayouts)
 					vkDestroyDescriptorSetLayout(g_Device, setlayout, nullptr);
-
 				vkDestroyPipelineLayout(g_Device, layout.layout, nullptr);
-				layout.layout = VK_NULL_HANDLE;
 			}
 		});
 

@@ -3,6 +3,7 @@
 #include <GLFW/glfw3native.h>
 #define RENDERX_DEBUG
 #include "RenderX/RenderX.h"
+#include "Files.h"
 
 struct Frame {
 	Rx::CommandAllocator* graphicsAlloc;
@@ -53,36 +54,75 @@ int main() {
 		glfwPollEvents();
 	}
 
-	Rx::Window rxWindow{};
+	Rx::InitDesc rxWindow{};
 	rxWindow.api = Rx::GraphicsAPI::VULKAN;
 	rxWindow.platform = Rx::Platform::WINDOWS;
-	rxWindow.width = width;
-	rxWindow.height = height;
+	rxWindow.windowWidth = width;
+	rxWindow.windowHeight = height;
 	rxWindow.instanceExtensions = glfwGetRequiredInstanceExtensions(&rxWindow.extensionCount);
-	rxWindow.nativeHandle = glfwGetWin32Window(window);
+	rxWindow.nativeWindowHandle = glfwGetWin32Window(window);
 	rxWindow.displayHandle = GetModuleHandle(nullptr);
 	Rx::Init(rxWindow);
 
-
-
+	// Get GPU queues
 	Rx::CommandQueue* graphics = Rx::GetGpuQueue(Rx::QueueType::GRAPHICS);
 	Rx::CommandQueue* compute = Rx::GetGpuQueue(Rx::QueueType::COMPUTE);
 
-	Rx::BufferDesc vertexbufferinfo{};
-	vertexbufferinfo.usage = Rx::BufferUsage::VERTEX | Rx::BufferUsage::TRANSFER_DST;
-	vertexbufferinfo.initialData = cubeIndices;
-	vertexbufferinfo.memoryType = Rx::MemoryType::GPU_ONLY;
-	vertexbufferinfo.size = sizeof(cubeVertices);
+	// Create vertex buffer 
+	auto vertexbuffer = Rx::CreateBuffer(
+		Rx::BufferDesc::VertexBuffer(
+			sizeof(cubeVertices),
+			Rx::MemoryType::GPU_ONLY,
+			cubeVertices));
 
+	// Create vertex input state
+	auto vertexInputState = Rx::VertexInputState()
+								.AddBinding(Rx::VertexBinding::PerVertex(0, sizeof(float) * 6))
+								.AddAttribute(Rx::VertexAttribute::Vec3(0, 0, 0))				   // position
+								.AddAttribute(Rx::VertexAttribute::Vec3(1, 0, sizeof(float) * 3)); // color
 
-	auto vertexbuffer = Rx::CreateBuffer(vertexbufferinfo);
+	// Load shaders
+	auto vertexshader = Rx::CreateShader(
+		Rx::ShaderDesc::FromBytecode(
+			Rx::ShaderStage::VERTEX,
+			Files::ReadBinaryFile("D:/dev/cpp/RenderX/Test/HelloTriangle/Shaders/bsc.vert.spv")));
 
-	Rx::SwapchainDesc swapchianinfo{};
-	glfwGetWindowSize(window, (int*)&swapchianinfo.width, (int*)&swapchianinfo.height);
-	swapchianinfo.preferredFromat = Rx::Format::RGBA8_SRGB;
-	auto* swapchain = Rx::CreateSwapchain(swapchianinfo);
+	auto fragmentshader = Rx::CreateShader(
+		Rx::ShaderDesc::FromBytecode(
+			Rx::ShaderStage::FRAGMENT,
+			Files::ReadBinaryFile("D:/dev/cpp/RenderX/Test/HelloTriangle/Shaders/bsc.frag.spv")));
 
+	// Create swapchain
+	int swapWidth, swapHeight;
+	glfwGetWindowSize(window, &swapWidth, &swapHeight);
 
+	auto* swapchain = Rx::CreateSwapchain(
+		Rx::SwapchainDesc::Default(swapWidth, swapHeight)
+			.setFormat(Rx::Format::BGRA8_SRGB));
+
+	// Create resource group
+	auto rglayout = Rx::CreateResourceGroupLayout(
+		Rx::ResourceGroupLayoutDesc()
+			.AddBinding(Rx::ResourceGroupLayoutItem::ConstantBuffer(0, Rx::ShaderStage::VERTEX))
+			.setDebugName("MainResourceGroupLayout"));
+
+	// Create pipeline layout
+	auto pipelineLayout = Rx::CreatePipelineLayout(&rglayout, 1);
+
+	// Create graphics pipeline
+	auto pipeline = Rx::CreateGraphicsPipeline(
+		Rx::PipelineDesc()
+			.setLayout(pipelineLayout)
+			.AddColorFormat(Rx::Format::BGRA8_SRGB)
+			.AddShader(vertexshader)
+			.AddShader(fragmentshader)
+			.setVertexInput(vertexInputState)
+			.setTopology(Rx::Topology::TRIANGLES)
+			.setRasterizer(Rx::RasterizerState::Default())
+			.setDepthStencil(Rx::DepthStencilState::NoDepth())
+			.setBlend(Rx::BlendState::Disabled()));
+
+	// Setup per-frame resources
 	Frame frames[3];
 	for (auto& frame : frames) {
 		frame.graphicsAlloc = graphics->CreateCommandAllocator();
@@ -93,45 +133,52 @@ int main() {
 
 	uint32_t currentFrame = 0;
 	uint32_t currentImageIndex = 0;
-	int currentWidth = swapchianinfo.width;
-	int currentHeight = swapchianinfo.height;
+	int currentWidth = swapWidth;
+	int currentHeight = swapHeight;
 
 	while (!glfwWindowShouldClose(window)) {
-		// look out for missing reference operator !!!
 		auto& frame = frames[currentFrame];
+
+		// Handle window resize
 		glfwGetWindowSize(window, &currentWidth, &currentHeight);
-		if (swapchianinfo.width != currentWidth || swapchianinfo.height != currentHeight) {
-			swapchianinfo.width = currentWidth;
-			swapchianinfo.height = currentHeight;
+		if (swapchain->GetWidth() != currentWidth || swapchain->GetHeight() != currentHeight) {
 			swapchain->Resize(currentWidth, currentHeight);
 		}
+
+		// Wait for this frame to complete its prevois submition
 		graphics->Wait(frame.T);
 
+		// Acquire next swapchain image
 		currentImageIndex = swapchain->AcquireNextImage();
 
+		// Record compute commands
 		frame.computelist->open();
-		// Compute work
+		// Compute work...
 		frame.computelist->close();
 
+		// Record graphics commands
 		frame.graphicslist->open();
-		// Graphics Work
+		// Graphics work...
 		frame.graphicslist->close();
 
-
+		// Submit compute work
 		auto t0 = compute->Submit(frame.computelist);
-		Rx::SubmitInfo submitInfo{};
-		submitInfo.commandList = frame.graphicslist;
 
-		submitInfo.commandListCount = 1;
-		submitInfo.writesToSwapchain = true;
-		submitInfo.waitDependencies.push_back({ Rx::QueueType::COMPUTE, t0 });
-		frame.T = graphics->Submit(submitInfo);
+		// Submit graphics work set dependency on compute and swapchain write
+		frame.T = graphics->Submit(
+			Rx::SubmitInfo::Single(frame.graphicslist)
+				.setSwapchainWrite()
+				.AddDependency(Rx::QueueDependency(Rx::QueueType::COMPUTE, t0)));
 
+		// Present
 		swapchain->Present(currentImageIndex);
+
+		// Advance to next frame
 		currentFrame = (currentFrame + 1) % 3;
 		glfwPollEvents();
 	}
 
+	// Cleanup
 	graphics->WaitIdle();
 	compute->WaitIdle();
 
@@ -141,6 +188,9 @@ int main() {
 		graphics->DestroyCommandAllocator(frame.graphicsAlloc);
 		compute->DestroyCommandAllocator(frame.computeAlloc);
 	}
+
 	Rx::Shutdown();
+	glfwDestroyWindow(window);
+	glfwTerminate();
 	return 0;
 }
