@@ -1,10 +1,11 @@
 #include "VK_RenderX.h"
 #include "VK_Common.h"
 
-#include <Windows.h>
 #include <vector>
 #include <cstring>
+#include <Windows.h>
 #include <vulkan/vulkan_win32.h>
+
 
 namespace Rx::RxVK {
 
