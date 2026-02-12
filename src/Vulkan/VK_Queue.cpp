@@ -1,7 +1,5 @@
 #include "VK_Common.h"
 #include "VK_RenderX.h"
-
-#include <Windows.h>
 #include <vector>
 #include <cstring>
 
