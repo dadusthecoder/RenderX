@@ -3,8 +3,6 @@
 
 namespace Rx::RxVK {
 
-	ResourcePool<VulkanFramebuffer, FramebufferHandle> g_FramebufferPool;
-
 	FramebufferHandle VKCreateFramebuffer(const FramebufferDesc& desc) {
 		auto& ctx = GetVulkanContext();
 		RENDERX_ASSERT_MSG(ctx.device != VK_NULL_HANDLE, "VKCreateFramebuffer: device is VK_NULL_HANDLE");

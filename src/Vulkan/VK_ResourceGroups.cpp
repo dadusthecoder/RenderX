@@ -178,7 +178,7 @@ namespace RxVK {
 
 	VulkanDescriptorManager::~VulkanDescriptorManager() {}
 
-	VulkanResourceGroupLayout VulkanDescriptorManager::createLayout(const ResourceGroupLayout& layout) {
+	VulkanResourceGroupLayout VulkanDescriptorManager::createLayout(const ResourceGroupLayoutDesc& layout) {
 		VulkanResourceGroupLayout out{};
 		out.model = ChooseModel(layout.flags);
 
@@ -590,7 +590,7 @@ namespace RxVK {
 		}
 	}
 
-	ResourceGroupLayoutHandle VKCreateResourceGroupLayout(const ResourceGroupLayout& desc) {
+	ResourceGroupLayoutHandle VKCreateResourceGroupLayout(const ResourceGroupLayoutDesc& desc) {
 		auto& ctx = GetVulkanContext();
 		auto Layout = ctx.descriptorSetManager->createLayout(desc);
 		RENDERX_ASSERT_MSG(Layout.layout != VK_NULL_HANDLE, "Failed to create resource group layout");

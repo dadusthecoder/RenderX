@@ -43,17 +43,17 @@ namespace RxVK {
 	}
 
 	// Pipeline LAyout Creation
-	PipelineLayoutHandle VKCreatePipelineLayout(const ResourceGroupLayoutHandle* playouts, uint32_t layoutcount) {
-		// Store the created layout in a local registry and return a handle
-		RENDERX_ASSERT_MSG(layoutcount > 0, "VKCreatePipelineLayout: layout count is zero");
-		RENDERX_ASSERT_MSG(playouts != nullptr, "VKCreatePipelineLayout: playouts pointer is null");
+	PipelineLayoutHandle VKCreatePipelineLayout(const ResourceGroupLayoutHandle* playouts, uint32_t resourceGroupLayoutCount) {
+		if (resourceGroupLayoutCount <= 0)
+			RENDERX_WARN("resourcegrouplayoutcount is zero");
+		if (playouts == nullptr)
+			RENDERX_WARN("playouts pointer is null");
 		auto& ctx = GetVulkanContext();
-		RENDERX_ASSERT_MSG(ctx.device && ctx.device->logical() != VK_NULL_HANDLE, "VKCreatePipelineLayout: device is VK_NULL_HANDLE");
-
 		std::vector<VkDescriptorSetLayout> setLayouts;
-
-		for (int i = 0; i < layoutcount; ++i) {
-			// auto layout = g_Re
+		for (int i = 0; i < resourceGroupLayoutCount; ++i) {
+			auto layout = g_ResourceGroupLayoutPool.get(playouts[i]);
+			if (!layout) continue;
+			setLayouts.push_back(layout->layout);
 		}
 
 		//  Pipeline Layout
@@ -63,13 +63,11 @@ namespace RxVK {
 		lci.setLayoutCount = (uint32_t)setLayouts.size();
 		lci.pSetLayouts = setLayouts.data();
 		VkResult lres = vkCreatePipelineLayout(ctx.device->logical(), &lci, nullptr, &pipelinelayout);
-		if (lres != VK_SUCCESS) {
-			RENDERX_ERROR("VKCreatePipelineLayout: Failed to create pipeline layout: {}", VkResultToString(lres));
-			return PipelineLayoutHandle{};
-		}
-		RENDERX_ASSERT_MSG(pipelinelayout != VK_NULL_HANDLE, "VKCreatePipelineLayout: created pipeline layout is null");
+		VK_CHECK(lres);
+		RENDERX_ASSERT_MSG(pipelinelayout != VK_NULL_HANDLE, "Failed to create pipeline layout");
 
 		// Debug naming
+		// TODO
 		// if (desc.&& desc.debugName[0] != '\0') {
 		//	VkDebugUtilsObjectNameInfoEXT nameInfo = {};
 		//	nameInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
@@ -84,8 +82,7 @@ namespace RxVK {
 		rxPipelneLayout.setlayouts = setLayouts;
 
 		// handle
-		auto handle = g_PipelineLayoutPool.allocate(rxPipelneLayout);
-		return handle;
+		return g_PipelineLayoutPool.allocate(rxPipelneLayout);
 	}
 
 	// GRAPHICS PIPELINE
@@ -139,7 +136,7 @@ namespace RxVK {
 		inputAsm.topology = ToVulkanTopology(desc.primitiveType);
 
 		// temp
-		//   Viewport
+		// Viewport
 		VkViewport viewport{};
 		viewport.width = (float)ctx.swapchain->GetWidth();
 		viewport.height = (float)ctx.swapchain->GetHeight();
@@ -209,6 +206,17 @@ namespace RxVK {
 		cb.blendConstants[2] = b.blendFactor.b;
 		cb.blendConstants[3] = b.blendFactor.a;
 
+		// dynamic rendering
+		std::vector<VkFormat> colorAttachmentFormats;
+		for (auto format : desc.colorFromats)
+			colorAttachmentFormats.push_back(ToVulkanFormat(format));
+
+		VkPipelineRenderingCreateInfo rci{};
+		rci.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
+		rci.colorAttachmentCount = (uint32_t)colorAttachmentFormats.size();
+		rci.pColorAttachmentFormats = colorAttachmentFormats.data();
+		rci.depthAttachmentFormat = ToVulkanFormat(desc.depthFormat);
+
 		//  Create Pipeline
 		VkGraphicsPipelineCreateInfo pci{};
 		pci.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -221,7 +229,8 @@ namespace RxVK {
 		pci.pMultisampleState = &ms;
 		pci.pDepthStencilState = &depth;
 		pci.pColorBlendState = &cb;
-		pci.renderPass = g_RenderPassPool.get(desc.renderPass)->renderPass;
+		pci.pNext = &rci;
+		//pci.renderPass = g_RenderPassPool.get(desc.renderPass)->renderPass;
 		auto* layout = g_PipelineLayoutPool.get(desc.layout);
 		pci.layout = layout->layout;
 

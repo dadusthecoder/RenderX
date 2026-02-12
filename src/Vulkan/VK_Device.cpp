@@ -329,10 +329,15 @@ namespace Rx::RxVK {
 			queues.push_back(q);
 		}
 
-		// add here 
+		// add here
+		VkPhysicalDeviceDynamicRenderingFeatures dynamicRendering{};
+		dynamicRendering.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES;
+		dynamicRendering.dynamicRendering = VK_TRUE;
+
 		VkPhysicalDeviceSynchronization2Features sync2{};
 		sync2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES;
 		sync2.synchronization2 = VK_TRUE;
+		sync2.pNext = &dynamicRendering;
 
 		VkPhysicalDeviceBufferDeviceAddressFeatures bufferAddressFeatures{};
 		bufferAddressFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
@@ -351,6 +356,7 @@ namespace Rx::RxVK {
 		indexing.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE;
 		indexing.runtimeDescriptorArray = VK_TRUE;
 		indexing.descriptorBindingVariableDescriptorCount = VK_TRUE;
+
 
 		VkDeviceCreateInfo info{};
 		info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;

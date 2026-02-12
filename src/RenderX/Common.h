@@ -277,7 +277,7 @@ namespace Rx {
 		(handle))                                                         \
                                                                           \
 	X(ResourceGroupLayoutHandle, CreateResourceGroupLayout,               \
-		(const ResourceGroupLayout& desc),                                \
+		(const ResourceGroupLayoutDesc& desc),                            \
 		(desc))                                                           \
                                                                           \
 	X(void*, MapBuffer,                                                   \
@@ -579,6 +579,15 @@ namespace Rx {
 								 height(size.y),
 								 minDepth(minD),
 								 maxDepth(maxD) {}
+
+		// Factory methods
+		static Viewport FromSize(int width, int height) {
+			return Viewport(0, 0, width, height);
+		}
+
+		static Viewport FromSize(const IVec2& size) {
+			return Viewport(0, 0, size.x, size.y);
+		}
 	};
 
 	struct Scissor {
@@ -591,6 +600,15 @@ namespace Rx {
 		Scissor(const IVec2& pos, const IVec2& size)
 			: x(pos.x), y(pos.y), width(size.x), height(size.y) {
 		}
+
+		// Factory methods
+		static Scissor FromSize(int width, int height) {
+			return Scissor(0, 0, width, height);
+		}
+
+		static Scissor FromSize(const IVec2& size) {
+			return Scissor(0, 0, size.x, size.y);
+		}
 	};
 
 	struct ClearColor {
@@ -601,6 +619,16 @@ namespace Rx {
 		}
 		ClearColor(const Vec4& c) : color(c) {}
 		ClearColor(const Vec3& c, float a = 1.0f) : color(c, a) {}
+
+		// Common presets
+		static ClearColor Black() { return ClearColor(0.0f, 0.0f, 0.0f, 1.0f); }
+		static ClearColor White() { return ClearColor(1.0f, 1.0f, 1.0f, 1.0f); }
+		static ClearColor Red() { return ClearColor(1.0f, 0.0f, 0.0f, 1.0f); }
+		static ClearColor Green() { return ClearColor(0.0f, 1.0f, 0.0f, 1.0f); }
+		static ClearColor Blue() { return ClearColor(0.0f, 0.0f, 1.0f, 1.0f); }
+		static ClearColor CornflowerBlue() { return ClearColor(0.392f, 0.584f, 0.929f, 1.0f); }
+		static ClearColor DarkGray() { return ClearColor(0.169f, 0.169f, 0.169f, 1.0f); }
+		static ClearColor Transparent() { return ClearColor(0.0f, 0.0f, 0.0f, 0.0f); }
 	};
 
 	// Vertex input description
@@ -613,21 +641,92 @@ namespace Rx {
 		VertexAttribute(uint32_t loc, uint32_t binding, Format format, uint32_t off)
 			: location(loc), binding(binding), format(format), offset(off) {
 		}
+
+		// Factory methods for common formats
+		static VertexAttribute Float(uint32_t location, uint32_t binding, uint32_t offset) {
+			return VertexAttribute(location, binding, Format::R32_SFLOAT, offset);
+		}
+
+		static VertexAttribute Vec2(uint32_t location, uint32_t binding, uint32_t offset) {
+			return VertexAttribute(location, binding, Format::RG32_SFLOAT, offset);
+		}
+
+		static VertexAttribute Vec3(uint32_t location, uint32_t binding, uint32_t offset) {
+			return VertexAttribute(location, binding, Format::RGB32_SFLOAT, offset);
+		}
+
+		static VertexAttribute Vec4(uint32_t location, uint32_t binding, uint32_t offset) {
+			return VertexAttribute(location, binding, Format::RGBA32_SFLOAT, offset);
+		}
 	};
 
 	struct VertexBinding {
 		uint32_t binding;
 		uint32_t stride;
-		bool instanceData; // true for per-instance, false for per-vertex
+		bool instanceData = false; // true for per-instance, false for per-vertex
 
 		VertexBinding(uint32_t bind, uint32_t str, bool inst = false)
 			: binding(bind), stride(str), instanceData(inst) {
+		}
+
+		// Factory methods
+		static VertexBinding PerVertex(uint32_t binding, uint32_t stride) {
+			return VertexBinding(binding, stride, false);
+		}
+
+		static VertexBinding PerInstance(uint32_t binding, uint32_t stride) {
+			return VertexBinding(binding, stride, true);
 		}
 	};
 
 	struct VertexInputState {
 		std::vector<VertexAttribute> attributes;
 		std::vector<VertexBinding> vertexBindings;
+
+		VertexInputState() = default;
+
+		VertexInputState& AddAttribute(const VertexAttribute& attr) {
+			attributes.push_back(attr);
+			return *this;
+		}
+
+		VertexInputState& AddBinding(const VertexBinding& binding) {
+			vertexBindings.push_back(binding);
+			return *this;
+		}
+
+		// Common vertex layouts
+		static VertexInputState Position3D() {
+			VertexInputState state;
+			state.AddBinding(VertexBinding::PerVertex(0, sizeof(Vec3)));
+			state.AddAttribute(VertexAttribute::Vec3(0, 0, 0));
+			return state;
+		}
+
+		static VertexInputState PositionColor() {
+			VertexInputState state;
+			state.AddBinding(VertexBinding::PerVertex(0, sizeof(Vec3) + sizeof(Vec4)));
+			state.AddAttribute(VertexAttribute::Vec3(0, 0, 0));
+			state.AddAttribute(VertexAttribute::Vec4(1, 0, sizeof(Vec3)));
+			return state;
+		}
+
+		static VertexInputState PositionTexCoord() {
+			VertexInputState state;
+			state.AddBinding(VertexBinding::PerVertex(0, sizeof(Vec3) + sizeof(Vec2)));
+			state.AddAttribute(VertexAttribute::Vec3(0, 0, 0));
+			state.AddAttribute(VertexAttribute::Vec2(1, 0, sizeof(Vec3)));
+			return state;
+		}
+
+		static VertexInputState PositionNormalTexCoord() {
+			VertexInputState state;
+			state.AddBinding(VertexBinding::PerVertex(0, sizeof(Vec3) * 2 + sizeof(Vec2)));
+			state.AddAttribute(VertexAttribute::Vec3(0, 0, 0));
+			state.AddAttribute(VertexAttribute::Vec3(1, 0, sizeof(Vec3)));
+			state.AddAttribute(VertexAttribute::Vec2(2, 0, sizeof(Vec3) * 2));
+			return state;
+		}
 	};
 
 
@@ -656,20 +755,76 @@ namespace Rx {
 		BufferUsage usage;
 		MemoryType memoryType;
 		size_t size;
-		uint32_t bindingCount;
-		const void* initialData;
+		uint32_t bindingCount = 0;
+		const void* initialData = nullptr;
+
+		BufferDesc() = default;
+
+		BufferDesc(BufferUsage usage, MemoryType memType, size_t sz, const void* data = nullptr)
+			: usage(usage), memoryType(memType), size(sz), initialData(data) {}
+
+		// Factory methods for common buffer types
+		static BufferDesc VertexBuffer(size_t size, MemoryType memType = MemoryType::GPU_ONLY, const void* data = nullptr) {
+			return BufferDesc(BufferUsage::VERTEX | BufferUsage::TRANSFER_DST, memType, size, data);
+		}
+
+		static BufferDesc IndexBuffer(size_t size, MemoryType memType = MemoryType::GPU_ONLY, const void* data = nullptr) {
+			return BufferDesc(BufferUsage::INDEX | BufferUsage::TRANSFER_DST, memType, size, data);
+		}
+
+		static BufferDesc UniformBuffer(size_t size, MemoryType memType = MemoryType::CPU_TO_GPU, const void* data = nullptr) {
+			BufferDesc desc(BufferUsage::UNIFORM, memType, size, data);
+			return desc;
+		}
+
+		static BufferDesc StorageBuffer(size_t size, MemoryType memType = MemoryType::GPU_ONLY, const void* data = nullptr) {
+			return BufferDesc(BufferUsage::STORAGE, memType, size, data);
+		}
+
+		static BufferDesc StagingBuffer(size_t size) {
+			return BufferDesc(BufferUsage::TRANSFER_SRC, MemoryType::CPU_TO_GPU, size, nullptr);
+		}
+
+		static BufferDesc ReadbackBuffer(size_t size) {
+			return BufferDesc(BufferUsage::TRANSFER_DST, MemoryType::GPU_TO_CPU, size, nullptr);
+		}
+
+		// Dynamic buffers (frequently updated)
+		static BufferDesc DynamicVertexBuffer(size_t size) {
+			return BufferDesc(BufferUsage::VERTEX | BufferUsage::DYNAMIC, MemoryType::CPU_TO_GPU, size, nullptr);
+		}
+
+		static BufferDesc DynamicUniformBuffer(size_t size) {
+			return BufferDesc(BufferUsage::UNIFORM | BufferUsage::DYNAMIC, MemoryType::CPU_TO_GPU, size, nullptr);
+		}
 	};
 
 	struct BufferCopyRegion {
 		uint32_t srcOffset = 0;
 		uint32_t dstOffset = 0;
 		uint32_t size = 0;
+
+		BufferCopyRegion() = default;
+		BufferCopyRegion(uint32_t src, uint32_t dst, uint32_t sz)
+			: srcOffset(src), dstOffset(dst), size(sz) {}
+
+		static BufferCopyRegion FullBuffer(uint32_t size) {
+			return BufferCopyRegion(0, 0, size);
+		}
 	};
 
 	struct BufferViewDesc {
 		BufferHandle buffer;
 		uint32_t offset = 0;
 		uint32_t range = 0; // 0 = whole buffer
+
+		BufferViewDesc() = default;
+		BufferViewDesc(BufferHandle buf, uint32_t off = 0, uint32_t rng = 0)
+			: buffer(buf), offset(off), range(rng) {}
+
+		static BufferViewDesc WholeBuffer(BufferHandle buffer) {
+			return BufferViewDesc(buffer, 0, 0);
+		}
 	};
 
 	struct SamplerDesc {
@@ -688,6 +843,59 @@ namespace Rx {
 			  wrapU(TextureWrap::REPEAT), wrapV(TextureWrap::REPEAT),
 			  wrapW(TextureWrap::REPEAT), maxAnisotropy(1.0f), enableCompare(false),
 			  compareFunc(CompareFunc::NEVER), borderColor(0.0f, 0.0f, 0.0f, 1.0f) {
+		}
+
+		// Common sampler presets
+		static SamplerDesc LinearRepeat() {
+			SamplerDesc desc;
+			desc.minFilter = Filter::LINEAR;
+			desc.magFilter = Filter::LINEAR;
+			desc.wrapU = desc.wrapV = desc.wrapW = TextureWrap::REPEAT;
+			return desc;
+		}
+
+		static SamplerDesc LinearClamp() {
+			SamplerDesc desc;
+			desc.minFilter = Filter::LINEAR;
+			desc.magFilter = Filter::LINEAR;
+			desc.wrapU = desc.wrapV = desc.wrapW = TextureWrap::CLAMP_TO_EDGE;
+			return desc;
+		}
+
+		static SamplerDesc NearestRepeat() {
+			SamplerDesc desc;
+			desc.minFilter = Filter::NEAREST;
+			desc.magFilter = Filter::NEAREST;
+			desc.wrapU = desc.wrapV = desc.wrapW = TextureWrap::REPEAT;
+			return desc;
+		}
+
+		static SamplerDesc NearestClamp() {
+			SamplerDesc desc;
+			desc.minFilter = Filter::NEAREST;
+			desc.magFilter = Filter::NEAREST;
+			desc.wrapU = desc.wrapV = desc.wrapW = TextureWrap::CLAMP_TO_EDGE;
+			return desc;
+		}
+
+		static SamplerDesc Anisotropic(float maxAniso = 16.0f) {
+			SamplerDesc desc;
+			desc.minFilter = Filter::LINEAR_MIPMAP_LINEAR;
+			desc.magFilter = Filter::LINEAR;
+			desc.maxAnisotropy = maxAniso;
+			desc.wrapU = desc.wrapV = desc.wrapW = TextureWrap::REPEAT;
+			return desc;
+		}
+
+		static SamplerDesc ShadowMap() {
+			SamplerDesc desc;
+			desc.minFilter = Filter::LINEAR;
+			desc.magFilter = Filter::LINEAR;
+			desc.wrapU = desc.wrapV = desc.wrapW = TextureWrap::CLAMP_TO_BORDER;
+			desc.enableCompare = true;
+			desc.compareFunc = CompareFunc::LESS;
+			desc.borderColor = Vec4(1.0f);
+			return desc;
 		}
 	};
 
@@ -708,8 +916,8 @@ namespace Rx {
 		uint32_t height;
 		uint32_t depth;
 		uint32_t mipLevels;
-		uint32_t arrayLayers; // Add this for texture arrays
-		uint32_t sampleCount; // Add this for MSAA
+		uint32_t arrayLayers;
+		uint32_t sampleCount;
 		Format format;
 		TextureUsageFlags usage;
 		MemoryType memoryType;
@@ -717,7 +925,7 @@ namespace Rx {
 		const char* debugName;
 
 		// Constructors
-		TextureDesc(uint32_t w, uint32_t h, Format fmt,
+		TextureDesc(uint32_t w = 1, uint32_t h = 1, Format fmt = Format::RGBA8_UNORM,
 			TextureType t = TextureType::TEXTURE_2D)
 			: type(t), width(w), height(h), depth(1),
 			  mipLevels(1), arrayLayers(1), sampleCount(1),
@@ -725,15 +933,74 @@ namespace Rx {
 			  memoryType(MemoryType::GPU_ONLY), generateMips(false),
 			  debugName(nullptr) {}
 
-		TextureDesc(const IVec2& size, Format fmt,
+		TextureDesc(const IVec2& size, Format fmt = Format::RGBA8_UNORM,
 			TextureType t = TextureType::TEXTURE_2D)
 			: TextureDesc(size.x, size.y, fmt, t) {}
+
+		// Factory methods for common texture types
+		static TextureDesc Texture2D(uint32_t width, uint32_t height, Format format = Format::RGBA8_UNORM) {
+			TextureDesc desc(width, height, format, TextureType::TEXTURE_2D);
+			desc.usage = TextureUsageFlags::SAMPLED | TextureUsageFlags::TRANSFER_DST;
+			return desc;
+		}
+
+		static TextureDesc RenderTarget(uint32_t width, uint32_t height, Format format = Format::RGBA8_UNORM) {
+			TextureDesc desc(width, height, format, TextureType::TEXTURE_2D);
+			desc.usage = TextureUsageFlags::RENDER_TARGET | TextureUsageFlags::SAMPLED;
+			return desc;
+		}
+
+		static TextureDesc DepthStencil(uint32_t width, uint32_t height, Format format = Format::D24_UNORM_S8_UINT) {
+			TextureDesc desc(width, height, format, TextureType::TEXTURE_2D);
+			desc.usage = TextureUsageFlags::DEPTH_STENCIL;
+			return desc;
+		}
+
+		static TextureDesc StorageTexture(uint32_t width, uint32_t height, Format format = Format::RGBA8_UNORM) {
+			TextureDesc desc(width, height, format, TextureType::TEXTURE_2D);
+			desc.usage = TextureUsageFlags::STORAGE | TextureUsageFlags::SAMPLED;
+			return desc;
+		}
+
+		static TextureDesc Cubemap(uint32_t size, Format format = Format::RGBA8_UNORM) {
+			TextureDesc desc(size, size, format, TextureType::TEXTURE_CUBE);
+			desc.arrayLayers = 6;
+			desc.usage = TextureUsageFlags::SAMPLED | TextureUsageFlags::TRANSFER_DST;
+			return desc;
+		}
+
+		static TextureDesc TextureArray(uint32_t width, uint32_t height, uint32_t layers, Format format = Format::RGBA8_UNORM) {
+			TextureDesc desc(width, height, format, TextureType::TEXTURE_2D_ARRAY);
+			desc.arrayLayers = layers;
+			desc.usage = TextureUsageFlags::SAMPLED | TextureUsageFlags::TRANSFER_DST;
+			return desc;
+		}
+
+		TextureDesc& setMips(uint32_t levels) {
+			mipLevels = levels;
+			return *this;
+		}
+
+		TextureDesc& setGeneratedMips() {
+			generateMips = true;
+			return *this;
+		}
+
+		TextureDesc& setUsage(TextureUsageFlags newUsage) {
+			usage = newUsage;
+			return *this;
+		}
+
+		TextureDesc& setDebugName(const char* name) {
+			debugName = name;
+			return *this;
+		}
 	};
 
 	struct TextureViewDesc {
 		TextureHandle texture;
-		TextureType viewType; // Can differ from base texture
-		Format format;		  // Can reinterpret format
+		TextureType viewType = TextureType::TEXTURE_2D;
+		Format format = Format::UNDEFINED;
 		uint32_t baseMipLevel;
 		uint32_t mipLevelCount;
 		uint32_t baseArrayLayer;
@@ -744,6 +1011,37 @@ namespace Rx {
 			: baseMipLevel(0), mipLevelCount(1),
 			  baseArrayLayer(0), arrayLayerCount(1),
 			  debugName(nullptr) {}
+
+		TextureViewDesc(TextureHandle tex)
+			: texture(tex), baseMipLevel(0), mipLevelCount(1),
+			  baseArrayLayer(0), arrayLayerCount(1),
+			  debugName(nullptr) {}
+
+		static TextureViewDesc Default(TextureHandle texture) {
+			return TextureViewDesc(texture);
+		}
+
+		static TextureViewDesc SingleMip(TextureHandle texture, uint32_t mipLevel) {
+			TextureViewDesc desc(texture);
+			desc.baseMipLevel = mipLevel;
+			desc.mipLevelCount = 1;
+			return desc;
+		}
+
+		static TextureViewDesc CubeFace(TextureHandle texture, uint32_t faceIndex) {
+			TextureViewDesc desc(texture);
+			desc.viewType = TextureType::TEXTURE_2D;
+			desc.baseArrayLayer = faceIndex;
+			desc.arrayLayerCount = 1;
+			return desc;
+		}
+
+		static TextureViewDesc ArrayLayer(TextureHandle texture, uint32_t layerIndex) {
+			TextureViewDesc desc(texture);
+			desc.baseArrayLayer = layerIndex;
+			desc.arrayLayerCount = 1;
+			return desc;
+		}
 	};
 
 	struct TextureCopyRegion {
@@ -756,21 +1054,48 @@ namespace Rx {
 		IVec3 dstOffset = IVec3(0);
 
 		IVec3 extent = IVec3(0);
+
+		static TextureCopyRegion FullTexture(uint32_t width, uint32_t height, uint32_t depth = 1) {
+			TextureCopyRegion region;
+			region.extent = IVec3(width, height, depth);
+			return region;
+		}
 	};
 
 	struct ShaderDesc {
 		ShaderStage type;
-		std::string source;			   // GLSL source or HLSL
-		std::vector<uint8_t> bytecode; // SPIR-V or compiled bytecode
-		std::string entryPoint;		   // Entry function name (for HLSL/SPIR-V)
+		std::string source;
+		std::vector<uint8_t> bytecode;
+		std::string entryPoint;
 
-		ShaderDesc(ShaderStage t, const std::string& src)
+		ShaderDesc(ShaderStage t = ShaderStage::VERTEX, const std::string& src = "")
 			: type(t), source(src), entryPoint("main") {
 		}
 
 		ShaderDesc(ShaderStage t, const std::vector<uint8_t>& code,
 			const std::string entry = "main")
 			: type(t), bytecode(code), entryPoint(entry) {
+		}
+
+		// Factory methods
+		static ShaderDesc FromSource(ShaderStage stage, const std::string& source) {
+			return ShaderDesc(stage, source);
+		}
+
+		static ShaderDesc FromBytecode(ShaderStage stage, const std::vector<uint8_t>& bytecode) {
+			return ShaderDesc(stage, bytecode);
+		}
+
+		static ShaderDesc VertexShader(const std::string& source) {
+			return ShaderDesc(ShaderStage::VERTEX, source);
+		}
+
+		static ShaderDesc FragmentShader(const std::string& source) {
+			return ShaderDesc(ShaderStage::FRAGMENT, source);
+		}
+
+		static ShaderDesc ComputeShader(const std::string& source) {
+			return ShaderDesc(ShaderStage::COMPUTE, source);
 		}
 	};
 
@@ -792,20 +1117,76 @@ namespace Rx {
 			  slopeScaledDepthBias(0.0f), depthClipEnable(true), scissorEnable(false),
 			  multisampleEnable(false) {
 		}
+
+		// Common presets
+		static RasterizerState Default() {
+			return RasterizerState();
+		}
+
+		static RasterizerState CullBack() {
+			RasterizerState state;
+			state.cullMode = CullMode::BACK;
+			return state;
+		}
+
+		static RasterizerState CullFront() {
+			RasterizerState state;
+			state.cullMode = CullMode::FRONT;
+			return state;
+		}
+
+		static RasterizerState Wireframe() {
+			RasterizerState state;
+			state.fillMode = FillMode::WIREFRAME;
+			state.cullMode = CullMode::NONE;
+			return state;
+		}
+
+		static RasterizerState ShadowMap() {
+			RasterizerState state;
+			state.cullMode = CullMode::FRONT;
+			state.depthBias = 1.25f;
+			state.slopeScaledDepthBias = 1.75f;
+			return state;
+		}
 	};
 
 	struct DepthStencilState {
 		bool depthEnable;
 		bool depthWriteEnable;
-		CompareFunc depthFunc;
 		bool stencilEnable;
+		CompareFunc depthFunc;
 		uint8_t stencilReadMask;
 		uint8_t stencilWriteMask;
-		// Stencil operations would go here...
 
 		DepthStencilState()
 			: depthEnable(true), depthWriteEnable(true), depthFunc(CompareFunc::LESS),
 			  stencilEnable(false), stencilReadMask(0xFF), stencilWriteMask(0xFF) {
+		}
+
+		// Common presets
+		static DepthStencilState Default() {
+			return DepthStencilState();
+		}
+
+		static DepthStencilState DepthReadOnly() {
+			DepthStencilState state;
+			state.depthEnable = true;
+			state.depthWriteEnable = false;
+			return state;
+		}
+
+		static DepthStencilState NoDepth() {
+			DepthStencilState state;
+			state.depthEnable = false;
+			state.depthWriteEnable = false;
+			return state;
+		}
+
+		static DepthStencilState DepthEqual() {
+			DepthStencilState state;
+			state.depthFunc = CompareFunc::EQUAL;
+			return state;
 		}
 	};
 
@@ -831,7 +1212,55 @@ namespace Rx {
 			  colorOp(BlendOp::ADD),
 			  alphaOp(BlendOp::ADD),
 			  blendFactor(1.0f) {}
+
+		// Common presets
+		static BlendState Disabled() {
+			BlendState state;
+			state.enable = false;
+			return state;
+		}
+
+		static BlendState AlphaBlend() {
+			BlendState state;
+			state.enable = true;
+			state.srcColor = BlendFunc::SRC_ALPHA;
+			state.dstColor = BlendFunc::ONE_MINUS_SRC_ALPHA;
+			state.srcAlpha = BlendFunc::ONE;
+			state.dstAlpha = BlendFunc::ZERO;
+			return state;
+		}
+
+		static BlendState Additive() {
+			BlendState state;
+			state.enable = true;
+			state.srcColor = BlendFunc::ONE;
+			state.dstColor = BlendFunc::ONE;
+			state.srcAlpha = BlendFunc::ONE;
+			state.dstAlpha = BlendFunc::ONE;
+			return state;
+		}
+
+		static BlendState Multiply() {
+			BlendState state;
+			state.enable = true;
+			state.srcColor = BlendFunc::DST_COLOR;
+			state.dstColor = BlendFunc::ZERO;
+			state.srcAlpha = BlendFunc::DST_ALPHA;
+			state.dstAlpha = BlendFunc::ZERO;
+			return state;
+		}
+
+		static BlendState Premultiplied() {
+			BlendState state;
+			state.enable = true;
+			state.srcColor = BlendFunc::ONE;
+			state.dstColor = BlendFunc::ONE_MINUS_SRC_ALPHA;
+			state.srcAlpha = BlendFunc::ONE;
+			state.dstAlpha = BlendFunc::ONE_MINUS_SRC_ALPHA;
+			return state;
+		}
 	};
+
 
 	// Describes a single binding slot in a ResourceGroupLayout
 	struct ResourceGroupLayoutItem {
@@ -880,14 +1309,30 @@ namespace Rx {
 	};
 
 	/// Describes the layout/structure of a pipeline inputs
-	struct ResourceGroupLayout {
+	struct ResourceGroupLayoutDesc {
 		std::vector<ResourceGroupLayoutItem> resourcebindings;
 		ResourceGroupFlags flags = ResourceGroupFlags::STATIC;
 		const char* debugName = nullptr;
-		ResourceGroupLayout() = default;
 
-		ResourceGroupLayout(const std::vector<ResourceGroupLayoutItem>& items)
+		ResourceGroupLayoutDesc() = default;
+
+		ResourceGroupLayoutDesc(const std::vector<ResourceGroupLayoutItem>& items)
 			: resourcebindings(items) {}
+
+		ResourceGroupLayoutDesc& AddBinding(const ResourceGroupLayoutItem& item) {
+			resourcebindings.push_back(item);
+			return *this;
+		}
+
+		ResourceGroupLayoutDesc& setFlags(ResourceGroupFlags f) {
+			flags = f;
+			return *this;
+		}
+
+		ResourceGroupLayoutDesc& setDebugName(const char* name) {
+			debugName = name;
+			return *this;
+		}
 	};
 
 	/// Describes a single resource binding in a descriptor set instance
@@ -908,8 +1353,6 @@ namespace Rx {
 			uint64_t rawHandle;
 			CombinedHandles combinedHandles;
 		};
-
-
 
 		ResourceGroupItem()
 			: binding(0), type(ResourceType::CONSTANT_BUFFER), rawHandle(0) {}
@@ -960,8 +1403,6 @@ namespace Rx {
 			ResourceGroupItem item;
 			item.binding = binding;
 			item.type = ResourceType::COMBINED_TEXTURE_SAMPLER;
-			// Store both handles into the combined struct so the union doesn't
-			// overwrite one with the other.
 			item.combinedHandles.texture = tex;
 			item.combinedHandles.sampler = samp;
 			return item;
@@ -970,40 +1411,111 @@ namespace Rx {
 
 	/// Describes a ResourceGroup instance
 	struct ResourceGroupDesc {
-		PipelineLayoutHandle pipelinelayout;	  // Must match layout used in pipeline
-		ResourceGroupLayoutHandle layout;		  //
-		std::vector<ResourceGroupItem> Resources; // Actual resources to bind
+		PipelineLayoutHandle pipelinelayout;
+		ResourceGroupLayoutHandle layout;
+		std::vector<ResourceGroupItem> Resources;
 		uint64_t dynamicOffset = 0;
 		const char* debugName = nullptr;
+
 		ResourceGroupDesc() = default;
+
 		ResourceGroupDesc(PipelineLayoutHandle layoutHandle, const std::vector<ResourceGroupItem>& items)
 			: pipelinelayout(layoutHandle), Resources(items) {}
+
+		ResourceGroupDesc& AddResource(const ResourceGroupItem& item) {
+			Resources.push_back(item);
+			return *this;
+		}
+
+		ResourceGroupDesc& setDebugName(const char* name) {
+			debugName = name;
+			return *this;
+		}
 	};
 
 
 	// Pipeline description
 	struct PipelineDesc {
 		std::vector<ShaderHandle> shaders;
-		VertexInputState vertexInputState;
-		Topology primitiveType;
-		RasterizerState rasterizer;
-		DepthStencilState depthStencil;
-		BlendState blend;
-		//[deprecated]
-		RenderPassHandle renderPass;
-
+		VertexInputState vertexInputState{};
+		Topology primitiveType{};
+		RasterizerState rasterizer{};
+		DepthStencilState depthStencil{};
+		BlendState blend{};
+		PipelineLayoutHandle layout;
 		std::vector<Format> colorFromats;
 		Format depthFormat = Format::UNDEFINED;
-		PipelineLayoutHandle layout;
+		RenderPassHandle renderPass;
 
 		PipelineDesc()
 			: primitiveType(Topology::TRIANGLES), renderPass(0) {}
+
+		PipelineDesc& AddShader(ShaderHandle shader) {
+			shaders.push_back(shader);
+			return *this;
+		}
+
+		PipelineDesc& setVertexInput(const VertexInputState& state) {
+			vertexInputState = state;
+			return *this;
+		}
+
+		PipelineDesc& setTopology(Topology topo) {
+			primitiveType = topo;
+			return *this;
+		}
+
+		PipelineDesc& setRasterizer(const RasterizerState& state) {
+			rasterizer = state;
+			return *this;
+		}
+
+		PipelineDesc& setDepthStencil(const DepthStencilState& state) {
+			depthStencil = state;
+			return *this;
+		}
+
+		PipelineDesc& setBlend(const BlendState& state) {
+			blend = state;
+			return *this;
+		}
+
+		PipelineDesc& setLayout(PipelineLayoutHandle layoutHandle) {
+			layout = layoutHandle;
+			return *this;
+		}
+
+		PipelineDesc& AddColorFormat(Format format) {
+			colorFromats.push_back(format);
+			return *this;
+		}
+
+		PipelineDesc& setDepthFormat(Format format) {
+			depthFormat = format;
+			return *this;
+		}
 	};
 
 	struct ClearValue {
 		ClearColor color;
 		float depth = 1.0f;
 		uint8_t stencil = 0;
+
+		ClearValue() = default;
+		ClearValue(const ClearColor& col) : color(col) {}
+		ClearValue(float d, uint8_t s = 0) : depth(d), stencil(s) {}
+
+		static ClearValue Color(const ClearColor& col) {
+			return ClearValue(col);
+		}
+
+		static ClearValue Depth(float d = 1.0f) {
+			return ClearValue(d);
+		}
+
+		static ClearValue DepthStencil(float d, uint8_t s) {
+			return ClearValue(d, s);
+		}
 	};
 
 
@@ -1013,8 +1525,26 @@ namespace Rx {
 		LoadOp loadOp = LoadOp::CLEAR;
 		StoreOp storeOp = StoreOp::STORE;
 		TextureViewHandle handle;
+
 		AttachmentDesc(Format fmt = Format::BGRA8_SRGB) : format(fmt) {}
+
+		static AttachmentDesc RenderTarget(TextureViewHandle view, Format fmt = Format::BGRA8_SRGB) {
+			AttachmentDesc desc(fmt);
+			desc.handle = view;
+			desc.loadOp = LoadOp::CLEAR;
+			desc.storeOp = StoreOp::STORE;
+			return desc;
+		}
+
+		static AttachmentDesc LoadAndStore(TextureViewHandle view, Format fmt = Format::BGRA8_SRGB) {
+			AttachmentDesc desc(fmt);
+			desc.handle = view;
+			desc.loadOp = LoadOp::LOAD;
+			desc.storeOp = StoreOp::STORE;
+			return desc;
+		}
 	};
+
 	struct DepthStencilAttachmentDesc {
 		TextureViewHandle handle;
 		Format format = Format::D24_UNORM_S8_UINT;
@@ -1022,11 +1552,25 @@ namespace Rx {
 		StoreOp depthStoreOp = StoreOp::STORE;
 		LoadOp stencilLoadOp = LoadOp::DONT_CARE;
 		StoreOp stencilStoreOp = StoreOp::DONT_CARE;
-		DepthStencilAttachmentDesc(Format format) : format(format) {}
+
+		DepthStencilAttachmentDesc(Format format = Format::D24_UNORM_S8_UINT) : format(format) {}
+
+		static DepthStencilAttachmentDesc Default(TextureViewHandle view, Format fmt = Format::D24_UNORM_S8_UINT) {
+			DepthStencilAttachmentDesc desc(fmt);
+			desc.handle = view;
+			return desc;
+		}
+
+		static DepthStencilAttachmentDesc DepthReadOnly(TextureViewHandle view, Format fmt = Format::D24_UNORM_S8_UINT) {
+			DepthStencilAttachmentDesc desc(fmt);
+			desc.handle = view;
+			desc.depthLoadOp = LoadOp::LOAD;
+			desc.depthStoreOp = StoreOp::DONT_CARE;
+			return desc;
+		}
 	};
 
 
-	//[deprecated]
 	struct RenderPassDesc {
 		std::vector<AttachmentDesc> colorAttachments;
 		DepthStencilAttachmentDesc depthStencilAttachment;
@@ -1036,23 +1580,50 @@ namespace Rx {
 			: depthStencilAttachment(Format::D24_UNORM_S8_UINT),
 			  hasDepthStencil(false) {
 		}
+
+		RenderPassDesc& AddColorAttachment(const AttachmentDesc& attachment) {
+			colorAttachments.push_back(attachment);
+			return *this;
+		}
+
+		RenderPassDesc& setDepthStencil(const DepthStencilAttachmentDesc& attachment) {
+			depthStencilAttachment = attachment;
+			hasDepthStencil = true;
+			return *this;
+		}
 	};
 
-	//[deprecated]
-	// Framebuffer description
 	struct FramebufferDesc {
 		std::vector<TextureViewHandle> colorAttachments;
 		TextureViewHandle depthStencilAttachment;
 		uint32_t width = 0;
 		uint32_t height = 0;
 		uint32_t layers = 1;
-		FramebufferDesc(int w, int h)
+
+		FramebufferDesc(int w = 0, int h = 0)
 			: depthStencilAttachment(0),
 			  width(w), height(h) {
 		}
+
 		FramebufferDesc(const IVec2& size)
 			: depthStencilAttachment(0),
 			  width(size.x), height(size.y) {
+		}
+
+		FramebufferDesc& AddColorAttachment(TextureViewHandle view) {
+			colorAttachments.push_back(view);
+			return *this;
+		}
+
+		FramebufferDesc& setDepthStencil(TextureViewHandle view) {
+			depthStencilAttachment = view;
+			return *this;
+		}
+
+		FramebufferDesc& setSize(uint32_t w, uint32_t h) {
+			width = w;
+			height = h;
+			return *this;
 		}
 	};
 
@@ -1060,8 +1631,27 @@ namespace Rx {
 		int width;
 		int height;
 		std::vector<AttachmentDesc> colorAttachments;
-		DepthStencilAttachmentDesc depthStencilAttachment{Format::D24_UNORM_S8_UINT};
+		DepthStencilAttachmentDesc depthStencilAttachment{ Format::D24_UNORM_S8_UINT };
 		bool hasDepthStencil;
+
+		RenderingDesc(int w = 0, int h = 0) : width(w), height(h), hasDepthStencil(false) {}
+
+		RenderingDesc& AddColorAttachment(const AttachmentDesc& attachment) {
+			colorAttachments.push_back(attachment);
+			return *this;
+		}
+
+		RenderingDesc& setDepthStencil(const DepthStencilAttachmentDesc& attachment) {
+			depthStencilAttachment = attachment;
+			hasDepthStencil = true;
+			return *this;
+		}
+
+		RenderingDesc& setSize(int w, int h) {
+			width = w;
+			height = h;
+			return *this;
+		}
 	};
 
 	// Statistics and debug info for a single frame.
@@ -1161,186 +1751,65 @@ namespace Rx {
 		virtual void copyBufferToTexture(BufferHandle srcBuffer, TextureHandle dstTexture, const TextureCopyRegion& region) = 0;
 		virtual void copyTexture(TextureHandle srcTexture, TextureHandle dstTexture, const TextureCopyRegion& region) = 0;
 		virtual void copyTextureToBuffer(TextureHandle srcTexture, BufferHandle dstBuffer, const TextureCopyRegion& region) = 0;
-
-
-		/*
-func
-open
-func
-close
-func
-clearState
-func
-clearTextureFloat
-func
-clearDepthStencilTexture
-func
-clearTextureUInt
-func
-copyTexture
-func
-copyTexture
-func
-copyTexture
-func
-writeTexture
-func
-resolveTexture
-func
-writeBuffer
-func
-clearBufferUInt
-func
-copyBuffer
-func
-clearSamplerFeedbackTexture
-func
-decodeSamplerFeedbackTexture
-func
-setSamplerFeedbackTextureState
-func
-setPushConstants
-func
-setGraphicsState
-func
-draw
-func
-drawIndexed
-func
-drawIndirect
-func
-drawIndexedIndirect
-func
-drawIndexedIndirectCount
-func
-setComputeState
-func
-dispatch
-func
-dispatchIndirect
-func
-setMeshletState
-func
-dispatchMesh
-func
-setRayTracingState
-func
-dispatchRays
-func
-buildOpacityMicromap
-func
-buildBottomLevelAccelStruct
-func
-compactBottomLevelAccelStructs
-func
-buildTopLevelAccelStruct
-func
-executeMultiIndirectClusterOperation
-func
-buildTopLevelAccelStructFromBuffer
-func
-convertCoopVecMatrices
-func
-beginTimerQuery
-func
-endTimerQuery
-func
-beginMarker
-func
-endMarker
-func
-setEnableAutomaticBarriers
-func
-setResourceStatesForBindingSet
-func
-setResourceStatesForFramebuffer
-func
-setEnableUavBarriersForTexture
-func
-setEnableUavBarriersForBuffer
-func
-beginTrackingTextureState
-func
-beginTrackingBufferState
-func
-setTextureState
-func
-setBufferState
-func
-setAccelStructState
-func
-setPermanentTextureState
-func
-setPermanentBufferState
-func
-commitBarriers
-func
-getTextureSubresourceState
-func
-getBufferState
-type
-CommandListHandle
-class
-AftermathCrashDumpHelper*/
 	};
 
 	// Synchronization dependency between queues
 	struct QueueDependency {
 		QueueType waitQueue; // Queue that needs to wait
 		Timeline waitValue;	 // Timeline value to wait for
-		QueueDependency(QueueType queue, Timeline value)
+
+		QueueDependency(QueueType queue = QueueType::GRAPHICS, Timeline value = Timeline(0))
 			: waitQueue(queue), waitValue(value) {}
 	};
 
 
 	// This Class Allocates a cpu side Recoding object CommandList
-	//(Maps to VkCommandPool in vulkan or ID3D12CommandAllocator in DX12)
 	class RENDERX_EXPORT CommandAllocator {
 	public:
-		// Allocate a new CommandList in INITIAL State
 		virtual CommandList* Allocate() = 0;
-
-		// Resets a Command List To the INITIAL state
 		virtual void Reset(CommandList* list) = 0;
-
-		// Sets a CommadList to a INVALID state
 		virtual void Free(CommandList* list) = 0;
-
-		// Resets All the CommandLsit Allocated From this Allocator To the Initial State;
 		virtual void Reset() = 0;
 	};
 
 	// Command List Submission
-	// Describes how to submit a command list
 	struct SubmitInfo {
-		// Command list to submit
 		CommandList* commandList = nullptr;
 		uint32_t commandListCount = 0;
-		// TEMP
-		// TODO
-		// When ResourceTracking is implemented , track the swapchain resources and determine which submition wrote last;
-		// wait on that last submition :: This is just a theory DONTKNOW if this will work or not
-
-		// if this is set true then the present operation waits on this submition to complete
 		bool writesToSwapchain = false;
-		// Dependencies - wait for these timeline values before executing
 		std::vector<QueueDependency> waitDependencies;
+
 		SubmitInfo() = default;
-		SubmitInfo(CommandList* cmd, uint32_t count)
+
+		SubmitInfo(CommandList* cmd, uint32_t count = 1)
 			: commandList(cmd), commandListCount(count) {}
+
+		static SubmitInfo Single(CommandList* cmd) {
+			return SubmitInfo(cmd, 1);
+		}
+
+		SubmitInfo& setSwapchainWrite() {
+			writesToSwapchain = true;
+			return *this;
+		}
+
+		SubmitInfo& AddDependency(const QueueDependency& dep) {
+			waitDependencies.push_back(dep);
+			return *this;
+		}
 	};
 
 	// Queue Capabilities
-	// Information about a queue's capabilities
 	struct QueueInfo {
 		QueueType type;
-		uint32_t familyIndex;					 // Internal queue family
-		bool supportsPresent;					 // Can present to swapchain
-		bool supportsTimestamps;				 // Can query GPU timestamps
-		uint32_t minImageTransferGranularity[3]; // Optimal transfer block size
+		uint32_t familyIndex;
+		bool supportsPresent;
+		bool supportsTimestamps;
+		uint32_t minImageTransferGranularity[3];
 
 		QueueInfo()
-			: type(QueueType::GRAPHICS), familyIndex(0), supportsPresent(false), supportsTimestamps(false), minImageTransferGranularity{ 1, 1, 1 } {}
+			: type(QueueType::GRAPHICS), familyIndex(0), supportsPresent(false),
+			  supportsTimestamps(false), minImageTransferGranularity{ 1, 1, 1 } {}
 	};
 
 	// Command Queue Interface
@@ -1348,50 +1817,18 @@ AftermathCrashDumpHelper*/
 	public:
 		virtual ~CommandQueue() = default;
 
-		/// Queue Information
-		/// Get queue type
-		/*	virtual QueueType GetType() const = 0;*/
-
-		/*	/// Get detailed queue info
-			virtual QueueInfo GetInfo() const = 0;*/
-
-		/// CommandAllcoator Management
-		/// Create a CommandAllcoator for this queue
-		/// @param debugName Optional name for debugging
 		virtual CommandAllocator* CreateCommandAllocator(const char* debugName = nullptr) = 0;
-
-		/// Destroy a cCommandAllcoator
 		virtual void DestroyCommandAllocator(CommandAllocator* allocator) = 0;
 
-		/// Submission
-		/// Submit a single command list
-		/// @return Timeline value that will be signaled when complete
 		virtual Timeline Submit(CommandList* commandList) = 0;
-
-		/// Submit with dependencies and custom signal value
 		virtual Timeline Submit(const SubmitInfo& submitInfo) = 0;
 
-		/// Synchronization
-
-		/// Wait for a specific timeline value on CPU!
-		/// @param timeout Timeout in nanoseconds (UINT64_MAX = infinite)
-		/// @return true if wait succeeded, false if timeout
 		virtual bool Wait(Timeline value, uint64_t timeout = UINT64_MAX) = 0;
-
-		/// Wait for the queue to be idle on CPU! (all submitted work complete)
 		virtual void WaitIdle() = 0;
-
-		/// Check if a timeline value has been reached (non-blocking)
 		virtual bool Poll(Timeline value) = 0;
-
-		/// Get the current timeline value (last completed submission)
 		virtual Timeline Completed() = 0;
-
-		/// Get the next timeline value that will be signaled
 		virtual Timeline Submitted() const = 0;
 
-		/// Features
-		/// Get GPU timestamp frequency (ticks per second)
 		virtual float TimestampFrequency() const = 0;
 	};
 
@@ -1401,6 +1838,31 @@ AftermathCrashDumpHelper*/
 		uint32_t preferredImageCount = 3;
 		Format preferredFromat = Format::BGRA8_SRGB;
 		uint32_t maxFramesInFlight = 3;
+
+		SwapchainDesc(uint32_t w = 0, uint32_t h = 0)
+			: width(w), height(h) {}
+
+		SwapchainDesc(const IVec2& size)
+			: width(size.x), height(size.y) {}
+
+		static SwapchainDesc Default(uint32_t width, uint32_t height) {
+			return SwapchainDesc(width, height);
+		}
+
+		SwapchainDesc& setImageCount(uint32_t count) {
+			preferredImageCount = count;
+			return *this;
+		}
+
+		SwapchainDesc& setFormat(Format fmt) {
+			preferredFromat = fmt;
+			return *this;
+		}
+
+		SwapchainDesc& setMaxFramesInFlight(uint32_t count) {
+			maxFramesInFlight = count;
+			return *this;
+		}
 	};
 
 	class RENDERX_EXPORT Swapchain {
@@ -1415,4 +1877,4 @@ AftermathCrashDumpHelper*/
 		virtual uint32_t GetImageCount() const = 0;
 	};
 
-} // namespace  RenderX
+} // namespace Rx
