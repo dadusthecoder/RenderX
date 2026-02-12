@@ -54,34 +54,23 @@ namespace Rx::RxVK {
 
 	void VulkanInstance::createSurface(const InitDesc& window) {
 #if defined(RX_PLATFORM_WINDOWS)
-#include <Windows.h>
-#include <vulkan/vulkan_win32.h>
 		VkWin32SurfaceCreateInfoKHR ci{};
 		ci.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
 		ci.hwnd = static_cast<HWND>(window.nativeWindowHandle);
 		ci.hinstance = static_cast<HINSTANCE>(window.displayHandle);
 		VK_CHECK(vkCreateWin32SurfaceKHR(m_Instance, &ci, nullptr, &m_Surface));
 #elif defined(RX_PLATFORM_LINUX)
-
-#include <vulkan/vulkan.h>
-#include <vulkan/vulkan_xlib.h>
-#include <X11/Xlib.h>
-
 VkXlibSurfaceCreateInfoKHR ci{};
 ci.sType = VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR;
 ci.dpy = static_cast<Display*>(window.displayHandle);
 ci.window = reinterpret_cast<::Window>(window.nativeWindowHandle);
-
 VK_CHECK(vkCreateXlibSurfaceKHR(m_Instance, &ci, nullptr, &m_Surface));
-
 #elif defined(RX_PLATFORM_MACOS)
-
 		VkMetalSurfaceCreateInfoEXT ci{};
 		ci.sType = VK_STRUCTURE_TYPE_METAL_SURFACE_CREATE_INFO_EXT;
 		ci.pLayer = static_cast<CAMetalLayer*>(window.nativeHandle);
 		VK_CHECK(vkCreateMetalSurfaceEXT(m_Instance, &ci, nullptr, &m_Surface));
 #elif defined(RX_PLATFORM_HEADLESS)
-		// Optional: no surface (compute / offscreen)
 		m_Surface = VK_NULL_HANDLE;
 #else
 #error "Vulkan surface creation not supported on this platform"
