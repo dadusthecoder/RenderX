@@ -1,9 +1,7 @@
 
 #include "VK_Common.h"
 #include "VK_RenderX.h"
-#include "Windows.h"
 #include <algorithm>
-#include <vulkan/vulkan_win32.h>
 
 // Define VMA implementation - must be included in exactly one source file
 #define VMA_IMPLEMENTATION
