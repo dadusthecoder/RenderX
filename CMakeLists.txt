@@ -80,6 +80,17 @@ if(RX_BUILD_VULKAN)
     find_package(Vulkan REQUIRED)
     target_link_libraries(RenderX PRIVATE Vulkan::Vulkan)
     target_compile_definitions(RenderX PRIVATE RX_ENABLE_VULKAN)
+    if(WIN32)
+    target_compile_definitions(${PROJECT_NAME}
+        PRIVATE
+        VK_USE_PLATFORM_WIN32_KHR
+    )
+elseif(UNIX AND NOT APPLE)
+    target_compile_definitions(${PROJECT_NAME}
+        PRIVATE
+        VK_USE_PLATFORM_XLIB_KHR
+    )
+endif()
 endif()
 
 if(RX_BUILD_OPENGL)

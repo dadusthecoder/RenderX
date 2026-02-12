@@ -240,7 +240,7 @@ namespace Rx {
 			s_FrameLogger->AddMessage(key, msg, level);
 	}
 
-	void Log::Status(const std::string& msg) {
+	void Log::LogStatus(const std::string& msg) {
 		if (!s_CoreLogger)
 			return;
 

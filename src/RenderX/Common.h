@@ -26,7 +26,7 @@
 #define RENDERX_DEBUGBREAK() std::abort()
 #endif
 
-// === Assert Macros ===
+
 #ifdef RX_DEBUG_BUILD
 #define RENDERX_ASSERT(expr)                                    \
 	{                                                           \
@@ -115,7 +115,7 @@ namespace Rx {
 		RENDERX_EXPORT static void FrameLog(const std::string& key, const std::string& msg,
 			spdlog::level::level_enum level = spdlog::level::info);
 
-		RENDERX_EXPORT static void Status(const std::string& msg);
+		RENDERX_EXPORT static void LogStatus(const std::string& msg);
 	private:
 		RENDERX_EXPORT static std::shared_ptr<spdlog::logger> s_CoreLogger;
 		RENDERX_EXPORT static std::shared_ptr<spdlog::logger> s_ClientLogger;
@@ -153,7 +153,7 @@ namespace Rx {
 #define RX_CLIENT_ERROR(msg, ...) ::Rx::Log::Client()->error("[{}:{}] " msg, __func__, __LINE__, ##__VA_ARGS__)
 #define RX_CLIENT_CRITICAL(msg, ...) ::Rx::Log::Client()->critical("[{}:{}] " msg, __func__, __LINE__, ##__VA_ARGS__)
 
-#define RX_STATUS(msg, ...) ::Rx::Log::Status(fmt::format(msg, ##__VA_ARGS__))
+#define RX_STATUS(msg, ...) ::Rx::Log::LogStatus(fmt::format(msg, ##__VA_ARGS__))
 #else
 #define RX_CORE_TRACE(msg, ...)
 #define RX_CORE_INFO(msg, ...)

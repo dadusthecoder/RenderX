@@ -1,6 +1,13 @@
 #include "VK_RenderX.h"
 #include "VK_Common.h"
-
+#if defined(_WIN32)
+#define NOMINMAX
+#include <windows.h>
+#include <vulkan/vulkan_win32.h>
+#elif defined(__linux__)
+#include <vulkan/vulkan_xlib.h>
+#include <X11/Xlib.h>
+#endif
 #include <vector>
 #include <cstring>
 
@@ -60,11 +67,11 @@ namespace Rx::RxVK {
 		ci.hinstance = static_cast<HINSTANCE>(window.displayHandle);
 		VK_CHECK(vkCreateWin32SurfaceKHR(m_Instance, &ci, nullptr, &m_Surface));
 #elif defined(RX_PLATFORM_LINUX)
-VkXlibSurfaceCreateInfoKHR ci{};
-ci.sType = VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR;
-ci.dpy = static_cast<Display*>(window.displayHandle);
-ci.window = reinterpret_cast<::Window>(window.nativeWindowHandle);
-VK_CHECK(vkCreateXlibSurfaceKHR(m_Instance, &ci, nullptr, &m_Surface));
+		VkXlibSurfaceCreateInfoKHR ci{};
+		ci.sType = VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR;
+		ci.dpy = static_cast<Display*>(window.displayHandle);
+		ci.window = reinterpret_cast<::Window>(window.nativeWindowHandle);
+		VK_CHECK(vkCreateXlibSurfaceKHR(m_Instance, &ci, nullptr, &m_Surface));
 #elif defined(RX_PLATFORM_MACOS)
 		VkMetalSurfaceCreateInfoEXT ci{};
 		ci.sType = VK_STRUCTURE_TYPE_METAL_SURFACE_CREATE_INFO_EXT;

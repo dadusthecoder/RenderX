@@ -2,16 +2,9 @@
 #include "ProLog/ProLog.h"
 #include "RenderX/Common.h"
 
+#define NOMINMAX
 #include <vulkan/vulkan.h>
-#if defined(_WIN32)
-#include <windows.h>
-#include <vulkan/vulkan_win32.h>
-#elif defined(__linux__)
-#include <vulkan/vulkan_xlib.h>
-#include <X11/Xlib.h>
-#endif
-
-#include "vk_mem_alloc.h"
+#include <vk_mem_alloc.h>
 
 #include <vector>
 #include <array>
@@ -346,7 +339,6 @@ namespace RxVK {
 		}
 
 		ResourceType* get(const Tag& handle) {
-
 			if (!handle.IsValid()) {
 				RENDERX_WARN("ResourcePool::get : invalid handle");
 				return nullptr;

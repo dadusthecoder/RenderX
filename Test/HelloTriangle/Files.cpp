@@ -1,5 +1,6 @@
 
 #if defined(_WIN32)
+#define NOMINMAX
 #include <windows.h>
 #include <commdlg.h>
 #elif defined(__linux__)
@@ -107,20 +108,35 @@ namespace Files {
 		return result;
 	}
 
+#if defined(_WIN32)
 
 	std::string WideToString(const std::wstring& wstr) {
 		if (wstr.empty()) return "";
 
-		int size_needed = WideCharToMultiByte(CP_UTF8, 0,
-			wstr.c_str(), (int)wstr.length(), NULL, 0, NULL, NULL);
+		int size_needed = WideCharToMultiByte(
+			CP_UTF8, 0,
+			wstr.c_str(), -1,
+			NULL, 0,
+			NULL, NULL);
 
 		std::string result(size_needed, 0);
 
-		WideCharToMultiByte(CP_UTF8, 0,
-			wstr.c_str(), (int)wstr.length(), &result[0], size_needed, NULL, NULL);
+		WideCharToMultiByte(
+			CP_UTF8, 0,
+			wstr.c_str(), -1,
+			result.data(), size_needed,
+			NULL, NULL);
 
 		return result;
 	}
+
+#else
+
+	std::string WideToString(const std::wstring&) {
+		return "";
+	}
+
+#endif
 
 	std::string OpenFile() {
 #if defined(_WIN32)
