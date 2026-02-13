@@ -1,5 +1,5 @@
 #pragma once
-#include "RenderX/Common.h"
+#include "RenderX/RX_Common.h"
 
 namespace Rx {
 

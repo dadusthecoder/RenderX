@@ -1,6 +1,6 @@
 #pragma once
 #include "ProLog/ProLog.h"
-#include "RenderX/Common.h"
+#include "RenderX/RX_Common.h"
 
 #define NOMINMAX
 #include <vulkan/vulkan.h>
@@ -26,8 +26,6 @@ namespace RxVK {
 
 	using Hash64 = uint64_t;
 
-	extern uint32_t MAX_FRAMES_IN_FLIGHT;
-	extern uint32_t g_CurrentFrame;
 
 	// Utility Functions
 
@@ -149,15 +147,6 @@ namespace RxVK {
 		uint32_t offset = 0;
 	};
 
-	struct FrameContex {
-		VkCommandPool commandPool = VK_NULL_HANDLE;
-		VkDescriptorPool DescriptorPool = VK_NULL_HANDLE;
-		VkSemaphore presentSemaphore = VK_NULL_HANDLE;
-		VkSemaphore renderSemaphore = VK_NULL_HANDLE;
-		VkFence fence = VK_NULL_HANDLE;
-		VulkanUploadContext upload;
-		uint32_t swapchainImageIndex = 0;
-	};
 
 	struct VulkanResourceGroupLayout {
 		VkDescriptorSetLayout layout = VK_NULL_HANDLE;
@@ -206,6 +195,10 @@ namespace RxVK {
 		VmaAllocationCreateFlags vmaFlags;
 	};
 
+
+	struct VulkanResource {
+
+	};
 	struct VulkanBuffer {
 		VkBuffer buffer = VK_NULL_HANDLE;
 		VmaAllocation allocation = VK_NULL_HANDLE;
@@ -213,10 +206,7 @@ namespace RxVK {
 		VkDeviceSize size = 0;
 		uint32_t bindingCount = 1;
 		BufferUsage flags;
-
-#ifdef RX_DEBUG_BUILD
 		const char* debugName = nullptr;
-#endif
 	};
 
 	struct VulkanBufferView {
@@ -225,6 +215,7 @@ namespace RxVK {
 		uint32_t range;
 		Hash64 hash;
 		bool isValid = false;
+		const char* debugName = nullptr;
 	};
 
 	struct VulkanTexture {
@@ -234,17 +225,21 @@ namespace RxVK {
 		uint32_t width = 0;
 		uint32_t height = 0;
 		uint32_t mipLevels = 1;
+		uint32_t arrayLayers = 1;
+		bool isSwapchainImage = false;
+		const char* debugName = nullptr;
+
 	};
 
 	struct VulkanTextureView {
-		VkImageView view;
-		VkImageViewType viewType;
-		VkImageLayout layout;
-		VkFormat format;
-		uint32_t baseMipLevel;
-		uint32_t mipLevelCount;
-		uint32_t baseArrayLayer;
-		uint32_t arrayLayerCount;
+		TextureHandle texture;
+		VkImageView view = VK_NULL_HANDLE;
+		VkFormat format =VK_FORMAT_UNDEFINED;
+		VkImageViewType viewType  = VK_IMAGE_VIEW_TYPE_2D;
+		uint32_t baseMipLevel = 0;
+		uint32_t mipLevelCount = 1;
+		uint32_t baseArrayLayer = 0;
+		uint32_t arrayLayerCount = 1;
 		const char* debugName = nullptr;
 	};
 
@@ -252,18 +247,21 @@ namespace RxVK {
 		std::string entryPoint;
 		ShaderStage type;
 		VkShaderModule shaderModule = VK_NULL_HANDLE;
+		const char* debugName = nullptr;
 	};
 
 	struct SwapchainSupportDetails {
 		VkSurfaceCapabilitiesKHR capabilities{};
 		std::vector<VkSurfaceFormatKHR> formats;
 		std::vector<VkPresentModeKHR> presentModes;
+		const char* debugName = nullptr;
 	};
 
 	struct VulkanCommandBuffer {
 		VkCommandPool pool = VK_NULL_HANDLE;
 		VkCommandBuffer buffer = VK_NULL_HANDLE;
 		uint64_t submissionID = 0;
+		const char* debugName = nullptr;
 	};
 
 	struct SwapchainCreateInfo {
@@ -278,10 +276,12 @@ namespace RxVK {
 
 	struct VulkanRenderPass {
 		VkRenderPass renderPass = VK_NULL_HANDLE;
+		const char* debugName = nullptr;
 	};
 
 	struct VulkanFramebuffer {
 		VkFramebuffer framebuffer = VK_NULL_HANDLE;
+		const char* debugName = nullptr;
 	};
 
 	// Resource Pool Template

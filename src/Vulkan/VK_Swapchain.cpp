@@ -136,6 +136,7 @@ namespace Rx::RxVK {
 		ci.imageExtent = extent;
 		ci.imageArrayLayers = 1;
 		ci.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
 		ci.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
 		ci.preTransform = caps.currentTransform;
 		ci.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
@@ -148,17 +149,31 @@ namespace Rx::RxVK {
 		m_Images.resize(imageCount);
 		VK_CHECK(vkGetSwapchainImagesKHR(ctx.device->logical(), m_Swapchain, &imageCount, m_Images.data()));
 
+		m_ImageViewsHandles.resize(imageCount);
 		m_ImageViews.resize(imageCount);
 		for (uint32_t i = 0; i < imageCount; ++i) {
 			VkImageViewCreateInfo iv{};
 			iv.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 			iv.image = m_Images[i];
+			VulkanTexture texture{};
+			texture.image = m_Images[i];
 			iv.viewType = VK_IMAGE_VIEW_TYPE_2D;
 			iv.format = surfaceFormat.format;
 			iv.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 			iv.subresourceRange.levelCount = 1;
 			iv.subresourceRange.layerCount = 1;
 			vkCreateImageView(ctx.device->logical(), &iv, nullptr, &m_ImageViews[i]);
+
+			VulkanTextureView textureView{};
+			textureView.texture = g_TexturePool.allocate(texture);
+			textureView.arrayLayerCount = 1;
+			textureView.baseArrayLayer = 0;
+			textureView.mipLevelCount = 1;
+			textureView.baseMipLevel = 0;
+			textureView.format = surfaceFormat.format;
+			textureView.view = m_ImageViews[i];
+			textureView.viewType = VK_IMAGE_VIEW_TYPE_2D;
+			m_ImageViewsHandles[i] = g_TextureViewPool.allocate(textureView);
 		}
 
 		m_Format = surfaceFormat.format;
@@ -168,11 +183,25 @@ namespace Rx::RxVK {
 
 	void VulkanSwapchain::destroySwapchain() {
 		auto& ctx = GetVulkanContext();
-		for (auto view : m_ImageViews)
+		int i = 0;
+		for (auto view : m_ImageViews) {
+
+			auto* textureview = g_TextureViewPool.get(m_ImageViewsHandles[i]);
+			auto* texture = g_TexturePool.get(textureview->texture);
+
+			g_TexturePool.free(textureview->texture);
+			g_TextureViewPool.free(m_ImageViewsHandles[i]);
+
+			// *texture = VulkanTexture{};
+			// *textureview = VulkanTextureView{};
+
 			vkDestroyImageView(ctx.device->logical(), view, nullptr);
+			i++;
+		}
 
 		m_ImageViews.clear();
 		m_Images.clear();
+		m_ImageViewsHandles.clear();
 
 		if (m_Swapchain) {
 			vkDestroySwapchainKHR(ctx.device->logical(), m_Swapchain, nullptr);

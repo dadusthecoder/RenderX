@@ -63,7 +63,7 @@ namespace RxVK {
 
 		auto* vb = g_BufferPool.get(buffer);
 		if (vb == nullptr || vb->buffer == VK_NULL_HANDLE) {
-			RENDERX_WARN("VulkanCommandList::setVertexBuffer: invalid vertex buffer handle");
+			RENDERX_WARN("invalid vertex buffer handle {}", buffer.id);
 			return;
 		}
 
@@ -112,17 +112,17 @@ namespace RxVK {
 		renderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
 
 		std::vector<VkRenderingAttachmentInfo> atts;
+		std::vector<VkImageMemoryBarrier2> barriers;
+     
 		for (auto& rxAtt : desc.colorAttachments) {
 			VkRenderingAttachmentInfo attinfo{};
 			attinfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-
 			attinfo.storeOp = ToVulkanStoreOp(rxAtt.storeOp);
 			attinfo.loadOp = ToVulkanLoadOp(rxAtt.loadOp);
 			auto* view = g_TextureViewPool.get(rxAtt.handle);
-			RENDERX_ASSERT_MSG(view, "VulkanCommandList::beginRendering: color attachment texture view is null");
+			RENDERX_ASSERT_MSG(view, "color attachment texture view is null");
 			attinfo.imageView = view->view;
-			attinfo.imageLayout = view->layout;
-
+			attinfo.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 			attinfo.clearValue = { 1.0f, 1.0f, 1.0f, 1.0f };
 			// TODO MSAA
 			// attinfo.resolveImageView
@@ -138,7 +138,7 @@ namespace RxVK {
 			auto* depthview = g_TextureViewPool.get(desc.depthStencilAttachment.handle);
 			RENDERX_ASSERT_MSG(depthview, "VulkanCommandList::beginRendering: depth attachment texture view is null");
 			depthinfo.imageView = depthview->view;
-			depthinfo.imageLayout = depthview->layout;
+			depthinfo.imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
 			depthinfo.clearValue = { 1.0f, 0.0f };
 		}
 		renderingInfo.colorAttachmentCount = static_cast<uint32_t>(atts.size());

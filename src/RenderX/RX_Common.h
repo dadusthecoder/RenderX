@@ -16,7 +16,7 @@
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/async.h>
 
-#include "Flags.h"
+#include "RX_Flags.h"
 
 #if defined(_MSC_VER)
 #define RENDERX_DEBUGBREAK() __debugbreak()
@@ -55,7 +55,9 @@
 #define RENDERX_EXPORT
 #else
 #if defined(RX_PLATFORM_WINDOWS)
+#pragma warning(disable : 4390)
 #if defined(RX_BUILD_DLL)
+#pragma warning(disable : 4251)
 #define RENDERX_EXPORT __declspec(dllexport)
 #else
 #define RENDERX_EXPORT __declspec(dllimport)
@@ -83,8 +85,7 @@ namespace spdlog {
 }
 
 namespace Rx {
-	// Frame-based logging accumulator
-	#pragma warning(disable: 4251)
+// Frame-based logging accumulator
 	class RENDERX_EXPORT FrameLogger {
 	public:
 		struct LogEntry {
@@ -101,7 +102,7 @@ namespace Rx {
 		std::mutex mutex_;
 	};
 
-	class  Log {
+	class Log {
 	public:
 		RENDERX_EXPORT static void Init();
 		RENDERX_EXPORT static void Shutdown();
@@ -182,7 +183,7 @@ namespace Rx {
 #define RENDERX_TRACE(msg, ...)
 #define RENDERX_INFO(msg, ...)
 #define RENDERX_WARN(msg, ...)
-#define RENDERX_ERROR(msg, ...)
+#define RENDERX_ERROR(msg, ...) 
 #define RENDERX_CRITICAL(msg, ...)
 #define LOG_SHUTDOWN()
 #endif
@@ -361,6 +362,22 @@ namespace Rx {
 	using UVec4 = glm::uvec4;
 	using Quat = glm::quat;
 
+	// Validation categories
+	enum class ValidationCategory : uint32_t {
+		NONE = 0,
+		HANDLE = 1 << 0,		  // Handle validity checks
+		STATE = 1 << 1,			  // State machine validation
+		RESOURCE = 1 << 2,		  // Resource usage validation
+		SYNCHRONIZATION = 1 << 3, // Sync primitive validation
+		MEMORY = 1 << 4,		  // Memory access validation
+		PIPELINE = 1 << 5,		  // Pipeline state validation
+		DESCRIPTOR = 1 << 6,	  // Resource binding validation
+		COMMAND_LIST = 1 << 7,	  // Command recording validation
+		RENDER_PASS = 1 << 8,	  // Render pass validation
+		ALL = 0xFFFFFFFF
+	};
+	ENABLE_BITMASK_OPERATORS(ValidationCategory)
+	
 	enum class GraphicsAPI {
 		NONE,
 		OPENGL,
@@ -1413,7 +1430,7 @@ namespace Rx {
 		PipelineLayoutHandle pipelinelayout;
 		ResourceGroupLayoutHandle layout;
 		std::vector<ResourceGroupItem> Resources;
-		uint64_t dynamicOffset = 0;
+		uint32_t dynamicOffset = 0;
 		const char* debugName = nullptr;
 
 		ResourceGroupDesc() = default;

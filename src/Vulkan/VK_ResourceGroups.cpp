@@ -634,7 +634,7 @@ namespace RxVK {
 		}
 
 		// Create the group
-		uint64_t timelineValue; //= ctx.getCurrentTimelineValue();
+		uint64_t timelineValue = 0; //= ctx.getCurrentTimelineValue();
 		auto group = ctx.descriptorSetManager->createGroup(desc.layout, desc, timelineValue);
 
 		auto handle = pool->allocate(group);

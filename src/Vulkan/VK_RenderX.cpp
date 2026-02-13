@@ -16,7 +16,6 @@ namespace RxVK {
 
 		VulkanContext& ctx = GetVulkanContext();
 		ctx.window = window.nativeWindowHandle;
-		MAX_FRAMES_IN_FLIGHT = window.maxFramesInFlight;
 		ctx.instance = std::make_unique<VulkanInstance>(window);
 		ctx.device = std::make_unique<VulkanDevice>(ctx.instance->getInstance(),ctx.instance->getSurface(),std::vector<const char*>(g_RequestedDeviceExtensions.begin(), g_RequestedDeviceExtensions.end()),std::vector<const char*>(g_RequestedValidationLayers.begin(), g_RequestedValidationLayers.end()));
 		ctx.swapchain = std::make_unique<VulkanSwapchain>();

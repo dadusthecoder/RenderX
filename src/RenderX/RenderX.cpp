@@ -1,5 +1,5 @@
 #include "RenderX/RenderX.h"
-#include "RenderX/Core.h"
+#include "RenderX/RX_Core.h"
 #include "RenderX/DebugProfiler.h"
 
 #include "ProLog/ProLog.h"

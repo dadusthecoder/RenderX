@@ -16,9 +16,6 @@ constexpr bool enableValidationLayers = false;
 namespace Rx {
 namespace RxVK {
 
-	uint32_t MAX_FRAMES_IN_FLIGHT;
-	static std::vector<FrameContex> g_Frames;
-
 	// ResourcePool instances for resource management
 	ResourcePool<VulkanTexture, TextureHandle> g_TexturePool;
 	ResourcePool<VulkanTextureView, TextureViewHandle> g_TextureViewPool;
@@ -36,6 +33,14 @@ namespace RxVK {
 		auto& ctx = GetVulkanContext();
 		auto g_Device = ctx.device->logical();
 		vkDeviceWaitIdle(ctx.device->logical());
+		//-------------------------------------------------------------------------------------
+		// The swapchain must be destroyed before resource pools.
+		// "freeAllVulkanResources()" releases pooled resources, and the backend may
+		// attempt to destroy swapchain images through those pools.
+		// Swapchain images are owned by the driver and must be destroyed with the swapchain.
+		ctx.swapchain.reset();
+		//
+		//-------------------------------------------------------------------------------------
 
 		g_BufferViewPool.ForEach([](VulkanBufferView& view) {
 			view.isValid = false;
@@ -93,14 +98,14 @@ namespace RxVK {
 			}
 		});
 
-		g_BufferViewPool.clear();
 		g_BufferPool.clear();
-		g_TexturePool.clear();
 		g_ShaderPool.clear();
-		g_PipelineLayoutPool.clear();
+		g_TexturePool.clear();
 		g_PipelinePool.clear();
+		g_BufferViewPool.clear();
 		g_RenderPassPool.clear();
 		g_BufferViewCache.clear();
+		g_PipelineLayoutPool.clear();
 	}
 
 	void VKShutdownCommon() {
@@ -108,20 +113,21 @@ namespace RxVK {
 		vkDeviceWaitIdle(ctx.device->logical());
 		freeAllVulkanResources();
 
-		// must folllow this order
+		// must folllow this distruction  order
 		ctx.descriptorPoolManager.reset();
 		ctx.descriptorSetManager.reset();
+		//
 		ctx.graphicsQueue.reset();
 		ctx.computeQueue.reset();
 		ctx.transferQueue.reset();
-		ctx.swapchain.reset();
+		//
 		ctx.stagingAllocator.reset();
 		ctx.immediateUploader.reset();
 		ctx.deferredUploader.reset();
+		//
 		ctx.allocator.reset();
 		ctx.device.reset();
 		ctx.instance.reset();
-
 	}
 
 } // namespace RxVK

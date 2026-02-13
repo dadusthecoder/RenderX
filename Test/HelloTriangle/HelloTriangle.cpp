@@ -95,10 +95,9 @@ int main() {
 
 	// Create vertex buffer
 	auto vertexbuffer = Rx::CreateBuffer(
-		Rx::BufferDesc::VertexBuffer(
-			sizeof(cubeVertices),
-			Rx::MemoryType::GPU_ONLY,
-			cubeVertices));
+		Rx::BufferDesc::VertexBuffer(sizeof(cubeVertices), Rx::MemoryType::GPU_ONLY, cubeVertices));
+	auto indexbuffer = Rx::CreateBuffer(
+		Rx::BufferDesc::IndexBuffer(sizeof(cubeIndices), Rx::MemoryType::GPU_ONLY, cubeIndices));
 
 	// Create vertex input state
 	auto vertexInputState = Rx::VertexInputState()
@@ -183,7 +182,12 @@ int main() {
 
 		// Record graphics commands
 		frame.graphicslist->open();
-		// Graphics work...
+		frame.graphicslist->setVertexBuffer(vertexbuffer);
+		frame.graphicslist->setIndexBuffer(indexbuffer);
+		// frame.graphicslist->beginRendering(Rx::RenderingDesc().
+		// AddColorAttachment());
+		//frame.graphicslist->drawIndexed(36);
+		//frame.graphicslist->endRendering();
 		frame.graphicslist->close();
 
 		// Submit compute work
