@@ -1,7 +1,9 @@
 #include "VK_RenderX.h"
 #include "VK_Common.h"
 #if defined(_WIN32)
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
 #include <windows.h>
 #include <vulkan/vulkan_win32.h>
 #elif defined(__linux__)

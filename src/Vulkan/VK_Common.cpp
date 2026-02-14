@@ -38,8 +38,7 @@ namespace RxVK {
 		// "freeAllVulkanResources()" releases pooled resources, and the backend may
 		// attempt to destroy swapchain images through those pools.
 		// Swapchain images are owned by the driver and must be destroyed with the swapchain.
-		ctx.swapchain.reset();
-		//
+		delete ctx.swapchain;
 		//-------------------------------------------------------------------------------------
 
 		g_BufferViewPool.ForEach([](VulkanBufferView& view) {
@@ -68,6 +67,7 @@ namespace RxVK {
 			texture.height = 0;
 			texture.mipLevels = 1;
 		});
+		
 		g_ShaderPool.ForEach([&](VulkanShader& shader) {
 			if (shader.shaderModule != VK_NULL_HANDLE) {
 				vkDestroyShaderModule(g_Device, shader.shaderModule, nullptr);
@@ -101,10 +101,12 @@ namespace RxVK {
 		g_BufferPool.clear();
 		g_ShaderPool.clear();
 		g_TexturePool.clear();
+		g_TextureViewPool.clear();
 		g_PipelinePool.clear();
 		g_BufferViewPool.clear();
 		g_RenderPassPool.clear();
 		g_BufferViewCache.clear();
+		g_FramebufferPool.clear();
 		g_PipelineLayoutPool.clear();
 	}
 
@@ -112,22 +114,21 @@ namespace RxVK {
 		auto& ctx = GetVulkanContext();
 		vkDeviceWaitIdle(ctx.device->logical());
 		freeAllVulkanResources();
-
-		// must folllow this distruction  order
-		ctx.descriptorPoolManager.reset();
-		ctx.descriptorSetManager.reset();
-		//
-		ctx.graphicsQueue.reset();
-		ctx.computeQueue.reset();
-		ctx.transferQueue.reset();
-		//
-		ctx.stagingAllocator.reset();
-		ctx.immediateUploader.reset();
-		ctx.deferredUploader.reset();
-		//
-		ctx.allocator.reset();
-		ctx.device.reset();
-		ctx.instance.reset();
+        
+		//---------------------------------------
+		// must follow this destruction order		
+		delete ctx.descriptorPoolManager;
+		delete ctx.descriptorSetManager;
+		delete ctx.stagingAllocator;
+		delete ctx.deferredUploader;
+		delete ctx.immediateUploader;
+		delete ctx.graphicsQueue;
+		delete ctx.computeQueue;
+		delete ctx.transferQueue;
+		delete ctx.allocator;
+		delete ctx.device;
+		delete ctx.instance;
+		//---------------------------------------
 	}
 
 } // namespace RxVK

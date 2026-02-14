@@ -2,7 +2,9 @@
 #include "ProLog/ProLog.h"
 #include "RenderX/RX_Common.h"
 
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
 #include <vulkan/vulkan.h>
 #include <vk_mem_alloc.h>
 
@@ -195,10 +197,29 @@ namespace RxVK {
 		VmaAllocationCreateFlags vmaFlags;
 	};
 
+	struct VulkanAccessState {
+		VkPipelineStageFlags2 stageMask = 0;
+		VkAccessFlags2 accessMask = 0;
+		VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
+		uint32_t queueFamily = VK_QUEUE_FAMILY_IGNORED;
 
-	struct VulkanResource {
+		bool operator==(const VulkanAccessState& o) const {
+			return stageMask == o.stageMask &&
+				   accessMask == o.accessMask &&
+				   layout == o.layout &&
+				   queueFamily == o.queueFamily;
+		}
 
+		bool operator!=(const VulkanAccessState& o) const {
+			return !(*this == o);
+		}
 	};
+
+	struct SparseTextureState {
+		VulkanAccessState global; // fallback
+		std::unordered_map<uint32_t, VulkanAccessState> overrides;
+	};
+
 	struct VulkanBuffer {
 		VkBuffer buffer = VK_NULL_HANDLE;
 		VmaAllocation allocation = VK_NULL_HANDLE;
@@ -207,6 +228,7 @@ namespace RxVK {
 		uint32_t bindingCount = 1;
 		BufferUsage flags;
 		const char* debugName = nullptr;
+		VulkanAccessState state;
 	};
 
 	struct VulkanBufferView {
@@ -228,14 +250,14 @@ namespace RxVK {
 		uint32_t arrayLayers = 1;
 		bool isSwapchainImage = false;
 		const char* debugName = nullptr;
-
+		SparseTextureState state;
 	};
 
 	struct VulkanTextureView {
 		TextureHandle texture;
 		VkImageView view = VK_NULL_HANDLE;
-		VkFormat format =VK_FORMAT_UNDEFINED;
-		VkImageViewType viewType  = VK_IMAGE_VIEW_TYPE_2D;
+		VkFormat format = VK_FORMAT_UNDEFINED;
+		VkImageViewType viewType = VK_IMAGE_VIEW_TYPE_2D;
 		uint32_t baseMipLevel = 0;
 		uint32_t mipLevelCount = 1;
 		uint32_t baseArrayLayer = 0;
@@ -245,7 +267,7 @@ namespace RxVK {
 
 	struct VulkanShader {
 		std::string entryPoint;
-		ShaderStage type;
+		PipelineStage type;
 		VkShaderModule shaderModule = VK_NULL_HANDLE;
 		const char* debugName = nullptr;
 	};
@@ -781,8 +803,6 @@ namespace RxVK {
 
 		void endRenderPass() override;
 
-
-
 		void beginRendering(const RenderingDesc& desc) override;
 		void endRendering() override;
 		void writeBuffer(
@@ -830,6 +850,25 @@ namespace RxVK {
 		// Track currently bound pipeline / layout so descriptor sets can be bound
 		PipelineHandle m_CurrentPipeline;
 		PipelineLayoutHandle m_CurrentPipelineLayout;
+
+		struct LocalTextureState {
+			TextureHandle handle;
+			uint32_t subresource;
+			VulkanAccessState state;
+		};
+
+		struct LocalBufferState {
+			BufferHandle handle;
+			VulkanAccessState state;
+		};
+
+		std::vector<LocalTextureState> m_LocalTextures;
+		std::vector<LocalBufferState> m_LocalBuffers;
+
+		std::vector<VkImageMemoryBarrier2> m_ImageBarriers;
+		std::vector<VkBufferMemoryBarrier2> m_BufferBarriers;
+
+
 		// Currently bound vertex/index buffers (handles) and offsets
 		BufferHandle m_VertexBuffer;
 		uint64_t m_VertexBufferOffset = 0;
@@ -902,18 +941,18 @@ namespace RxVK {
 
 	struct VulkanContext {
 		void* window = nullptr;
-		std::unique_ptr<VulkanInstance> instance;
-		std::unique_ptr<VulkanDevice> device;
-		std::unique_ptr<VulkanSwapchain> swapchain;
-		std::unique_ptr<VulkanCommandQueue> graphicsQueue;
-		std::unique_ptr<VulkanCommandQueue> computeQueue;
-		std::unique_ptr<VulkanCommandQueue> transferQueue;
-		std::unique_ptr<VulkanAllocator> allocator;
-		std::unique_ptr<VulkanDescriptorManager> descriptorSetManager;
-		std::unique_ptr<VulkanDescriptorPoolManager> descriptorPoolManager;
-		std::unique_ptr<VulkanStagingAllocator> stagingAllocator;
-		std::unique_ptr<VulkanImmediateUploader> immediateUploader;
-		std::unique_ptr<VulkanDeferredUploader> deferredUploader;
+		VulkanInstance* instance;
+		VulkanDevice* device;
+		VulkanSwapchain* swapchain;
+		VulkanCommandQueue* graphicsQueue;
+		VulkanCommandQueue* computeQueue;
+		VulkanCommandQueue* transferQueue;
+		VulkanAllocator* allocator;
+		VulkanDescriptorManager* descriptorSetManager;
+		VulkanDescriptorPoolManager* descriptorPoolManager;
+		VulkanStagingAllocator* stagingAllocator;
+		VulkanImmediateUploader* immediateUploader;
+		VulkanDeferredUploader* deferredUploader;
 	};
 
 	// Global Resource Pools
@@ -1403,32 +1442,32 @@ namespace RxVK {
 
 
 	// Shader Stage Conversion
-	inline VkShaderStageFlagBits ToVulkanShaderStage(ShaderStage stage) {
+	inline VkShaderStageFlagBits ToVulkanShaderStage(PipelineStage stage) {
 		switch (stage) {
-		case ShaderStage::VERTEX: return VK_SHADER_STAGE_VERTEX_BIT;
-		case ShaderStage::FRAGMENT: return VK_SHADER_STAGE_FRAGMENT_BIT;
-		case ShaderStage::GEOMETRY: return VK_SHADER_STAGE_GEOMETRY_BIT;
-		case ShaderStage::TESS_CONTROL: return VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
-		case ShaderStage::TESS_EVALUATION: return VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
-		case ShaderStage::COMPUTE: return VK_SHADER_STAGE_COMPUTE_BIT;
+		case PipelineStage::VERTEX: return VK_SHADER_STAGE_VERTEX_BIT;
+		case PipelineStage::FRAGMENT: return VK_SHADER_STAGE_FRAGMENT_BIT;
+		case PipelineStage::GEOMETRY: return VK_SHADER_STAGE_GEOMETRY_BIT;
+		case PipelineStage::TESS_CONTROL: return VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
+		case PipelineStage::TESS_EVALUATION: return VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
+		case PipelineStage::COMPUTE: return VK_SHADER_STAGE_COMPUTE_BIT;
 		default: return VK_SHADER_STAGE_VERTEX_BIT;
 		}
 	}
 
-	inline VkShaderStageFlags ToVulkanShaderStageFlags(ShaderStage stages) {
+	inline VkShaderStageFlags ToVulkanShaderStageFlags(PipelineStage stages) {
 		VkShaderStageFlags flags = 0;
 
-		if (Has(stages, ShaderStage::VERTEX))
+		if (Has(stages, PipelineStage::VERTEX))
 			flags |= VK_SHADER_STAGE_VERTEX_BIT;
-		if (Has(stages, ShaderStage::FRAGMENT))
+		if (Has(stages, PipelineStage::FRAGMENT))
 			flags |= VK_SHADER_STAGE_FRAGMENT_BIT;
-		if (Has(stages, ShaderStage::GEOMETRY))
+		if (Has(stages, PipelineStage::GEOMETRY))
 			flags |= VK_SHADER_STAGE_GEOMETRY_BIT;
-		if (Has(stages, ShaderStage::TESS_CONTROL))
+		if (Has(stages, PipelineStage::TESS_CONTROL))
 			flags |= VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
-		if (Has(stages, ShaderStage::TESS_EVALUATION))
+		if (Has(stages, PipelineStage::TESS_EVALUATION))
 			flags |= VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
-		if (Has(stages, ShaderStage::COMPUTE))
+		if (Has(stages, PipelineStage::COMPUTE))
 			flags |= VK_SHADER_STAGE_COMPUTE_BIT;
 
 		return flags;
@@ -1591,20 +1630,20 @@ namespace RxVK {
 
 
 	// Pipeline Stage Flags (for synchronization)
-	inline VkPipelineStageFlags ShaderStageToPipelineStage(ShaderStage stages) {
+	inline VkPipelineStageFlags ShaderStageToPipelineStage(PipelineStage stages) {
 		VkPipelineStageFlags flags = 0;
 
-		if (Has(stages, ShaderStage::VERTEX))
+		if (Has(stages, PipelineStage::VERTEX))
 			flags |= VK_PIPELINE_STAGE_VERTEX_SHADER_BIT;
-		if (Has(stages, ShaderStage::FRAGMENT))
+		if (Has(stages, PipelineStage::FRAGMENT))
 			flags |= VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-		if (Has(stages, ShaderStage::GEOMETRY))
+		if (Has(stages, PipelineStage::GEOMETRY))
 			flags |= VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT;
-		if (Has(stages, ShaderStage::TESS_CONTROL))
+		if (Has(stages, PipelineStage::TESS_CONTROL))
 			flags |= VK_PIPELINE_STAGE_TESSELLATION_CONTROL_SHADER_BIT;
-		if (Has(stages, ShaderStage::TESS_EVALUATION))
+		if (Has(stages, PipelineStage::TESS_EVALUATION))
 			flags |= VK_PIPELINE_STAGE_TESSELLATION_EVALUATION_SHADER_BIT;
-		if (Has(stages, ShaderStage::COMPUTE))
+		if (Has(stages, PipelineStage::COMPUTE))
 			flags |= VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
 
 		return flags;
@@ -1695,6 +1734,109 @@ namespace RxVK {
 		default:
 			return "UNKNOWN_COLOR_SPACE";
 		}
+	}
+
+	// resource tracking
+	inline VulkanAccessState ConvertState(
+		ResourceState state,
+		PipelineStage stages,
+		QueueType queue) {
+		VulkanAccessState out{};
+
+		VkPipelineStageFlags2 stageMask = 0;
+		VkAccessFlags2 accessMask = 0;
+		VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+		if (Has(state, ResourceState::SHADER_RESOURCE)) {
+			stageMask |= ShaderStageToPipelineStage(stages);
+			accessMask |= VK_ACCESS_2_SHADER_READ_BIT;
+			layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		}
+
+		if (Has(state, ResourceState::UNORDERED_ACCESS)) {
+			stageMask |= ShaderStageToPipelineStage(stages);
+			accessMask |= VK_ACCESS_2_SHADER_READ_BIT |
+						  VK_ACCESS_2_SHADER_WRITE_BIT;
+			layout = VK_IMAGE_LAYOUT_GENERAL;
+		}
+
+		if (Has(state, ResourceState::RENDER_TARGET)) {
+			stageMask |= VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+			accessMask |= VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+			layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		}
+
+		if (Has(state, ResourceState::TRANSFER_SRC)) {
+			stageMask |= VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+			accessMask |= VK_ACCESS_2_TRANSFER_READ_BIT;
+			layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+		}
+
+		if (Has(state, ResourceState::TRANSFER_DST)) {
+			stageMask |= VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+			accessMask |= VK_ACCESS_2_TRANSFER_WRITE_BIT;
+			layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+		}
+
+		out.stageMask = stageMask;
+		out.accessMask = accessMask;
+		out.layout = layout;
+		return out;
+	}
+
+	inline bool HasWriteAccess(VkAccessFlags2 access) {
+		return access & (VK_ACCESS_2_SHADER_WRITE_BIT |
+							VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT |
+							VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
+							VK_ACCESS_2_TRANSFER_WRITE_BIT |
+							VK_ACCESS_2_HOST_WRITE_BIT |
+							VK_ACCESS_2_MEMORY_WRITE_BIT);
+	}
+
+	inline bool IsReadOnly(VkAccessFlags2 access) {
+		return !HasWriteAccess(access);
+	}
+
+	inline bool NeedsBarrier(
+		const VulkanAccessState& oldState,
+		const VulkanAccessState& newState) {
+		bool writeHazard =
+			HasWriteAccess(oldState.accessMask) ||
+			HasWriteAccess(newState.accessMask);
+
+		bool layoutChange = oldState.layout != newState.layout;
+		bool queueTransfer =
+			oldState.queueFamily != newState.queueFamily &&
+			oldState.queueFamily != VK_QUEUE_FAMILY_IGNORED;
+
+		bool stageOnlyChange =
+			oldState.stageMask != newState.stageMask &&
+			IsReadOnly(oldState.accessMask) &&
+			IsReadOnly(newState.accessMask) &&
+			!layoutChange &&
+			!queueTransfer;
+
+		// Skip barrier entirely
+		if (stageOnlyChange)
+			return false;
+
+		return writeHazard || layoutChange || queueTransfer;
+	}
+
+	inline VulkanAccessState& GetSubresourceState(
+		SparseTextureState& sparse,
+		uint32_t subresource) {
+		auto it = sparse.overrides.find(subresource);
+		if (it != sparse.overrides.end())
+			return it->second;
+		return sparse.global;
+	}
+
+	inline void SetSubresourceState(
+		SparseTextureState& sparse,
+		uint32_t subresource,
+		const VulkanAccessState& newState) {
+		sparse.overrides[subresource] = newState;
 	}
 
 

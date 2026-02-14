@@ -260,7 +260,7 @@ namespace Rx::RxVK {
 		info.preferredColorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR; // Or add to SwapchainDesc
 		info.preferredPresentMode = VK_PRESENT_MODE_MAILBOX_KHR;	  // Or add to SwapchainDesc
 		ctx.swapchain->create(info);
-		return ctx.swapchain.get();
+		return ctx.swapchain;
 	}
 
 	void VKDestroySwapchain(Swapchain* swapchain) {

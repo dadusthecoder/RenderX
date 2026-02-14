@@ -85,7 +85,7 @@ namespace spdlog {
 }
 
 namespace Rx {
-// Frame-based logging accumulator
+	// Frame-based logging accumulator
 	class RENDERX_EXPORT FrameLogger {
 	public:
 		struct LogEntry {
@@ -183,7 +183,7 @@ namespace Rx {
 #define RENDERX_TRACE(msg, ...)
 #define RENDERX_INFO(msg, ...)
 #define RENDERX_WARN(msg, ...)
-#define RENDERX_ERROR(msg, ...) 
+#define RENDERX_ERROR(msg, ...)
 #define RENDERX_CRITICAL(msg, ...)
 #define LOG_SHUTDOWN()
 #endif
@@ -377,7 +377,33 @@ namespace Rx {
 		ALL = 0xFFFFFFFF
 	};
 	ENABLE_BITMASK_OPERATORS(ValidationCategory)
-	
+
+	enum class ResourceState : uint32_t {
+		UNDEFINED = 0,
+		COMMON = 1 << 0, // Generic read state (D3D12 COMMON)
+		VERTEX_BUFFER = 1 << 1,
+		INDEX_BUFFER = 1 << 2,
+		CONSTANT_BUFFER = 1 << 3,
+		SHADER_RESOURCE = 1 << 4,  // Read-only texture/buffer in shader
+		UNORDERED_ACCESS = 1 << 5, // Read-write UAV/storage buffer
+		RENDER_TARGET = 1 << 6,
+		DEPTH_WRITE = 1 << 7,
+		DEPTH_READ = 1 << 8,
+		TRANSFER_SRC = 1 << 9,
+		TRANSFER_DST = 1 << 10,
+		PRESENT = 1 << 11,
+
+		
+		//TODO
+		INDIRECT_ARGUMENT = 1 << 12, //not supported
+		ACCELERATION_STRUCTURE_READ = 1 << 13, //not supported
+		ACCELERATION_STRUCTURE_WRITE = 1 << 14,//not supported
+		RESOLVE_SRC = 1 << 15,//not supported
+		RESOLVE_DST = 1 << 16//not supported
+
+	};
+	ENABLE_BITMASK_OPERATORS(ResourceState)
+
 	enum class GraphicsAPI {
 		NONE,
 		OPENGL,
@@ -537,7 +563,7 @@ namespace Rx {
 	};
 
 
-	enum class ShaderStage : uint8_t {
+	enum class PipelineStage : uint8_t {
 		NONE = 0,
 		VERTEX = 1 << 0,
 		FRAGMENT = 1 << 1,
@@ -545,10 +571,9 @@ namespace Rx {
 		TESS_CONTROL = 1 << 3,
 		TESS_EVALUATION = 1 << 4,
 		COMPUTE = 1 << 5,
-		ALL = VERTEX | FRAGMENT | COMPUTE
+		ALL = VERTEX | FRAGMENT | COMPUTE | GEOMETRY | TESS_CONTROL | TESS_EVALUATION 
 	};
-	ENABLE_BITMASK_OPERATORS(ShaderStage)
-
+	ENABLE_BITMASK_OPERATORS(PipelineStage)
 
 	enum class ResourceGroupFlags : uint8_t {
 		NONE = 0,				  // No special flags
@@ -573,7 +598,6 @@ namespace Rx {
 		STREAMING = 1 << 10
 	};
 	ENABLE_BITMASK_OPERATORS(BufferUsage)
-
 
 	struct Viewport {
 		int x, y;
@@ -1079,39 +1103,39 @@ namespace Rx {
 	};
 
 	struct ShaderDesc {
-		ShaderStage type;
+		PipelineStage type;
 		std::string source;
 		std::vector<uint8_t> bytecode;
 		std::string entryPoint;
 
-		ShaderDesc(ShaderStage t = ShaderStage::VERTEX, const std::string& src = "")
+		ShaderDesc(PipelineStage t = PipelineStage::VERTEX, const std::string& src = "")
 			: type(t), source(src), entryPoint("main") {
 		}
 
-		ShaderDesc(ShaderStage t, const std::vector<uint8_t>& code,
+		ShaderDesc(PipelineStage t, const std::vector<uint8_t>& code,
 			const std::string entry = "main")
 			: type(t), bytecode(code), entryPoint(entry) {
 		}
 
 		// Factory methods
-		static ShaderDesc FromSource(ShaderStage stage, const std::string& source) {
+		static ShaderDesc FromSource(PipelineStage stage, const std::string& source) {
 			return ShaderDesc(stage, source);
 		}
 
-		static ShaderDesc FromBytecode(ShaderStage stage, const std::vector<uint8_t>& bytecode) {
+		static ShaderDesc FromBytecode(PipelineStage stage, const std::vector<uint8_t>& bytecode) {
 			return ShaderDesc(stage, bytecode);
 		}
 
 		static ShaderDesc VertexShader(const std::string& source) {
-			return ShaderDesc(ShaderStage::VERTEX, source);
+			return ShaderDesc(PipelineStage::VERTEX, source);
 		}
 
 		static ShaderDesc FragmentShader(const std::string& source) {
-			return ShaderDesc(ShaderStage::FRAGMENT, source);
+			return ShaderDesc(PipelineStage::FRAGMENT, source);
 		}
 
 		static ShaderDesc ComputeShader(const std::string& source) {
-			return ShaderDesc(ShaderStage::COMPUTE, source);
+			return ShaderDesc(PipelineStage::COMPUTE, source);
 		}
 	};
 
@@ -1285,41 +1309,41 @@ namespace Rx {
 		// What kind of resource
 		ResourceType type;
 		// Which shader stages can access this
-		ShaderStage stages;
+		PipelineStage stages;
 		// Array size (1 for non-arrays, >1 for arrays) For Bindless indexing
 		uint32_t count;
 
 		ResourceGroupLayoutItem()
 			: binding(0), type(ResourceType::CONSTANT_BUFFER),
-			  stages(ShaderStage::ALL), count(1) {}
+			  stages(PipelineStage::ALL), count(1) {}
 
-		ResourceGroupLayoutItem(uint32_t bind, ResourceType t, ShaderStage s = ShaderStage::ALL, uint32_t cnt = 1)
+		ResourceGroupLayoutItem(uint32_t bind, ResourceType t, PipelineStage s = PipelineStage::ALL, uint32_t cnt = 1)
 			: binding(bind), type(t), stages(s), count(cnt) {}
 
 		// Convenience factory methods
-		static ResourceGroupLayoutItem ConstantBuffer(uint32_t binding, ShaderStage stages = ShaderStage::ALL) {
+		static ResourceGroupLayoutItem ConstantBuffer(uint32_t binding, PipelineStage stages = PipelineStage::ALL) {
 			return ResourceGroupLayoutItem(binding, ResourceType::CONSTANT_BUFFER, stages, 1);
 		}
 
-		static ResourceGroupLayoutItem StorageBuffer(uint32_t binding, ShaderStage stages = ShaderStage::ALL, bool writable = false) {
+		static ResourceGroupLayoutItem StorageBuffer(uint32_t binding, PipelineStage stages = PipelineStage::ALL, bool writable = false) {
 			return ResourceGroupLayoutItem(binding,
 				writable ? ResourceType::RW_STORAGE_BUFFER : ResourceType::STORAGE_BUFFER,
 				stages, 1);
 		}
 
-		static ResourceGroupLayoutItem Texture_SRV(uint32_t binding, ShaderStage stages = ShaderStage::ALL, uint32_t count = 1) {
+		static ResourceGroupLayoutItem Texture_SRV(uint32_t binding, PipelineStage stages = PipelineStage::ALL, uint32_t count = 1) {
 			return ResourceGroupLayoutItem(binding, ResourceType::TEXTURE_SRV, stages, count);
 		}
 
-		static ResourceGroupLayoutItem Texture_UAV(uint32_t binding, ShaderStage stages = ShaderStage::ALL, uint32_t count = 1) {
+		static ResourceGroupLayoutItem Texture_UAV(uint32_t binding, PipelineStage stages = PipelineStage::ALL, uint32_t count = 1) {
 			return ResourceGroupLayoutItem(binding, ResourceType::TEXTURE_UAV, stages, count);
 		}
 
-		static ResourceGroupLayoutItem Sampler(uint32_t binding, ShaderStage stages = ShaderStage::ALL) {
+		static ResourceGroupLayoutItem Sampler(uint32_t binding, PipelineStage stages = PipelineStage::ALL) {
 			return ResourceGroupLayoutItem(binding, ResourceType::SAMPLER, stages, 1);
 		}
 
-		static ResourceGroupLayoutItem CombinedTextureSampler(uint32_t binding, ShaderStage stages = ShaderStage::ALL) {
+		static ResourceGroupLayoutItem CombinedTextureSampler(uint32_t binding, PipelineStage stages = PipelineStage::ALL) {
 			return ResourceGroupLayoutItem(binding, ResourceType::COMBINED_TEXTURE_SAMPLER, stages, 1);
 		}
 	};

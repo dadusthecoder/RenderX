@@ -1,5 +1,5 @@
+#pragma once
 #include <type_traits>
-
 namespace Rx {
 	template <typename Enum>
 	struct EnableBitMaskOperators {
@@ -100,11 +100,10 @@ namespace Rx {
 	Clear(Enum& mask, Enum flag) {
 		mask &= ~flag;
 	}
-
-#define ENABLE_BITMASK_OPERATORS(_enum)            \
-	template <>                                    \
+#define ENABLE_BITMASK_OPERATORS(_enum)        \
+	template <>                                \
 	struct EnableBitMaskOperators<_enum> { \
-		static constexpr bool enable = true;       \
+		static constexpr bool enable = true;   \
 	};
 
-} // namespace  RenderX
+} // namespace Rx} // namespace  RenderX

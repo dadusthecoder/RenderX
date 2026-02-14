@@ -215,11 +215,11 @@ namespace Rx::RxVK {
 	CommandQueue* VKGetGpuQueue(QueueType type) {
 		switch (type) {
 		case QueueType::GRAPHICS:
-			return GetVulkanContext().graphicsQueue.get();
+			return GetVulkanContext().graphicsQueue;
 		case QueueType::COMPUTE:
-			return GetVulkanContext().computeQueue.get();
+			return GetVulkanContext().computeQueue;
 		case QueueType::TRANSFER:
-			return GetVulkanContext().transferQueue.get();
+			return GetVulkanContext().transferQueue;
 		default: {
 			RENDERX_ERROR("VKGetGpuQueue: unknown queue type");
 			return nullptr;

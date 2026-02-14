@@ -192,56 +192,63 @@ namespace Rx::RxVK {
 #else
 		RENDERX_INFO("Suitable devices:");
 		for (auto idx : devices) {
-			RENDERX_INFO("  [{}] {} - Score: {}",
+			RENDERX_INFO("  {} {} - Score: {}",
 				idx.index,
 				idx.properties.deviceName,
 				idx.score);
 		}
 
+		int i = 0, recommendedinfoIndex = 0;
 		int recommendedIndex = devices[0].index;
-		uint32_t bestScore = devices[recommendedIndex].score;
+		uint32_t bestScore = devices[0].score;
 
 		for (auto idx : devices) {
 			if (idx.score > bestScore) {
 				bestScore = idx.score;
 				recommendedIndex = idx.index;
+				recommendedinfoIndex = i;
 			}
+			i++;
 		}
 
-		RENDERX_INFO("Recommended: [{}] (highest score)", devices[recommendedIndex].properties.deviceName);
+		RENDERX_INFO("Recommended: {} (highest score)", devices[recommendedinfoIndex].properties.deviceName);
 		std::string input;
 		std::getline(std::cin, input);
 
 		if (input.empty()) {
-			RENDERX_INFO("Using recommended device [{}]", devices[recommendedIndex].properties.deviceName);
 			return recommendedIndex;
 		}
 
 		try {
 			int selectedIndex = std::stoi(input);
+			int selectedInfoIndex = 0;
 			bool valid = false;
+			i = 0;
 			for (auto idx : devices) {
 				if (idx.index == selectedIndex) {
+					selectedInfoIndex = i;
 					valid = true;
 					break;
 				}
+				i++;
 			}
 
 			if (valid) {
-				RENDERX_INFO("Using selected device [{}]", devices[selectedIndex].properties.deviceName);
+				RENDERX_INFO("Using selected device [{}]", devices[selectedInfoIndex].properties.deviceName);
 				return selectedIndex;
 			}
 			else {
 				RENDERX_WARN("Invalid device selection. Falling back to recommended device [{}]",
-					devices[recommendedIndex].properties.deviceName);
+					devices[recommendedinfoIndex].properties.deviceName);
 				return recommendedIndex;
 			}
 		}
+
 		catch (const std::exception& e) {
-			RENDERX_WARN("Invalid device selection input. Falling back to recommended device [{}]",
-				devices[recommendedIndex].properties.deviceName);
+			RENDERX_WARN("Exception  {} : Falling back to recommended device {}", devices[recommendedinfoIndex].properties.deviceName, e.what());
 			return recommendedIndex;
 		}
+
 		return -1;
 #endif
 	}
@@ -397,7 +404,6 @@ namespace Rx::RxVK {
 		uint32_t count;
 		vkEnumeratePhysicalDevices(m_Instance, &count, nullptr);
 		devices.resize(count);
-		infos.resize(count);
 		vkEnumeratePhysicalDevices(m_Instance, &count, devices.data());
 
 		for (uint32_t i = 0; i < count; i++) {

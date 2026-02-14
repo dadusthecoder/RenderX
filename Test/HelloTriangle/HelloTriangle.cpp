@@ -108,12 +108,12 @@ int main() {
 	// Load shaders
 	auto vertexshader = Rx::CreateShader(
 		Rx::ShaderDesc::FromBytecode(
-			Rx::ShaderStage::VERTEX,
+			Rx::PipelineStage::VERTEX,
 			Files::ReadBinaryFile("D:/dev/cpp/RenderX/Test/HelloTriangle/Shaders/bsc.vert.spv")));
 
 	auto fragmentshader = Rx::CreateShader(
 		Rx::ShaderDesc::FromBytecode(
-			Rx::ShaderStage::FRAGMENT,
+			Rx::PipelineStage::FRAGMENT,
 			Files::ReadBinaryFile("D:/dev/cpp/RenderX/Test/HelloTriangle/Shaders/bsc.frag.spv")));
 
 	// Create swapchain
@@ -127,7 +127,7 @@ int main() {
 	// Create resource group
 	auto rglayout = Rx::CreateResourceGroupLayout(
 		Rx::ResourceGroupLayoutDesc()
-			.AddBinding(Rx::ResourceGroupLayoutItem::ConstantBuffer(0, Rx::ShaderStage::VERTEX))
+			.AddBinding(Rx::ResourceGroupLayoutItem::ConstantBuffer(0, Rx::PipelineStage::VERTEX))
 			.setDebugName("MainResourceGroupLayout"));
 
 	// Create pipeline layout
