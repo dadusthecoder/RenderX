@@ -1,0 +1,88 @@
+name: Build
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+        build-type: [Debug, Release]
+
+        include:
+          - os: windows-latest
+            generator: "Visual Studio 17 2022"
+            arch: "-A x64"
+
+          - os: ubuntu-latest
+            generator: "Ninja"
+            arch: ""
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    # =========================
+    # Linux Dependencies
+    # =========================
+    - name: Install dependencies (Linux)
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          ninja-build \
+          libx11-dev libxrandr-dev libxinerama-dev \
+          libxcursor-dev libxi-dev \
+          libvulkan-dev vulkan-utility-libraries-dev
+
+    # =========================
+    # Install vcpkg manually (Windows)
+    # =========================
+    - name: Setup vcpkg (Windows)
+      if: runner.os == 'Windows'
+      run: |
+        git clone https://github.com/microsoft/vcpkg.git C:\vcpkg
+        C:\vcpkg\bootstrap-vcpkg.bat
+        C:\vcpkg\vcpkg install vulkan:x64-windows
+
+    # =========================
+    # Configure (Linux)
+    # =========================
+    - name: Configure (Linux)
+      if: runner.os == 'Linux'
+      run: |
+        cmake -S . -B build \
+          -G "${{ matrix.generator }}" \
+          -DGLFW_BUILD_WAYLAND=OFF \
+          -DCMAKE_BUILD_TYPE=${{ matrix.build-type }}
+
+    # =========================
+    # Configure (Windows)
+    # =========================
+    - name: Configure (Windows)
+      if: runner.os == 'Windows'
+      run: |
+        cmake -S . -B build -G "${{ matrix.generator }}" ${{ matrix.arch }} `
+          -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake `
+          -DGLFW_BUILD_WAYLAND=OFF
+
+    # =========================
+    # Build
+    # =========================
+    - name: Build
+      run: cmake --build build --config ${{ matrix.build-type }} --parallel
+
+    # =========================
+    # Test
+    # =========================
+    - name: Test
+      working-directory: build
+      run: ctest --build-config ${{ matrix.build-type }} --output-on-failure
