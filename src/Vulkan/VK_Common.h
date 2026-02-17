@@ -826,15 +826,20 @@ public:
     void
     copyBufferToTexture(BufferHandle srcBuffer, TextureHandle dstTexture, const TextureCopyRegion& region) override;
 
-    /// Copy between textures
     void copyTexture(TextureHandle srcTexture, TextureHandle dstTexture, const TextureCopyRegion& region) override;
 
-    // coyp buffer to buffer
     void copyBuffer(BufferHandle src, BufferHandle dst, const BufferCopyRegion& region) override;
 
-    /// Copy from texture to buffer (readback)
     void
     copyTextureToBuffer(TextureHandle srcTexture, BufferHandle dstBuffer, const TextureCopyRegion& region) override;
+
+    /// Copy between textures
+    void Barrier(const Memory_Barrier* memoryBarriers,
+                 uint32_t              memoryCount,
+                 const BufferBarrier*  bufferBarriers,
+                 uint32_t              bufferCount,
+                 const TextureBarrier* imageBarriers,
+                 uint32_t              imageCount) override;
 
     // friends
     friend class VulkanCommandAllocator;
@@ -1505,45 +1510,6 @@ inline VkAttachmentStoreOp ToVulkanStoreOp(StoreOp op) {
     }
 }
 
-// Shader Stage Conversion
-inline VkShaderStageFlagBits ToVulkanShaderStage(PipelineStage stage) {
-    switch (stage) {
-    case PipelineStage::VERTEX:
-        return VK_SHADER_STAGE_VERTEX_BIT;
-    case PipelineStage::FRAGMENT:
-        return VK_SHADER_STAGE_FRAGMENT_BIT;
-    case PipelineStage::GEOMETRY:
-        return VK_SHADER_STAGE_GEOMETRY_BIT;
-    case PipelineStage::TESS_CONTROL:
-        return VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
-    case PipelineStage::TESS_EVALUATION:
-        return VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
-    case PipelineStage::COMPUTE:
-        return VK_SHADER_STAGE_COMPUTE_BIT;
-    default:
-        return VK_SHADER_STAGE_VERTEX_BIT;
-    }
-}
-
-inline VkShaderStageFlags ToVulkanShaderStageFlags(PipelineStage stages) {
-    VkShaderStageFlags flags = 0;
-
-    if (Has(stages, PipelineStage::VERTEX))
-        flags |= VK_SHADER_STAGE_VERTEX_BIT;
-    if (Has(stages, PipelineStage::FRAGMENT))
-        flags |= VK_SHADER_STAGE_FRAGMENT_BIT;
-    if (Has(stages, PipelineStage::GEOMETRY))
-        flags |= VK_SHADER_STAGE_GEOMETRY_BIT;
-    if (Has(stages, PipelineStage::TESS_CONTROL))
-        flags |= VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
-    if (Has(stages, PipelineStage::TESS_EVALUATION))
-        flags |= VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
-    if (Has(stages, PipelineStage::COMPUTE))
-        flags |= VK_SHADER_STAGE_COMPUTE_BIT;
-
-    return flags;
-}
-
 // Descriptor/Resource Type Conversion
 inline VkDescriptorType ToVulkanDescriptorType(ResourceType type) {
     switch (type) {
@@ -1698,26 +1664,6 @@ inline VkImageViewType ToVulkanViewType(TextureType type) {
     }
 }
 
-// Pipeline Stage Flags (for synchronization)
-inline VkPipelineStageFlags ShaderStageToPipelineStage(PipelineStage stages) {
-    VkPipelineStageFlags flags = 0;
-
-    if (Has(stages, PipelineStage::VERTEX))
-        flags |= VK_PIPELINE_STAGE_VERTEX_SHADER_BIT;
-    if (Has(stages, PipelineStage::FRAGMENT))
-        flags |= VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-    if (Has(stages, PipelineStage::GEOMETRY))
-        flags |= VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT;
-    if (Has(stages, PipelineStage::TESS_CONTROL))
-        flags |= VK_PIPELINE_STAGE_TESSELLATION_CONTROL_SHADER_BIT;
-    if (Has(stages, PipelineStage::TESS_EVALUATION))
-        flags |= VK_PIPELINE_STAGE_TESSELLATION_EVALUATION_SHADER_BIT;
-    if (Has(stages, PipelineStage::COMPUTE))
-        flags |= VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
-
-    return flags;
-}
-
 inline uint32_t GetMinVulkanAlignment(BufferUsage usages) {
     auto&       ctx       = GetVulkanContext();
     const auto& limits    = ctx.device->limits();
@@ -1845,6 +1791,103 @@ inline const char* VkColorSpaceToString(VkColorSpaceKHR cs) {
     }
 }
 
+inline VkShaderStageFlagBits MapShaderStage(PipelineStage stage) {
+
+    if (Has(stage, PipelineStage::VERTEX))
+        return VK_SHADER_STAGE_VERTEX_BIT;
+
+    if (Has(stage, PipelineStage::FRAGMENT))
+        return VK_SHADER_STAGE_FRAGMENT_BIT;
+
+    if (Has(stage, PipelineStage::COMPUTE))
+        return VK_SHADER_STAGE_COMPUTE_BIT;
+
+    if (Has(stage, PipelineStage::GEOMETRY))
+        return VK_SHADER_STAGE_GEOMETRY_BIT;
+
+    if (Has(stage, PipelineStage::TESS_CONTROL))
+        return VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
+
+    if (Has(stage, PipelineStage::TESS_EVALUATION))
+        return VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
+
+    return VK_SHADER_STAGE_ALL;
+}
+
+inline VkShaderStageFlags MapShaderStageFlags(PipelineStage stage) {
+    VkShaderStageFlags result = 0;
+
+    if (Has(stage, PipelineStage::VERTEX))
+        result |= VK_SHADER_STAGE_VERTEX_BIT;
+
+    if (Has(stage, PipelineStage::FRAGMENT))
+        result |= VK_SHADER_STAGE_FRAGMENT_BIT;
+
+    if (Has(stage, PipelineStage::COMPUTE))
+        result |= VK_SHADER_STAGE_COMPUTE_BIT;
+
+    if (Has(stage, PipelineStage::GEOMETRY))
+        result |= VK_SHADER_STAGE_GEOMETRY_BIT;
+
+    if (Has(stage, PipelineStage::TESS_CONTROL))
+        result |= VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
+
+    if (Has(stage, PipelineStage::TESS_EVALUATION))
+        result |= VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
+
+    return result;
+}
+
+static inline VkPipelineStageFlags2 MapPipelineStage(PipelineStage stage) {
+    VkPipelineStageFlags2 result = 0;
+
+    // Shader stages
+    if (Has(stage, PipelineStage::VERTEX))
+        result |= VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT;
+
+    if (Has(stage, PipelineStage::FRAGMENT))
+        result |= VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+
+    if (Has(stage, PipelineStage::COMPUTE))
+        result |= VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+
+    if (Has(stage, PipelineStage::GEOMETRY))
+        result |= VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT;
+
+    if (Has(stage, PipelineStage::TESS_CONTROL))
+        result |= VK_PIPELINE_STAGE_2_TESSELLATION_CONTROL_SHADER_BIT;
+
+    if (Has(stage, PipelineStage::TESS_EVALUATION))
+        result |= VK_PIPELINE_STAGE_2_TESSELLATION_EVALUATION_SHADER_BIT;
+
+    // Fixed-function / non-shader
+    if (Has(stage, PipelineStage::DRAW_INDIRECT))
+        result |= VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT;
+
+    if (Has(stage, PipelineStage::TRANSFER))
+        result |= VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+
+    if (Has(stage, PipelineStage::COLOR_ATTACHMENT_OUTPUT))
+        result |= VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+
+    if (Has(stage, PipelineStage::EARLY_FRAGMENT_TESTS))
+        result |= VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT;
+
+    if (Has(stage, PipelineStage::LATE_FRAGMENT_TESTS))
+        result |= VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
+
+    if (Has(stage, PipelineStage::TOP_OF_PIPE))
+        result |= VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
+
+    if (Has(stage, PipelineStage::BOTTOM_OF_PIPE))
+        result |= VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT;
+
+    if (Has(stage, PipelineStage::HOST))
+        result |= VK_PIPELINE_STAGE_2_HOST_BIT;
+
+    return result;
+}
+
 // resource tracking helpers
 inline VulkanAccessState ConvertState(ResourceState state, PipelineStage stages, QueueType queue) {
     VulkanAccessState out{};
@@ -1854,13 +1897,13 @@ inline VulkanAccessState ConvertState(ResourceState state, PipelineStage stages,
     VkImageLayout         layout     = VK_IMAGE_LAYOUT_UNDEFINED;
 
     if (Has(state, ResourceState::SHADER_RESOURCE)) {
-        stageMask  |= ShaderStageToPipelineStage(stages);
+        stageMask  |= MapPipelineStage(stages);
         accessMask |= VK_ACCESS_2_SHADER_READ_BIT;
         layout      = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     }
 
     if (Has(state, ResourceState::UNORDERED_ACCESS)) {
-        stageMask  |= ShaderStageToPipelineStage(stages);
+        stageMask  |= MapPipelineStage(stages);
         accessMask |= VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT;
         layout      = VK_IMAGE_LAYOUT_GENERAL;
     }
@@ -1923,6 +1966,7 @@ inline VulkanSubresourceState& GetSubresourceState(SparseTextureState& sparse, u
 
     return sparse.global;
 }
+
 // TODO----------------------------------------------------
 //  inline void SetSubresourceState(
 //  	SparseTextureState& sparse,
@@ -1931,6 +1975,106 @@ inline VulkanSubresourceState& GetSubresourceState(SparseTextureState& sparse, u
 //  	sparse.overrides[subresource] = newState;
 //  }
 //---------------------------------------------------------
+
+inline VkAccessFlags2 MapAccess(AccessFlags access) {
+    VkAccessFlags2 result = 0;
+
+    if (Has(access, AccessFlags::INDIRECT_COMMAND_READ))
+        result |= VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT;
+
+    if (Has(access, AccessFlags::INDEX_READ))
+        result |= VK_ACCESS_2_INDEX_READ_BIT;
+
+    if (Has(access, AccessFlags::VERTEX_ATTRIBUTE_READ))
+        result |= VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT;
+
+    if (Has(access, AccessFlags::UNIFORM_READ))
+        result |= VK_ACCESS_2_UNIFORM_READ_BIT;
+
+    if (Has(access, AccessFlags::SHADER_READ))
+        result |= VK_ACCESS_2_SHADER_READ_BIT;
+
+    if (Has(access, AccessFlags::SHADER_WRITE))
+        result |= VK_ACCESS_2_SHADER_WRITE_BIT;
+
+    if (Has(access, AccessFlags::COLOR_ATTACHMENT_READ))
+        result |= VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT;
+
+    if (Has(access, AccessFlags::COLOR_ATTACHMENT_WRITE))
+        result |= VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+
+    if (Has(access, AccessFlags::DEPTH_STENCIL_READ))
+        result |= VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
+
+    if (Has(access, AccessFlags::DEPTH_STENCIL_WRITE))
+        result |= VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
+    if (Has(access, AccessFlags::TRANSFER_READ))
+        result |= VK_ACCESS_2_TRANSFER_READ_BIT;
+
+    if (Has(access, AccessFlags::TRANSFER_WRITE))
+        result |= VK_ACCESS_2_TRANSFER_WRITE_BIT;
+
+    if (Has(access, AccessFlags::HOST_READ))
+        result |= VK_ACCESS_2_HOST_READ_BIT;
+
+    if (Has(access, AccessFlags::HOST_WRITE))
+        result |= VK_ACCESS_2_HOST_WRITE_BIT;
+
+    if (Has(access, AccessFlags::MEMORY_READ))
+        result |= VK_ACCESS_2_MEMORY_READ_BIT;
+
+    if (Has(access, AccessFlags::MEMORY_WRITE))
+        result |= VK_ACCESS_2_MEMORY_WRITE_BIT;
+
+    return result;
+}
+
+inline VkImageLayout MapLayout(TextureLayout layout) {
+    switch (layout) {
+    case TextureLayout::UNDEFINED:
+        return VK_IMAGE_LAYOUT_UNDEFINED;
+
+    case TextureLayout::GENERAL:
+        return VK_IMAGE_LAYOUT_GENERAL;
+
+    case TextureLayout::COLOR_ATTACHMENT:
+        return VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+    case TextureLayout::DEPTH_STENCIL_ATTACHMENT:
+        return VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+    case TextureLayout::SHADER_READ_ONLY:
+        return VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+    case TextureLayout::TRANSFER_SRC:
+        return VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+
+    case TextureLayout::TRANSFER_DST:
+        return VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+
+    case TextureLayout::PRESENT:
+        return VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+    default:
+        return VK_IMAGE_LAYOUT_UNDEFINED;
+    }
+}
+
+inline VkImageAspectFlags MapAspect(TextureAspect aspect) {
+    VkImageAspectFlags result = 0;
+
+    if (Has(aspect, TextureAspect::IMAGE_ASPECT_COLOR))
+        result |= VK_IMAGE_ASPECT_COLOR_BIT;
+
+    if (Has(aspect, TextureAspect::IMAGE_ASPECT_DEPTH))
+        result |= VK_IMAGE_ASPECT_DEPTH_BIT;
+
+    if (Has(aspect, TextureAspect::IMAGE_ASPECT_STENCIL))
+        result |= VK_IMAGE_ASPECT_STENCIL_BIT;
+
+    return result;
+}
 
 } // namespace RxVK
 } // namespace Rx

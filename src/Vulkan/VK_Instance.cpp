@@ -1,7 +1,6 @@
 #include "VK_Common.h"
 #include "VK_RenderX.h"
 
-
 #if defined(_WIN32)
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -17,7 +16,6 @@
 
 #include <cstring>
 #include <vector>
-
 
 namespace Rx::RxVK {
 

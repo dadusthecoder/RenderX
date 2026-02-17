@@ -138,14 +138,8 @@ int main() {
     auto* swapchain = Rx::CreateSwapchain(
         Rx::SwapchainDesc::Default(swapWidth, swapHeight).setFormat(Rx::Format::BGRA8_SRGB).setMaxFramesInFlight(4));
 
-    // Create resource group
-    auto rglayout = Rx::CreateResourceGroupLayout(
-        Rx::ResourceGroupLayoutDesc()
-            .addBinding(Rx::ResourceGroupLayoutItem::ConstantBuffer(0, Rx::PipelineStage::VERTEX))
-            .setDebugName("MainResourceGroupLayout"));
-
     // Create pipeline layout
-    auto pipelineLayout = Rx::CreatePipelineLayout(&rglayout, 1);
+    auto pipelineLayout = Rx::CreatePipelineLayout(nullptr, 0);
 
     // Create graphics pipeline
     auto pipeline = Rx::CreateGraphicsPipeline(Rx::PipelineDesc()
@@ -195,13 +189,60 @@ int main() {
 
         // Record graphics commands
         frame.graphicslist->open();
+
+        // Transition swapchain image to color attachment
+        {
+            Rx::TextureBarrier barrier{};
+            barrier.texture          = swapchain->GetImageView(currentImageIndex).id; // ⚠️ see note below
+            barrier.srcStage         = Rx::PipelineStage::TOP_OF_PIPE;
+            barrier.srcAccess        = Rx::AccessFlags::NONE;
+            barrier.dstStage         = Rx::PipelineStage::COLOR_ATTACHMENT_OUTPUT;
+            barrier.dstAccess        = Rx::AccessFlags::COLOR_ATTACHMENT_WRITE;
+            barrier.oldLayout        = Rx::TextureLayout::UNDEFINED; // or PRESENT if tracking
+            barrier.newLayout        = Rx::TextureLayout::COLOR_ATTACHMENT ;
+            barrier.srcQueue         = 0;
+            barrier.dstQueue         = 0;
+            barrier.range.baseMip    = 0;
+            barrier.range.mipCount   = 1;
+            barrier.range.baseLayer  = 0;
+            barrier.range.layerCount = 1;
+            barrier.range.aspect     = Rx::TextureAspect::IMAGE_ASPECT_COLOR;
+
+            frame.graphicslist->Barrier(nullptr, 0, nullptr, 0, &barrier, 1);
+        }
+
         frame.graphicslist->setVertexBuffer(vertexbuffer);
         frame.graphicslist->setIndexBuffer(indexbuffer);
         frame.graphicslist->setPipeline(pipeline);
-        // frame.graphicslist->beginRendering(Rx::RenderingDesc().
-        // addColorAttachment());
-        // frame.graphicslist->drawIndexed(36);
-        // frame.graphicslist->endRendering();
+
+        frame.graphicslist->beginRendering(
+            Rx::RenderingDesc(currentWidth, currentHeight)
+                .addColorAttachment(Rx::AttachmentDesc::RenderTarget(swapchain->GetImageView(currentImageIndex))));
+
+        frame.graphicslist->drawIndexed(36);
+
+        frame.graphicslist->endRendering();
+
+        // Transition to PRESENT
+        {
+            Rx::TextureBarrier barrier{};
+            barrier.texture          = swapchain->GetImageView(currentImageIndex).id; 
+            barrier.srcStage         = Rx::PipelineStage::COLOR_ATTACHMENT_OUTPUT;
+            barrier.srcAccess        = Rx::AccessFlags::COLOR_ATTACHMENT_WRITE;
+            barrier.dstStage         = Rx::PipelineStage::BOTTOM_OF_PIPE;
+            barrier.dstAccess        = Rx::AccessFlags::NONE;
+            barrier.oldLayout        = Rx::TextureLayout::COLOR_ATTACHMENT;
+            barrier.newLayout        = Rx::TextureLayout::PRESENT;
+            barrier.srcQueue         = 0;
+            barrier.dstQueue         = 0;
+            barrier.range.baseMip    = 0;
+            barrier.range.mipCount   = 1;
+            barrier.range.baseLayer  = 0;
+            barrier.range.layerCount = 1;
+            barrier.range.aspect     = Rx::TextureAspect::IMAGE_ASPECT_COLOR;
+            frame.graphicslist->Barrier(nullptr, 0, nullptr, 0, &barrier, 1);
+        }
+
         frame.graphicslist->close();
 
         // Submit compute work

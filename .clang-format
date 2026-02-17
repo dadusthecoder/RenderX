@@ -99,12 +99,11 @@ AlignTrailingComments:
 BreakConstructorInitializers: BeforeColon
 ConstructorInitializerIndentWidth: 4
 PackConstructorInitializers: Never
-
 AccessModifierOffset: -4
-
 NamespaceIndentation: None
-
 SpaceBeforeParens: ControlStatements
 SpaceInEmptyParentheses: false
 SpacesInAngles: Never
 SpacesInContainerLiterals: false
+AllowShortEnumsOnASingleLine: false
+SortIncludes: false

@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.10)
 
 project(RenderX VERSION 1.0.2)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
@@ -81,16 +81,16 @@ if(RX_BUILD_VULKAN)
     target_link_libraries(RenderX PRIVATE Vulkan::Vulkan)
     target_compile_definitions(RenderX PRIVATE RX_ENABLE_VULKAN)
     if(WIN32)
-    target_compile_definitions(${PROJECT_NAME}
-        PRIVATE
-        VK_USE_PLATFORM_WIN32_KHR
-    )
-elseif(UNIX AND NOT APPLE)
-    target_compile_definitions(${PROJECT_NAME}
-        PRIVATE
-        VK_USE_PLATFORM_XLIB_KHR
-    )
-endif()
+        target_compile_definitions(${PROJECT_NAME}
+            PRIVATE
+            VK_USE_PLATFORM_WIN32_KHR
+        )
+    elseif(UNIX AND NOT APPLE)
+        target_compile_definitions(${PROJECT_NAME}
+            PRIVATE
+            VK_USE_PLATFORM_XLIB_KHR
+        )
+    endif()
 endif()
 
 if(RX_BUILD_OPENGL)

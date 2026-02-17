@@ -1,11 +1,9 @@
 ﻿#include "VK_Common.h"
 #include "VK_RenderX.h"
 
-
 #include <iomanip>
 #include <iostream>
 #include <set>
-
 
 namespace Rx::RxVK {
 
@@ -132,9 +130,8 @@ void VulkanDevice::logDeviceInfo(uint32_t index, const DeviceInfo& info) const {
     RENDERX_INFO("    Max Image Dimension 2D: {}", props.limits.maxImageDimension2D);
     RENDERX_INFO("    Max Framebuffer Width: {}", props.limits.maxFramebufferWidth);
     RENDERX_INFO("    Max Framebuffer Height: {}", props.limits.maxFramebufferHeight);
-    RENDERX_INFO("    Max Viewport Dimensions: {}x{}",
-                 props.limits.maxViewportDimensions[0],
-                 props.limits.maxViewportDimensions[1]);
+    RENDERX_INFO(
+        "    Max Viewport Dimensions: {}x{}", props.limits.maxViewportDimensions[0], props.limits.maxViewportDimensions[1]);
     RENDERX_INFO("    Max Bound Descriptor Sets: {}", props.limits.maxBoundDescriptorSets);
     RENDERX_INFO("    Max Per-Stage Descriptor Samplers: {}", props.limits.maxPerStageDescriptorSamplers);
     RENDERX_INFO("    Max Per-Stage Descriptor Uniform Buffers: {}", props.limits.maxPerStageDescriptorUniformBuffers);
@@ -373,9 +370,9 @@ void VulkanDevice::createLogicalDevice(const std::vector<const char*>& requiredE
     timelineFeatures.timelineSemaphore = VK_TRUE;
 
     VkPhysicalDeviceDescriptorIndexingFeatures indexing{};
-    indexing.sType                           = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
-    indexing.pNext                           = &timelineFeatures;
-    indexing.descriptorBindingPartiallyBound = VK_TRUE;
+    indexing.sType                                        = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
+    indexing.pNext                                        = &timelineFeatures;
+    indexing.descriptorBindingPartiallyBound              = VK_TRUE;
     indexing.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE;
     indexing.runtimeDescriptorArray                       = VK_TRUE;
     indexing.descriptorBindingVariableDescriptorCount     = VK_TRUE;
