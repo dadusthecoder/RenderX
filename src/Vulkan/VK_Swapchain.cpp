@@ -28,15 +28,14 @@ namespace Rx::RxVK {
 		return modes;
 	}
 
-	VulkanSwapchain::VulkanSwapchain() {
-	}
+	VulkanSwapchain::VulkanSwapchain() {}
 
 	VulkanSwapchain::~VulkanSwapchain() {
 		destroy();
 	}
 
 	bool VulkanSwapchain::create(const SwapchainCreateInfo& info) {
-		m_Info = info;
+		m_Info    = info;
 		auto& ctx = GetVulkanContext();
 
 		createSwapchain(info.width, info.height);
@@ -82,25 +81,30 @@ namespace Rx::RxVK {
 		createSwapchain(width, height);
 	}
 
-	Format VulkanSwapchain::GetFormat() const { return VkFormatToFormat(m_Format); }
-
+	Format VulkanSwapchain::GetFormat() const {
+		return VkFormatToFormat(m_Format);
+	}
 
 	uint32_t VulkanSwapchain::AcquireNextImage() {
-		auto& ctx = GetVulkanContext();
-		VkResult result = vkAcquireNextImageKHR(ctx.device->logical(), m_Swapchain, UINT64_MAX,
-			m_SignalSemaphores[m_currentSemaphoreIndex], VK_NULL_HANDLE, &m_CurrentImageIndex);
+		auto&    ctx    = GetVulkanContext();
+		VkResult result = vkAcquireNextImageKHR(ctx.device->logical(),
+		                                        m_Swapchain,
+		                                        UINT64_MAX,
+		                                        m_SignalSemaphores[m_currentSemaphoreIndex],
+		                                        VK_NULL_HANDLE,
+		                                        &m_CurrentImageIndex);
 		VK_CHECK(result);
 		return m_CurrentImageIndex;
 	}
 	void VulkanSwapchain::Present(uint32_t imageIndex) {
-		auto& ctx = GetVulkanContext();
+		auto&            ctx = GetVulkanContext();
 		VkPresentInfoKHR info{};
-		info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+		info.sType              = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
 		info.waitSemaphoreCount = 1;
-		info.pWaitSemaphores = &m_WaitSemaphores[imageIndex];
-		info.swapchainCount = 1;
-		info.pSwapchains = &m_Swapchain;
-		info.pImageIndices = &imageIndex;
+		info.pWaitSemaphores    = &m_WaitSemaphores[imageIndex];
+		info.swapchainCount     = 1;
+		info.pSwapchains        = &m_Swapchain;
+		info.pImageIndices      = &imageIndex;
 		VK_CHECK(vkQueuePresentKHR(ctx.graphicsQueue->Queue(), &info));
 		m_currentSemaphoreIndex = (m_currentSemaphoreIndex + 1) % m_Info.maxFramesInFlight;
 	}
@@ -109,15 +113,15 @@ namespace Rx::RxVK {
 	}
 
 	void VulkanSwapchain::createSwapchain(uint32_t width, uint32_t height) {
-		auto& ctx = GetVulkanContext();
-		auto caps = QueryCaps(ctx.device->physical(), ctx.instance->getSurface());
-		auto formats = QueryFormats(ctx.device->physical(), ctx.instance->getSurface());
-		auto presentModes = QueryPresentModes(ctx.device->physical(), ctx.instance->getSurface());
+		auto& ctx          = GetVulkanContext();
+		auto  caps         = QueryCaps(ctx.device->physical(), ctx.instance->getSurface());
+		auto  formats      = QueryFormats(ctx.device->physical(), ctx.instance->getSurface());
+		auto  presentModes = QueryPresentModes(ctx.device->physical(), ctx.instance->getSurface());
 
 		VkSurfaceFormatKHR surfaceFormat = chooseSurfaceFormat();
-		VkPresentModeKHR presentMode = choosePresentMode();
-		VkExtent2D extent = chooseExtent(width, height);
-		uint32_t desired = m_Info.imageCount;
+		VkPresentModeKHR   presentMode   = choosePresentMode();
+		VkExtent2D         extent        = chooseExtent(width, height);
+		uint32_t           desired       = m_Info.imageCount;
 
 		if (desired == 0)
 			desired = caps.minImageCount + 1;
@@ -128,20 +132,20 @@ namespace Rx::RxVK {
 			imageCount = std::min(imageCount, caps.maxImageCount);
 
 		VkSwapchainCreateInfoKHR ci{};
-		ci.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-		ci.surface = ctx.instance->getSurface();
-		ci.minImageCount = imageCount;
-		ci.imageFormat = surfaceFormat.format;
-		ci.imageColorSpace = surfaceFormat.colorSpace;
-		ci.imageExtent = extent;
+		ci.sType            = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+		ci.surface          = ctx.instance->getSurface();
+		ci.minImageCount    = imageCount;
+		ci.imageFormat      = surfaceFormat.format;
+		ci.imageColorSpace  = surfaceFormat.colorSpace;
+		ci.imageExtent      = extent;
 		ci.imageArrayLayers = 1;
-		ci.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+		ci.imageUsage       = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
 		ci.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-		ci.preTransform = caps.currentTransform;
-		ci.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-		ci.presentMode = presentMode;
-		ci.clipped = VK_TRUE;
+		ci.preTransform     = caps.currentTransform;
+		ci.compositeAlpha   = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+		ci.presentMode      = presentMode;
+		ci.clipped          = VK_TRUE;
 
 		VK_CHECK(vkCreateSwapchainKHR(ctx.device->logical(), &ci, nullptr, &m_Swapchain));
 
@@ -156,38 +160,37 @@ namespace Rx::RxVK {
 			iv.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 			iv.image = m_Images[i];
 			VulkanTexture texture{};
-			texture.image = m_Images[i];
-			iv.viewType = VK_IMAGE_VIEW_TYPE_2D;
-			iv.format = surfaceFormat.format;
+			texture.image                  = m_Images[i];
+			iv.viewType                    = VK_IMAGE_VIEW_TYPE_2D;
+			iv.format                      = surfaceFormat.format;
 			iv.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 			iv.subresourceRange.levelCount = 1;
 			iv.subresourceRange.layerCount = 1;
 			vkCreateImageView(ctx.device->logical(), &iv, nullptr, &m_ImageViews[i]);
 
 			VulkanTextureView textureView{};
-			textureView.texture = g_TexturePool.allocate(texture);
+			textureView.texture         = g_TexturePool.allocate(texture);
 			textureView.arrayLayerCount = 1;
-			textureView.baseArrayLayer = 0;
-			textureView.mipLevelCount = 1;
-			textureView.baseMipLevel = 0;
-			textureView.format = surfaceFormat.format;
-			textureView.view = m_ImageViews[i];
-			textureView.viewType = VK_IMAGE_VIEW_TYPE_2D;
-			m_ImageViewsHandles[i] = g_TextureViewPool.allocate(textureView);
+			textureView.baseArrayLayer  = 0;
+			textureView.mipLevelCount   = 1;
+			textureView.baseMipLevel    = 0;
+			textureView.format          = surfaceFormat.format;
+			textureView.view            = m_ImageViews[i];
+			textureView.viewType        = VK_IMAGE_VIEW_TYPE_2D;
+			m_ImageViewsHandles[i]      = g_TextureViewPool.allocate(textureView);
 		}
 
-		m_Format = surfaceFormat.format;
-		m_Extent = extent;
+		m_Format     = surfaceFormat.format;
+		m_Extent     = extent;
 		m_ImageCount = imageCount;
 	}
 
 	void VulkanSwapchain::destroySwapchain() {
 		auto& ctx = GetVulkanContext();
-		int i = 0;
+		int   i   = 0;
 		for (auto view : m_ImageViews) {
-
 			auto* textureview = g_TextureViewPool.get(m_ImageViewsHandles[i]);
-			auto* texture = g_TexturePool.get(textureview->texture);
+			auto* texture     = g_TexturePool.get(textureview->texture);
 
 			g_TexturePool.free(textureview->texture);
 			g_TextureViewPool.free(m_ImageViewsHandles[i]);
@@ -210,26 +213,28 @@ namespace Rx::RxVK {
 	}
 
 	VkSurfaceFormatKHR VulkanSwapchain::chooseSurfaceFormat() const {
-		auto& ctx = GetVulkanContext();
-		auto formats = QueryFormats(ctx.device->physical(), ctx.instance->getSurface());
+		auto& ctx     = GetVulkanContext();
+		auto  formats = QueryFormats(ctx.device->physical(), ctx.instance->getSurface());
 		for (auto& f : formats) {
-			if (f.format == m_Info.preferredFormat &&
-				f.colorSpace == m_Info.preferredColorSpace) {
+			if (f.format == m_Info.preferredFormat && f.colorSpace == m_Info.preferredColorSpace) {
 				RENDERX_INFO("Swapchain format: {} | ColorSpace: {}",
-					FormatToString(VkFormatToFormat(m_Info.preferredFormat)), VkColorSpaceToString(f.colorSpace));
+				             FormatToString(VkFormatToFormat(m_Info.preferredFormat)),
+				             VkColorSpaceToString(f.colorSpace));
 				return f;
 			}
 		}
 
-		RENDERX_WARN("The surface doesn't support preferred format: {}", FormatToString(VkFormatToFormat(m_Info.preferredFormat)));
+		RENDERX_WARN("The surface doesn't support preferred format: {}",
+		             FormatToString(VkFormatToFormat(m_Info.preferredFormat)));
 		assert(!formats.empty() && "No surface formats available");
 		RENDERX_INFO("Swapchain format: {} | ColorSpace={}",
-			FormatToString(VkFormatToFormat(formats[0].format)), VkColorSpaceToString(formats[0].colorSpace));
+		             FormatToString(VkFormatToFormat(formats[0].format)),
+		             VkColorSpaceToString(formats[0].colorSpace));
 		return formats[0];
 	}
 	VkPresentModeKHR VulkanSwapchain::choosePresentMode() const {
-		auto& ctx = GetVulkanContext();
-		auto modes = QueryPresentModes(ctx.device->physical(), ctx.instance->getSurface());
+		auto& ctx   = GetVulkanContext();
+		auto  modes = QueryPresentModes(ctx.device->physical(), ctx.instance->getSurface());
 		for (auto m : modes)
 			if (m == m_Info.preferredPresentMode)
 				return m;
@@ -237,28 +242,28 @@ namespace Rx::RxVK {
 	}
 
 	VkExtent2D VulkanSwapchain::chooseExtent(uint32_t width, uint32_t height) const {
-		auto& ctx = GetVulkanContext();
-		auto caps = QueryCaps(ctx.device->physical(), ctx.instance->getSurface());
+		auto& ctx  = GetVulkanContext();
+		auto  caps = QueryCaps(ctx.device->physical(), ctx.instance->getSurface());
 		if (caps.currentExtent.width != UINT32_MAX)
 			return caps.currentExtent;
 
 		VkExtent2D e{};
-		e.width = std::clamp(width, caps.minImageExtent.width, caps.maxImageExtent.width);
+		e.width  = std::clamp(width, caps.minImageExtent.width, caps.maxImageExtent.width);
 		e.height = std::clamp(height, caps.minImageExtent.height, caps.maxImageExtent.height);
 		return e;
 	}
 
 	// renderx API implemention
 	Swapchain* VKCreateSwapchain(const SwapchainDesc& desc) {
-		auto& ctx = GetVulkanContext();
+		auto&               ctx = GetVulkanContext();
 		SwapchainCreateInfo info{};
-		info.height = desc.height;
-		info.width = desc.width;
-		info.imageCount = desc.preferredImageCount;
-		info.maxFramesInFlight = desc.maxFramesInFlight;
-		info.preferredFormat = ToVulkanFormat(desc.preferredFromat);
-		info.preferredColorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR; // Or add to SwapchainDesc
-		info.preferredPresentMode = VK_PRESENT_MODE_MAILBOX_KHR;	  // Or add to SwapchainDesc
+		info.height               = desc.height;
+		info.width                = desc.width;
+		info.imageCount           = desc.preferredImageCount;
+		info.maxFramesInFlight    = desc.maxFramesInFlight;
+		info.preferredFormat      = ToVulkanFormat(desc.preferredFromat);
+		info.preferredColorSpace  = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR; // Or add to SwapchainDesc
+		info.preferredPresentMode = VK_PRESENT_MODE_MAILBOX_KHR;       // Or add to SwapchainDesc
 		ctx.swapchain->create(info);
 		return ctx.swapchain;
 	}

@@ -19,7 +19,6 @@ RenderX abstracts graphics APIs behind a clean interface while preserving contro
 - Automatic Barrier optimization with hazard detection(optional)
 - Staging buffer suballocation for static initial gpu uploads (internally uses transfer queue)
 
-
 **Design Principles**
 - Explicit Over Implicit: No hidden state transitions. User controls synchronization.
 - Multi-Queue First: Graphics, compute, and transfer queues operate independently. Timeline semaphores enable async workflows.
