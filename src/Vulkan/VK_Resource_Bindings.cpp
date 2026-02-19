@@ -1016,6 +1016,7 @@ void VulkanCommandList::setInlineUAV(uint32_t slot, BufferHandle buf, uint64_t o
 //     setDescriptorSets         :   one vkCmdBindDescriptorSets for N sets
 //     pushConstants             :   vkCmdPushConstants
 
+//TODO-------------------------------------------------------------------------------
 // palceholdes (needs extension function pointers wired at device init):
 //     DESCRIPTOR_BUFFER write    : needs vkGetDescriptorEXT
 //     setDescriptorHeaps         : needs vkCmdBindDescriptorBuffersEXT
@@ -1024,6 +1025,7 @@ void VulkanCommandList::setInlineUAV(uint32_t slot, BufferHandle buf, uint64_t o
 //     setInlineCBV/SRV/UAV       : needs push descriptor or device address path
 //     setDynamicOffset           : needs bound set tracking per slot
 //     setBindlessTable           : needs bindless backend
+//-----------------------------------------------------------------------------------
 
 } // namespace RxVK
 } // namespace Rx

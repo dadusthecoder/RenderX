@@ -1437,6 +1437,7 @@ struct TextureViewDesc {
 
     static TextureViewDesc Default(TextureHandle texture, Format informat = Format::UNDEFINED) {
         Rx::TextureViewDesc textureViewInfo{};
+        textureViewInfo.viewType = TextureType::TEXTURE_2D;
         textureViewInfo.arrayLayerCount = 1;
         textureViewInfo.baseArrayLayer  = 0;
         textureViewInfo.mipLevelCount   = 1;
@@ -2592,7 +2593,10 @@ public:
     virtual uint32_t          AcquireNextImage()                      = 0;
     virtual void              Present(uint32_t imageIndex)            = 0;
     virtual void              Resize(uint32_t width, uint32_t height) = 0;
+    virtual TextureHandle     GetImage(uint32_t imageIndex) const     = 0;
+    virtual TextureHandle     GetDepth(uint32_t imageindex) const     = 0;
     virtual TextureViewHandle GetImageView(uint32_t imageindex) const = 0;
+    virtual TextureViewHandle GetDepthView(uint32_t imageindex) const = 0;
     virtual Format            GetFormat() const                       = 0;
     virtual uint32_t          GetWidth() const                        = 0;
     virtual uint32_t          GetHeight() const                       = 0;

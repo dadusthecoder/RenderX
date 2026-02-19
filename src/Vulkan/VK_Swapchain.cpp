@@ -153,31 +153,25 @@ void VulkanSwapchain::createSwapchain(uint32_t width, uint32_t height) {
     m_Images.resize(imageCount);
     VK_CHECK(vkGetSwapchainImagesKHR(ctx.device->logical(), m_Swapchain, &imageCount, m_Images.data()));
 
+    m_ImageHandles.resize(imageCount);
+    m_DepthHandles.resize(imageCount);
     m_ImageViewsHandles.resize(imageCount);
-    m_ImageViews.resize(imageCount);
-    for (uint32_t i = 0; i < imageCount; ++i) {
-        VkImageViewCreateInfo iv{};
-        iv.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        iv.image = m_Images[i];
-        VulkanTexture texture{};
-        texture.image                  = m_Images[i];
-        iv.viewType                    = VK_IMAGE_VIEW_TYPE_2D;
-        iv.format                      = surfaceFormat.format;
-        iv.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        iv.subresourceRange.levelCount = 1;
-        iv.subresourceRange.layerCount = 1;
-        vkCreateImageView(ctx.device->logical(), &iv, nullptr, &m_ImageViews[i]);
+    m_DepthViewHandles.resize(imageCount);
 
-        VulkanTextureView textureView{};
-        textureView.texture         = g_TexturePool.allocate(texture);
-        textureView.arrayLayerCount = 1;
-        textureView.baseArrayLayer  = 0;
-        textureView.mipLevelCount   = 1;
-        textureView.baseMipLevel    = 0;
-        textureView.format          = surfaceFormat.format;
-        textureView.view            = m_ImageViews[i];
-        textureView.viewType        = VK_IMAGE_VIEW_TYPE_2D;
-        m_ImageViewsHandles[i]      = g_TextureViewPool.allocate(textureView);
+    for (uint32_t i = 0; i < imageCount; ++i) {
+
+        VulkanTexture texture{};
+        texture.image            = m_Images[i];
+        texture.format           = surfaceFormat.format;
+        texture.isSwapchainImage = true;
+
+        m_ImageHandles[i] = g_TexturePool.allocate(std::move(texture));
+        m_DepthHandles[i] = VKCreateTexture(TextureDesc::DepthStencil(extent.width, extent.height));
+
+        m_DepthViewHandles[i] =
+            VKCreateTextureView(TextureViewDesc::Default(m_DepthHandles[i], Format::D24_UNORM_S8_UINT));
+        m_ImageViewsHandles[i] =
+            VKCreateTextureView(TextureViewDesc::Default(m_ImageHandles[i], VkFormatToFormat(surfaceFormat.format)));
     }
 
     m_Format     = surfaceFormat.format;
@@ -188,23 +182,18 @@ void VulkanSwapchain::createSwapchain(uint32_t width, uint32_t height) {
 void VulkanSwapchain::destroySwapchain() {
     auto& ctx = GetVulkanContext();
     int   i   = 0;
-    for (auto view : m_ImageViews) {
-        auto* textureview = g_TextureViewPool.get(m_ImageViewsHandles[i]);
-        auto* texture     = g_TexturePool.get(textureview->texture);
-
-        g_TexturePool.free(textureview->texture);
-        g_TextureViewPool.free(m_ImageViewsHandles[i]);
-
-        // *texture = VulkanTexture{};
-        // *textureview = VulkanTextureView{};
-
-        vkDestroyImageView(ctx.device->logical(), view, nullptr);
+    for (auto image : m_ImageHandles) {
+        VKDestroyTextureView(m_ImageViewsHandles[i]);
+        VKDestroyTextureView(m_DepthViewHandles[i]);
+        VKDestroyTexture(m_DepthHandles[i]);
+        g_TexturePool.free(image);
         i++;
     }
 
-    m_ImageViews.clear();
-    m_Images.clear();
+    m_ImageHandles.clear();
+    m_DepthHandles.clear();
     m_ImageViewsHandles.clear();
+    m_DepthViewHandles.clear();
 
     if (m_Swapchain) {
         vkDestroySwapchainKHR(ctx.device->logical(), m_Swapchain, nullptr);
@@ -224,7 +213,8 @@ VkSurfaceFormatKHR VulkanSwapchain::chooseSurfaceFormat() const {
         }
     }
 
-    RENDERX_WARN("The surface doesn't support preferred format: {}", FormatToString(VkFormatToFormat(m_Info.preferredFormat)));
+    RENDERX_WARN("The surface doesn't support preferred format: {}",
+                 FormatToString(VkFormatToFormat(m_Info.preferredFormat)));
     assert(!formats.empty() && "No surface formats available");
     RENDERX_INFO("Swapchain format: {} | ColorSpace={}",
                  FormatToString(VkFormatToFormat(formats[0].format)),

@@ -643,7 +643,10 @@ public:
     void recreate(uint32_t width, uint32_t height);
 
     // renderx public api functions
+    TextureHandle     GetImage(uint32_t imageIndex) const override { return m_ImageHandles[imageIndex]; };
+    TextureHandle     GetDepth(uint32_t imageindex) const override { return m_DepthHandles[imageindex]; };
     TextureViewHandle GetImageView(uint32_t imageindex) const override { return m_ImageViewsHandles[imageindex]; };
+    TextureViewHandle GetDepthView(uint32_t imageindex) const override { return m_DepthViewHandles[imageindex]; };
     Format            GetFormat() const override;
     uint32_t          GetWidth() const override { return m_Extent.width; }
     uint32_t          GetHeight() const override { return m_Extent.height; };
@@ -668,18 +671,18 @@ private:
     VkSwapchainKHR m_Swapchain = VK_NULL_HANDLE;
     VkFormat       m_Format    = VK_FORMAT_UNDEFINED;
     VkExtent2D     m_Extent{};
-
-    uint32_t m_ImageCount            = 0;
-    uint32_t m_CurrentImageIndex     = 0;
-    uint32_t m_currentSemaphoreIndex = 0;
+    uint32_t       m_ImageCount            = 0;
+    uint32_t       m_CurrentImageIndex     = 0;
+    uint32_t       m_currentSemaphoreIndex = 0;
 
     std::vector<VkImage>           m_Images;
-    std::vector<VkImageView>       m_ImageViews;
+    std::vector<TextureHandle>     m_ImageHandles;
+    std::vector<TextureHandle>     m_DepthHandles;
     std::vector<TextureViewHandle> m_ImageViewsHandles;
-
-    std::vector<VkSemaphore> m_WaitSemaphores;
-    std::vector<VkSemaphore> m_SignalSemaphores;
-    SwapchainCreateInfo      m_Info{};
+    std::vector<TextureViewHandle> m_DepthViewHandles;
+    std::vector<VkSemaphore>       m_WaitSemaphores;
+    std::vector<VkSemaphore>       m_SignalSemaphores;
+    SwapchainCreateInfo            m_Info{};
 };
 
 class VulkanInstance {
