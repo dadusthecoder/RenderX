@@ -81,11 +81,7 @@ void freeAllVulkanResources() {
         }
     });
 
-    g_ResourceGroupLayoutPool.ForEach([&](VulkanResourceGroupLayout& layout) {
-        if (layout.layout != VK_NULL_HANDLE) {
-            vkDestroyDescriptorSetLayout(g_Device, layout.layout, nullptr);
-        }
-    });
+ 
 
     g_PipelinePool.ForEach([&](VulkanPipeline& pipeline) {
         if (pipeline.pipeline != VK_NULL_HANDLE) {
@@ -109,7 +105,6 @@ void freeAllVulkanResources() {
     g_RenderPassPool.clear();
     g_BufferViewCache.clear();
     g_FramebufferPool.clear();
-    g_ResourceGroupLayoutPool.clear();
     g_PipelineLayoutPool.clear();
 }
 
@@ -120,8 +115,6 @@ void VKShutdownCommon() {
 
     //---------------------------------------
     // must follow this destruction order
-    delete ctx.descriptorPoolManager;
-    delete ctx.descriptorSetManager;
     delete ctx.stagingAllocator;
     delete ctx.deferredUploader;
     delete ctx.immediateUploader;

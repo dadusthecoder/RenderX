@@ -1,4 +1,3 @@
-
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
 
@@ -16,66 +15,42 @@
 struct Frame {
     Rx::CommandAllocator* graphicsAlloc;
     Rx::CommandAllocator* computeAlloc;
-    Rx::CommandList*      graphicslist;
-    Rx::CommandList*      computelist;
-    Rx::Timeline          T = Rx::Timeline(0);
+    Rx::CommandList*      graphicsList;
+    Rx::CommandList*      computeList;
+
+    Rx::BufferHandle     uniformBuffer;
+    Rx::BufferViewHandle uniformBufferView;
+    void*                uniformMappedPtr = nullptr;
+
+    // NEW: one set per frame, allocated from the shared pool
+    Rx::SetHandle descriptorSet;
+
+    Rx::Timeline T = Rx::Timeline(0);
 };
 
 float cubeVertices[] = {
-    // positions          // colors
     -0.5f, -0.5f, -0.5f, 1, 0, 0, 0.5f, -0.5f, -0.5f, 0, 1, 0, 0.5f, 0.5f, -0.5f, 0, 0, 1, -0.5f, 0.5f, -0.5f, 1, 1, 0,
 
-    -0.5f, -0.5f, 0.5f,  1, 0, 1, 0.5f, -0.5f, 0.5f,  0, 1, 1, 0.5f, 0.5f, 0.5f,  1, 1, 1, -0.5f, 0.5f, 0.5f,  0, 0, 0};
+    -0.5f, -0.5f, 0.5f,  1, 0, 1, 0.5f, -0.5f, 0.5f,  0, 1, 1, 0.5f, 0.5f, 0.5f,  1, 1, 1, -0.5f, 0.5f, 0.5f,  0, 0, 0,
+};
 
 unsigned int cubeIndices[] = {
-    // back
-    0,
-    1,
-    2,
-    2,
-    3,
-    0,
-    // front
-    4,
-    5,
-    6,
-    6,
-    7,
-    4,
-    // left
-    4,
-    7,
-    3,
-    3,
-    0,
-    4,
-    // right
-    1,
-    5,
-    6,
-    6,
-    2,
-    1,
-    // bottom
-    4,
-    5,
-    1,
-    1,
-    0,
-    4,
-    // top
-    3,
-    2,
-    6,
-    6,
-    7,
-    3};
+    0, 1, 2, 2, 3, 0, // back
+    4, 5, 6, 6, 7, 4, // front
+    4, 7, 3, 3, 0, 4, // left
+    1, 5, 6, 6, 2, 1, // right
+    4, 5, 1, 1, 0, 4, // bottom
+    3, 2, 6, 6, 7, 3, // top
+};
+
+struct Mvp {
+    glm::mat4 mvp;
+};
 
 int main() {
     glfwInit();
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-
-    GLFWwindow* window = glfwCreateWindow(1280, 720, "RenderX", nullptr, nullptr);
+    GLFWwindow* window = glfwCreateWindow(1280, 720, "RenderX - HelloCube", nullptr, nullptr);
 
     int width = 0, height = 0;
     while (width == 0 || height == 0) {
@@ -84,193 +59,243 @@ int main() {
     }
 
     Rx::InitDesc initInfo{};
-
     initInfo.api                = Rx::GraphicsAPI::VULKAN;
     initInfo.instanceExtensions = glfwGetRequiredInstanceExtensions(&initInfo.extensionCount);
 
 #if defined(_WIN32)
-
     initInfo.nativeWindowHandle = glfwGetWin32Window(window);
     initInfo.displayHandle      = GetModuleHandle(nullptr);
-
 #elif defined(__linux__)
-
     initInfo.nativeWindowHandle = reinterpret_cast<void*>(glfwGetX11Window(window));
-
-    initInfo.displayHandle = reinterpret_cast<void*>(glfwGetX11Display());
-
+    initInfo.displayHandle      = reinterpret_cast<void*>(glfwGetX11Display());
 #else
 #error Unsupported platform
 #endif
+
     Rx::Init(initInfo);
 
-    // Get GPU queues
     Rx::CommandQueue* graphics = Rx::GetGpuQueue(Rx::QueueType::GRAPHICS);
     Rx::CommandQueue* compute  = Rx::GetGpuQueue(Rx::QueueType::COMPUTE);
 
-    // Create vertex buffer
-    auto vertexbuffer =
+    // ── Geometry ────────────────────────────────────────────────────────────
+    auto vertexBuffer =
         Rx::CreateBuffer(Rx::BufferDesc::VertexBuffer(sizeof(cubeVertices), Rx::MemoryType::GPU_ONLY, cubeVertices));
-    auto indexbuffer =
+    auto indexBuffer =
         Rx::CreateBuffer(Rx::BufferDesc::IndexBuffer(sizeof(cubeIndices), Rx::MemoryType::GPU_ONLY, cubeIndices));
 
-    // Create vertex input state
     auto vertexInputState = Rx::VertexInputState()
                                 .addBinding(Rx::VertexBinding::PerVertex(0, sizeof(float) * 6))
                                 .addAttribute(Rx::VertexAttribute::Vec3(0, 0, 0))                  // position
                                 .addAttribute(Rx::VertexAttribute::Vec3(1, 0, sizeof(float) * 3)); // color
 
-    // Create shaders
-    // Note : For now the backend dose not support the corss compilation and each backend expects it's own shader lang
-    // glsl(openGl) , sprv(Vulkan) ...
-    auto vertexshader = Rx::CreateShader(Rx::ShaderDesc::FromBytecode(
+    // ── Shaders ─────────────────────────────────────────────────────────────
+    auto vertShader = Rx::CreateShader(Rx::ShaderDesc::FromBytecode(
         Rx::PipelineStage::VERTEX,
         Files::ReadBinaryFile("D:/dev/cpp/RenderX/Test/HelloTriangle/Shaders/bsc.vert.spv")));
 
-    auto fragmentshader = Rx::CreateShader(Rx::ShaderDesc::FromBytecode(
+    auto fragShader = Rx::CreateShader(Rx::ShaderDesc::FromBytecode(
         Rx::PipelineStage::FRAGMENT,
         Files::ReadBinaryFile("D:/dev/cpp/RenderX/Test/HelloTriangle/Shaders/bsc.frag.spv")));
 
-    // Create swapchain
+    // ── Swapchain ────────────────────────────────────────────────────────────
     int swapWidth, swapHeight;
     glfwGetWindowSize(window, &swapWidth, &swapHeight);
 
     auto* swapchain = Rx::CreateSwapchain(
-        Rx::SwapchainDesc::Default(swapWidth, swapHeight).setFormat(Rx::Format::BGRA8_SRGB).setMaxFramesInFlight(4));
+        Rx::SwapchainDesc::Default(swapWidth, swapHeight).setFormat(Rx::Format::BGRA8_SRGB).setMaxFramesInFlight(3));
 
-    // Create pipeline layout
-    auto pipelineLayout = Rx::CreatePipelineLayout(nullptr, 0);
+    // ── Descriptor layout ────────────────────────────────────────────────────
+    // Describe what the shaders expect:
+    //   slot 0 = uniform buffer  (MVP matrix) — vertex stage
+    //   slot 1 = texture SRV     (diffuse)    — fragment stage
+    auto setLayout = Rx::CreateSetLayout(Rx::SetLayoutDesc()
+                                             .add(Rx::Binding::ConstantBuffer(0, Rx::PipelineStage::VERTEX))
+                                             .add(Rx::Binding::Texture(1, Rx::PipelineStage::FRAGMENT))
+                                             .setDebugName("CubeSetLayout"));
 
-    // Create graphics pipeline
+    // ── Pipeline layout ──────────────────────────────────────────────────────
+    // Pipeline layout now takes SetLayoutHandle instead of ResourceGroupLayoutHandle
+    auto pipelineLayout = Rx::CreatePipelineLayout(&setLayout, 1);
+
+    // ---- Pipeline ---------------------------------------------------------------------------
     auto pipeline = Rx::CreateGraphicsPipeline(Rx::PipelineDesc()
                                                    .setLayout(pipelineLayout)
                                                    .addColorFormat(Rx::Format::BGRA8_SRGB)
-                                                   .addShader(vertexshader)
-                                                   .addShader(fragmentshader)
+                                                   .addShader(vertShader)
+                                                   .addShader(fragShader)
                                                    .setVertexInput(vertexInputState)
                                                    .setTopology(Rx::Topology::TRIANGLES)
-                                                   .setRasterizer(Rx::RasterizerState::Default())
-                                                   .setDepthStencil(Rx::DepthStencilState::NoDepth())
+                                                   .setRasterizer(Rx::RasterizerState::CullBack())
+                                                   .setDepthStencil(Rx::DepthStencilState::Default())
                                                    .setBlend(Rx::BlendState::Disabled()));
 
-    // Setup per-frame resources
-    Frame frames[3];
+    // ---- Texture ----------------------------------------------------------------------
+    auto texture     = Rx::CreateTexture(Rx::TextureDesc::Texture2D(200, 300));
+    auto textureView = Rx::CreateTextureView(Rx::TextureViewDesc::Default(texture));
+
+    //---- Descriptor pool -----------------------------------------------------------------------
+    // LINEAR pool — one reset per frame, 3 sets total (one per frame in flight)
+    // DESCRIPTOR_SETS path — classic Vulkan, works on every device
+    // I only create ONE pool for all frames.
+    // Each frame allocates its set from this pool at startup.
+    // At the start of each frame we don't reset the pool — sets are persistent.
+    // If the MVP data changes, we update the set's buffer contents, not the set itself.
+    auto descriptorPool =
+        Rx::CreateDescriptorPool(Rx::DescriptorPoolDesc::Persistent(setLayout, 3) // POOL policy, max 3 sets
+                                     .setDebugName("CubeDescriptorPool"));
+
+    //----- Per-frame resources  -----------------------------------------------------
+    constexpr uint32_t FRAME_COUNT = 3;
+    Frame              frames[FRAME_COUNT];
+
     for (auto& frame : frames) {
+        // Command infrastructure
         frame.graphicsAlloc = graphics->CreateCommandAllocator();
         frame.computeAlloc  = compute->CreateCommandAllocator();
-        frame.graphicslist  = frame.graphicsAlloc->Allocate();
-        frame.computelist   = frame.computeAlloc->Allocate();
+        frame.graphicsList  = frame.graphicsAlloc->Allocate();
+        frame.computeList   = frame.computeAlloc->Allocate();
+
+        // Uniform buffer — one per frame so we don't stomp on the GPU's copy
+        frame.uniformBuffer = Rx::CreateBuffer(Rx::BufferDesc::UniformBuffer(sizeof(Mvp), Rx::MemoryType::CPU_TO_GPU));
+        frame.uniformMappedPtr  = Rx::MapBuffer(frame.uniformBuffer);
+        frame.uniformBufferView = Rx::CreateBufferView(Rx::BufferViewDesc::WholeBuffer(frame.uniformBuffer));
+
+        // Allocate one descriptor set per frame from the shared pool
+        frame.descriptorSet = Rx::AllocateSet(descriptorPool, setLayout);
+
+        // Write the initial descriptor bindings into the set.
+        // The uniform buffer handle points to frame-specific data.
+        // The texture is shared — same view bound across all frames.
+        Rx::DescriptorWrite writes[] = {
+            Rx::DescriptorWrite::CBV(0, frame.uniformBufferView),
+            Rx::DescriptorWrite::Texture(1, textureView),
+        };
+        Rx::WriteSet(frame.descriptorSet, writes, 2);
+
+        // Note: we never call WriteSet again for the texture since it doesn't change.
+        // The uniform buffer is CPU_TO_GPU mapped — we just memcpy new data each frame.
+        // No descriptor update needed because the buffer handle stays the same,
+        // only the contents of the buffer change.
     }
 
+    // ── Main loop ────────────────────────────────────────────────────────────
     uint32_t currentFrame      = 0;
     uint32_t currentImageIndex = 0;
     int      currentWidth      = swapWidth;
     int      currentHeight     = swapHeight;
 
+    Mvp   mvp{};
+    float angle = 0.0f;
+
     while (!glfwWindowShouldClose(window)) {
         auto& frame = frames[currentFrame];
 
-        // Handle window resize
+        // Resize handling
         glfwGetWindowSize(window, &currentWidth, &currentHeight);
         if (swapchain->GetWidth() != currentWidth || swapchain->GetHeight() != currentHeight) {
             swapchain->Resize(currentWidth, currentHeight);
         }
 
-        // Wait for this frame to complete its prevois submition
+        // Wait for this frame slot to finish its previous GPU submission
         graphics->Wait(frame.T);
 
-        // Acquire next swapchain image
         currentImageIndex = swapchain->AcquireNextImage();
 
-        // Record compute commands
-        frame.computelist->open();
-        // Compute work...
-        frame.computelist->close();
+        // ── Update MVP (CPU write into persistently mapped buffer) ───────────
+        angle           += 0.01f;
+        glm::mat4 model  = glm::rotate(glm::mat4(1.0f), angle, glm::vec3(0.0f, 1.0f, 0.0f));
+        glm::mat4 view =
+            glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+        glm::mat4 proj =
+            glm::perspective(glm::radians(60.0f), (float)currentWidth / (float)currentHeight, 0.1f, 100.0f);
+        proj[1][1] *= -1.0f; // Vulkan clip space Y flip
 
-        // Record graphics commands
-        frame.graphicslist->open();
+        mvp.mvp = proj * view * model;
+        memcpy(frame.uniformMappedPtr, &mvp, sizeof(Mvp));
+        // No WriteSet needed — the descriptor still points at the same buffer,
+        // we just changed the buffer's contents via the mapped pointer.
 
-        // Transition swapchain image to color attachment
+        // ── Compute (empty pass for now) ─────────────────────────────────────
+        frame.computeList->open();
+        frame.computeList->close();
+
+        // ── Graphics ─────────────────────────────────────────────────────────
+        frame.graphicsList->open();
+
+        // Transition swapchain image → color attachment
         {
             Rx::TextureBarrier barrier{};
-            barrier.texture          = swapchain->GetImageView(currentImageIndex).id; // ⚠️ see note below
-            barrier.srcStage         = Rx::PipelineStage::TOP_OF_PIPE;
-            barrier.srcAccess        = Rx::AccessFlags::NONE;
-            barrier.dstStage         = Rx::PipelineStage::COLOR_ATTACHMENT_OUTPUT;
-            barrier.dstAccess        = Rx::AccessFlags::COLOR_ATTACHMENT_WRITE;
-            barrier.oldLayout        = Rx::TextureLayout::UNDEFINED; // or PRESENT if tracking
-            barrier.newLayout        = Rx::TextureLayout::COLOR_ATTACHMENT ;
-            barrier.srcQueue         = 0;
-            barrier.dstQueue         = 0;
-            barrier.range.baseMip    = 0;
-            barrier.range.mipCount   = 1;
-            barrier.range.baseLayer  = 0;
-            barrier.range.layerCount = 1;
-            barrier.range.aspect     = Rx::TextureAspect::IMAGE_ASPECT_COLOR;
-
-            frame.graphicslist->Barrier(nullptr, 0, nullptr, 0, &barrier, 1);
+            barrier.texture   = swapchain->GetImageView(currentImageIndex).id;
+            barrier.srcStage  = Rx::PipelineStage::TOP_OF_PIPE;
+            barrier.dstStage  = Rx::PipelineStage::COLOR_ATTACHMENT_OUTPUT;
+            barrier.srcAccess = Rx::AccessFlags::NONE;
+            barrier.dstAccess = Rx::AccessFlags::COLOR_ATTACHMENT_WRITE;
+            barrier.oldLayout = Rx::TextureLayout::UNDEFINED;
+            barrier.newLayout = Rx::TextureLayout::COLOR_ATTACHMENT;
+            barrier.range     = {0, 1, 0, 1, Rx::TextureAspect::IMAGE_ASPECT_COLOR};
+            frame.graphicsList->Barrier(nullptr, 0, nullptr, 0, &barrier, 1);
         }
 
-        frame.graphicslist->setVertexBuffer(vertexbuffer);
-        frame.graphicslist->setIndexBuffer(indexbuffer);
-        frame.graphicslist->setPipeline(pipeline);
+        frame.graphicsList->setPipeline(pipeline);
+        frame.graphicsList->setVertexBuffer(vertexBuffer);
+        frame.graphicsList->setIndexBuffer(indexBuffer);
 
-        frame.graphicslist->beginRendering(
+        // NEW API — bind the descriptor set at slot 0
+        // This replaces the old setResourceGroup call.
+        // VK backend: vkCmdBindDescriptorSets(set=0, frame.descriptorSet)
+        frame.graphicsList->setDescriptorSet(0, frame.descriptorSet);
+
+        frame.graphicsList->beginRendering(
             Rx::RenderingDesc(currentWidth, currentHeight)
                 .addColorAttachment(Rx::AttachmentDesc::RenderTarget(swapchain->GetImageView(currentImageIndex))));
 
-        frame.graphicslist->drawIndexed(36);
+        frame.graphicsList->drawIndexed(36);
+        frame.graphicsList->endRendering();
 
-        frame.graphicslist->endRendering();
-
-        // Transition to PRESENT
+        // Transition swapchain image → present
         {
             Rx::TextureBarrier barrier{};
-            barrier.texture          = swapchain->GetImageView(currentImageIndex).id; 
-            barrier.srcStage         = Rx::PipelineStage::COLOR_ATTACHMENT_OUTPUT;
-            barrier.srcAccess        = Rx::AccessFlags::COLOR_ATTACHMENT_WRITE;
-            barrier.dstStage         = Rx::PipelineStage::BOTTOM_OF_PIPE;
-            barrier.dstAccess        = Rx::AccessFlags::NONE;
-            barrier.oldLayout        = Rx::TextureLayout::COLOR_ATTACHMENT;
-            barrier.newLayout        = Rx::TextureLayout::PRESENT;
-            barrier.srcQueue         = 0;
-            barrier.dstQueue         = 0;
-            barrier.range.baseMip    = 0;
-            barrier.range.mipCount   = 1;
-            barrier.range.baseLayer  = 0;
-            barrier.range.layerCount = 1;
-            barrier.range.aspect     = Rx::TextureAspect::IMAGE_ASPECT_COLOR;
-            frame.graphicslist->Barrier(nullptr, 0, nullptr, 0, &barrier, 1);
+            barrier.texture   = swapchain->GetImageView(currentImageIndex).id;
+            barrier.srcStage  = Rx::PipelineStage::COLOR_ATTACHMENT_OUTPUT;
+            barrier.srcAccess = Rx::AccessFlags::COLOR_ATTACHMENT_WRITE;
+            barrier.dstStage  = Rx::PipelineStage::BOTTOM_OF_PIPE;
+            barrier.dstAccess = Rx::AccessFlags::NONE;
+            barrier.oldLayout = Rx::TextureLayout::COLOR_ATTACHMENT;
+            barrier.newLayout = Rx::TextureLayout::PRESENT;
+            barrier.range     = {0, 1, 0, 1, Rx::TextureAspect::IMAGE_ASPECT_COLOR};
+            frame.graphicsList->Barrier(nullptr, 0, nullptr, 0, &barrier, 1);
         }
 
-        frame.graphicslist->close();
+        frame.graphicsList->close();
 
-        // Submit compute work
-        auto t0 = compute->Submit(frame.computelist);
-
-        // Submit graphics work set dependency on compute and swapchain write
-        frame.T = graphics->Submit(Rx::SubmitInfo::Single(frame.graphicslist)
+        // Submit
+        auto t0 = compute->Submit(frame.computeList);
+        frame.T = graphics->Submit(Rx::SubmitInfo::Single(frame.graphicsList)
                                        .setSwapchainWrite()
                                        .addDependency(Rx::QueueDependency(Rx::QueueType::COMPUTE, t0)));
 
-        // Present
         swapchain->Present(currentImageIndex);
 
-        // Advance to next frame
-        currentFrame = (currentFrame + 1) % 3;
+        currentFrame = (currentFrame + 1) % FRAME_COUNT;
         glfwPollEvents();
     }
 
-    // Cleanup
+    // ── Cleanup ──────────────────────────────────────────────────────────────
+    // Wait for all GPU work to finish before destroying anything
     graphics->WaitIdle();
     compute->WaitIdle();
 
     for (auto& frame : frames) {
-        frame.computeAlloc->Free(frame.computelist);
-        frame.graphicsAlloc->Free(frame.graphicslist);
+        // Free the descriptor set back to the pool
+        Rx::FreeSet(descriptorPool, frame.descriptorSet);
+
+        frame.computeAlloc->Free(frame.computeList);
+        frame.graphicsAlloc->Free(frame.graphicsList);
         graphics->DestroyCommandAllocator(frame.graphicsAlloc);
         compute->DestroyCommandAllocator(frame.computeAlloc);
     }
+
+    Rx::DestroyDescriptorPool(descriptorPool);
 
     Rx::Shutdown();
     glfwDestroyWindow(window);

@@ -199,19 +199,6 @@ void VulkanCommandList::writeBuffer(BufferHandle handle, const void* data, uint3
     vkCmdUpdateBuffer(m_CommandBuffer, buf->buffer, static_cast<VkDeviceSize>(offset), size, data);
 }
 
-void VulkanCommandList::setResourceGroup(const ResourceGroupHandle& handle) {
-    PROFILE_FUNCTION();
-    if (!handle.IsValid())
-        return;
-    auto* group = g_ResourceGroupPool.get(handle);
-    if (!group)
-        return;
-    auto* layout = g_PipelineLayoutPool.get(m_CurrentPipelineLayout);
-    if (!layout)
-        return;
-    auto& ctx = GetVulkanContext();
-    ctx.descriptorSetManager->bind(m_CommandBuffer, layout->layout, 0, *group);
-}
 
 void VulkanCommandList::setFramebuffer(FramebufferHandle handle) {
     VulkanFramebuffer* framebuffer = g_FramebufferPool.get(handle);

@@ -161,7 +161,13 @@ constexpr std::array<VkDynamicState, 2> g_DynamicStates{VK_DYNAMIC_STATE_VIEWPOR
 constexpr std::array<const char*, 1>    g_RequestedValidationLayers{"VK_LAYER_KHRONOS_validation"};
 constexpr std::array<const char*, 1>    g_RequestedDeviceExtensions{VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 
-enum class DescriptorBindingModel { Static, DynamicUniform, Bindless, DescriptorBuffer, Dynamic };
+enum class DescriptorBindingModel {
+    Static,
+    DynamicUniform,
+    Bindless,
+    DescriptorBuffer,
+    Dynamic
+};
 
 // Data Structures
 
@@ -334,6 +340,165 @@ struct VulkanFramebuffer {
     VkFramebuffer framebuffer = VK_NULL_HANDLE;
     const char*   debugName   = nullptr;
 };
+
+// Stored per SetLayoutHandle
+struct VulkanSetLayout {
+    VkDescriptorSetLayout vkLayout = VK_NULL_HANDLE;
+
+    // Cached binding info — needed when writing descriptors
+    // and when computing pool sizes at arena creation
+    struct BindingInfo {
+        uint32_t           slot;
+        VkDescriptorType   vkType;
+        uint32_t           count;
+        VkShaderStageFlags stages;
+        bool               updateAfterBind;
+        bool               partiallyBound;
+    };
+
+    static constexpr uint32_t MAX_BINDINGS = 32;
+    BindingInfo               bindings[MAX_BINDINGS];
+    uint32_t                  bindingCount       = 0;
+    bool                      hasUpdateAfterBind = false;
+
+    // Total descriptor count across all bindings
+    // Used when computing how many slots an allocation takes
+    uint32_t totalDescriptorCount = 0;
+
+    const char* debugName = nullptr;
+};
+
+// Stored per DescriptorPoolHandle
+// One pool can back many sets (LINEAR) or individual sets (POOL)
+struct VulkanDescriptorPool {
+    DescriptorPoolFlags flags;
+
+    //---- DESCRIPTOR_SETS path -------------------------------------------
+    // VK:    one VkDescriptorPool
+    // Alloc: vkAllocateDescriptorSets
+    // Free:  vkFreeDescriptorSets (POOL policy only)
+    // Reset: vkResetDescriptorPool (LINEAR policy)
+    VkDescriptorPool vkPool = VK_NULL_HANDLE;
+
+    //---- DESCRIPTOR_BUFFER path -----------------------------------------
+    // VK:    suballocated from a VulkanDescriptorHeap
+    // No VkDescriptorPool — descriptors are raw bytes in a VkBuffer
+    DescriptorHeapHandle heapHandle;
+    uint64_t             heapBaseOffset = 0; // byte offset into the heap where this pool starts
+    uint64_t             writePtr       = 0; // current allocation position in bytes (LINEAR)
+
+    // POOL policy freelist — stores slot indices (not byte offsets)
+    std::vector<uint32_t> freeSlots;
+
+    // Layout ref — needed so we know the stride per set
+    SetLayoutHandle layout;
+
+    // Stride per set in bytes — computed at creation from layout memory info
+    // LINEAR: each allocation is stridePerSet bytes
+    // POOL:   each slot is stridePerSet bytes
+    uint64_t stridePerSet = 0;
+    uint32_t capacity     = 0; // max sets
+
+    bool        updateAfterBind = false;
+    const char* debugName       = nullptr;
+};
+
+// Stored per SetHandle
+struct VulkanSet {
+    DescriptorPoolFlags poolFlags; // which path this set came from
+
+    //---- DESCRIPTOR_SETS path -------------------------------------------
+    VkDescriptorSet vkSet = VK_NULL_HANDLE;
+
+    //---- DESCRIPTOR_BUFFER path -----------------------------------------
+    // The set is just a location in a heap buffer.
+    // No VkDescriptorSet exists.
+    DescriptorHeapHandle heapHandle;
+    uint64_t             byteOffset = 0; // offset into the heap's VkBuffer
+
+    // Back-reference to the pool this was allocated from
+    // Needed for FreeSet on POOL policy
+    DescriptorPoolHandle poolHandle;
+
+    // Layout — needed at bind time to know descriptor count
+    SetLayoutHandle layoutHandle;
+
+    const char* debugName = nullptr;
+};
+
+// Stored per DescriptorHeapHandle
+// Only used for the DESCRIPTOR_BUFFER path.
+// On the DESCRIPTOR_SETS path the user never creates a heap —
+// the backend creates VkDescriptorPools internally inside VulkanDescriptorPool.
+struct VulkanDescriptorHeap {
+    // The actual GPU memory — a VkBuffer mapped persistently
+    VkBuffer      buffer     = VK_NULL_HANDLE;
+    VmaAllocation allocation = VK_NULL_HANDLE;
+
+    // Persistently mapped CPU pointer — valid for the lifetime of the heap
+    // Null if MemoryType::GPU_ONLY (staging required)
+    uint8_t* mappedPtr = nullptr;
+
+    // GPU virtual address — used in vkCmdBindDescriptorBuffersEXT
+    VkDeviceAddress gpuAddress = 0;
+
+    uint32_t capacity       = 0; // number of descriptors
+    uint32_t descriptorSize = 0; // hardware size per descriptor for this heap type
+
+    DescriptorHeapType type;
+    bool               shaderVisible = true;
+
+    const char* debugName = nullptr;
+};
+
+// Convert ResourceType → VkDescriptorType
+// Already exists as ToVulkanDescriptorType in RX_VK_Common.h — reuse that.
+
+// Compute descriptor type counts from a layout
+// Used when creating a VkDescriptorPool to size it correctly
+struct VkDescriptorPoolSizeList {
+    VkDescriptorPoolSize sizes[16];
+    uint32_t             count = 0;
+};
+
+inline VkDescriptorPoolSizeList ComputePoolSizes(const VulkanSetLayout& layout, uint32_t maxSets) {
+    VkDescriptorPoolSizeList result;
+
+    // Accumulate counts per descriptor type
+    // Use a small fixed array indexed by VkDescriptorType
+    // Max VkDescriptorType value we care about is ~13
+    uint32_t counts[16] = {};
+
+    for (uint32_t i = 0; i < layout.bindingCount; i++) {
+        const auto& b       = layout.bindings[i];
+        uint32_t    typeIdx = static_cast<uint32_t>(b.vkType);
+        if (typeIdx < 16) {
+            counts[typeIdx] += b.count * maxSets;
+        }
+    }
+
+    for (uint32_t i = 0; i < 16; i++) {
+        if (counts[i] > 0) {
+            result.sizes[result.count++] = {static_cast<VkDescriptorType>(i), counts[i]};
+        }
+    }
+
+    return result;
+}
+
+// Write a single descriptor directly into CPU-mapped heap memory
+// Used for the DESCRIPTOR_BUFFER path
+void WriteRawDescriptorToMemory(uint8_t* destCpuPtr, VkDevice device, ResourceType type, uint64_t resourceHandle);
+
+// Write a descriptor into a VkDescriptorSet
+// Used for the DESCRIPTOR_SETS path
+void WriteVkDescriptor(VkDevice        device,
+                       VkDescriptorSet dstSet,
+                       uint32_t        dstBinding,
+                       uint32_t        dstArrayElement,
+                       uint32_t        count,
+                       ResourceType    type,
+                       uint64_t        resourceHandle);
 
 // Resource Pool Template
 
@@ -618,51 +783,6 @@ private:
     VmaAllocator m_Allocator = VK_NULL_HANDLE;
 };
 
-class VulkanDescriptorPoolManager {
-public:
-    VulkanDescriptorPoolManager(VulkanContext& ctx);
-    ~VulkanDescriptorPoolManager();
-
-    VkDescriptorPool acquire(bool allowFree, bool updateAfterBind, uint64_t gpuValue);
-    void             submit(uint64_t submissionID);
-    void             retire(uint64_t completedSubmission);
-    void             resetPersistent();
-    void             resetBindless();
-
-private:
-    VkDescriptorPool createPool(uint32_t maxSets, bool allowFree, bool updateAfterBind);
-
-private:
-    VulkanContext& m_Ctx;
-
-    struct VulkanDescriptorPool {
-        VkDescriptorPool pool         = VK_NULL_HANDLE;
-        uint64_t         submissionID = 0; // 0 = free
-    };
-
-    std::deque<VulkanDescriptorPool> m_usedPools;
-    std::vector<VkDescriptorPool>    m_freePools;
-    VulkanDescriptorPool             m_CurrentTransient;
-    VkDescriptorPool                 m_Persistent = VK_NULL_HANDLE;
-    VkDescriptorPool                 m_Bindless   = VK_NULL_HANDLE;
-};
-
-class VulkanDescriptorManager {
-public:
-    VulkanDescriptorManager(VulkanContext& ctx);
-    ~VulkanDescriptorManager();
-
-    VulkanResourceGroupLayout createLayout(const ResourceGroupLayoutDesc& layout);
-    VulkanResourceGroup
-    createGroup(const ResourceGroupLayoutHandle& layout, const ResourceGroupDesc& desc, uint64_t timelineValue = 0);
-
-    void
-    bind(VkCommandBuffer cmd, VkPipelineLayout pipelineLayout, uint32_t setIndex, const VulkanResourceGroup& group);
-
-private:
-    VulkanContext& m_Ctx;
-};
-
 // Per-frame staging allocation
 struct StagingAllocation {
     VkBuffer buffer       = VK_NULL_HANDLE;
@@ -810,30 +930,18 @@ public:
                      uint32_t instanceCount = 1,
                      uint32_t firstIndex    = 0,
                      uint32_t firstInstance = 0) override;
-
     void beginRenderPass(RenderPassHandle pass, const void* clearValues, uint32_t clearCount) override;
-
     void endRenderPass() override;
-
     void beginRendering(const RenderingDesc& desc) override;
     void endRendering() override;
     void writeBuffer(BufferHandle handle, const void* data, uint32_t offset, uint32_t size) override;
-
-    void setResourceGroup(const ResourceGroupHandle& handle) override;
-
     void setFramebuffer(FramebufferHandle handle) override;
-
     void
     copyBufferToTexture(BufferHandle srcBuffer, TextureHandle dstTexture, const TextureCopyRegion& region) override;
-
     void copyTexture(TextureHandle srcTexture, TextureHandle dstTexture, const TextureCopyRegion& region) override;
-
     void copyBuffer(BufferHandle src, BufferHandle dst, const BufferCopyRegion& region) override;
-
     void
     copyTextureToBuffer(TextureHandle srcTexture, BufferHandle dstBuffer, const TextureCopyRegion& region) override;
-
-    /// Copy between textures
     void Barrier(const Memory_Barrier* memoryBarriers,
                  uint32_t              memoryCount,
                  const BufferBarrier*  bufferBarriers,
@@ -841,6 +949,18 @@ public:
                  const TextureBarrier* imageBarriers,
                  uint32_t              imageCount) override;
 
+    void setDescriptorSet(uint32_t slot, SetHandle set) override;
+    void setDescriptorSets(uint32_t firstSlot, const SetHandle* sets, uint32_t count) override;
+    void setBindlessTable(BindlessTableHandle table) override;
+    void
+    pushConstants(uint32_t slot, const void* data, uint32_t sizeIn32BitWords, uint32_t offsetIn32BitWords = 0) override;
+    void setDescriptorHeaps(DescriptorHeapHandle* heaps, uint32_t count) override;
+    void setInlineCBV(uint32_t slot, BufferHandle buf, uint64_t offset = 0) override;
+    void setInlineSRV(uint32_t slot, BufferHandle buf, uint64_t offset = 0) override;
+    void setInlineUAV(uint32_t slot, BufferHandle buf, uint64_t offset = 0) override;
+    void setDescriptorBufferOffset(uint32_t slot, uint32_t bufferIndex, uint64_t byteOffset) override;
+    void setDynamicOffset(uint32_t slot, uint32_t byteOffset) override;
+    void pushDescriptor(uint32_t slot, const DescriptorWrite* writes, uint32_t count) override;
     // friends
     friend class VulkanCommandAllocator;
     friend class VulkanCommandQueue;
@@ -973,22 +1093,23 @@ struct VulkanContext {
 };
 
 // Global Resource Pools
-extern ResourcePool<VulkanBuffer, BufferHandle>                           g_BufferPool;
-extern ResourcePool<VulkanBufferView, BufferViewHandle>                   g_BufferViewPool;
-extern ResourcePool<VulkanTexture, TextureHandle>                         g_TexturePool;
-extern ResourcePool<VulkanTextureView, TextureViewHandle>                 g_TextureViewPool;
-extern ResourcePool<VulkanShader, ShaderHandle>                           g_ShaderPool;
-extern ResourcePool<VulkanPipeline, PipelineHandle>                       g_PipelinePool;
-extern ResourcePool<VulkanPipelineLayout, PipelineLayoutHandle>           g_PipelineLayoutPool;
-extern ResourcePool<VulkanResourceGroupLayout, ResourceGroupLayoutHandle> g_ResourceGroupLayoutPool;
-extern ResourcePool<VulkanRenderPass, RenderPassHandle>                   g_RenderPassPool;
-extern ResourcePool<VulkanFramebuffer, FramebufferHandle>                 g_FramebufferPool;
-extern ResourcePool<VulkanResourceGroup, ResourceGroupHandle>             g_ResourceGroupPool;
+extern ResourcePool<VulkanBuffer, BufferHandle>                 g_BufferPool;
+extern ResourcePool<VulkanBufferView, BufferViewHandle>         g_BufferViewPool;
+extern ResourcePool<VulkanTexture, TextureHandle>               g_TexturePool;
+extern ResourcePool<VulkanTextureView, TextureViewHandle>       g_TextureViewPool;
+extern ResourcePool<VulkanShader, ShaderHandle>                 g_ShaderPool;
+extern ResourcePool<VulkanPipeline, PipelineHandle>             g_PipelinePool;
+extern ResourcePool<VulkanPipelineLayout, PipelineLayoutHandle> g_PipelineLayoutPool;
+extern ResourcePool<VulkanRenderPass, RenderPassHandle>         g_RenderPassPool;
+extern ResourcePool<VulkanFramebuffer, FramebufferHandle>       g_FramebufferPool;
+extern ResourcePool<VulkanSetLayout, SetLayoutHandle>           g_SetLayoutPool;
+extern ResourcePool<VulkanDescriptorPool, DescriptorPoolHandle> g_DescriptorPoolPool;
+extern ResourcePool<VulkanSet, SetHandle>                       g_SetPool;
+extern ResourcePool<VulkanDescriptorHeap, DescriptorHeapHandle> g_DescriptorHeapPool;
 
 // Global Hash Storage
 // TODO implement better cache managenet
-extern std::unordered_map<Hash64, BufferViewHandle>    g_BufferViewCache;
-extern std::unordered_map<Hash64, ResourceGroupHandle> g_ResourceGroupCache;
+extern std::unordered_map<Hash64, BufferViewHandle> g_BufferViewCache;
 
 // Context & Cleanup Functions
 VulkanContext& GetVulkanContext();

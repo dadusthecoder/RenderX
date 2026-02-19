@@ -11,7 +11,12 @@ namespace Rx {
 namespace Validation {
 
 // Validation severity levels
-enum class ValidationSeverity { INFO, WARNING, _ERROR, FATAL };
+enum class ValidationSeverity {
+    INFO,
+    WARNING,
+    _ERROR,
+    FATAL
+};
 
 // Validation configuration
 struct ValidationConfig {
@@ -24,7 +29,12 @@ struct ValidationConfig {
 };
 
 // Resource tracking info
-enum class ResourceState : uint8_t { CREATED, BOUND, IN_USE, DESTROYED };
+enum class ResourceState : uint8_t {
+    CREATED,
+    BOUND,
+    IN_USE,
+    DESTROYED
+};
 
 struct ResourceInfo {
     uint64_t      handleId;
@@ -61,16 +71,15 @@ struct PipelineInfo : ResourceInfo {
 
 // Command list tracking
 struct CommandListInfo {
-    CommandListState                 state;
-    bool                             isInsideRenderPass = false;
-    bool                             isInsideRendering  = false;
-    PipelineHandle                   boundPipeline;
-    std::vector<BufferHandle>        boundVertexBuffers;
-    BufferHandle                     boundIndexBuffer;
-    std::vector<ResourceGroupHandle> boundResourceGroups;
-    FramebufferHandle                boundFramebuffer;
-    RenderPassHandle                 activeRenderPass;
-    uint64_t                         recordingFrame;
+    CommandListState          state;
+    bool                      isInsideRenderPass = false;
+    bool                      isInsideRendering  = false;
+    PipelineHandle            boundPipeline;
+    std::vector<BufferHandle> boundVertexBuffers;
+    BufferHandle              boundIndexBuffer;
+    FramebufferHandle         boundFramebuffer;
+    RenderPassHandle          activeRenderPass;
+    uint64_t                  recordingFrame;
 
     CommandListInfo()
         : state(CommandListState::INITIAL),
@@ -154,12 +163,6 @@ public:
     bool ValidatePipeline(PipelineHandle handle, const char* context = nullptr);
     void ValidatePipelineDesc(const PipelineDesc& desc);
 
-    // Resource group validation
-    void RegisterResourceGroup(ResourceGroupHandle handle, const ResourceGroupDesc& desc);
-    void UnregisterResourceGroup(ResourceGroupHandle handle);
-    bool ValidateResourceGroup(ResourceGroupHandle handle, const char* context = nullptr);
-    void ValidateResourceGroupDesc(const ResourceGroupDesc& desc);
-
     // Command list validation
     void RegisterCommandList(CommandList* cmdList);
     void UnregisterCommandList(CommandList* cmdList);
@@ -178,7 +181,6 @@ public:
     void ValidateSetPipeline(CommandList* cmdList, PipelineHandle pipeline);
     void ValidateSetVertexBuffer(CommandList* cmdList, BufferHandle buffer);
     void ValidateSetIndexBuffer(CommandList* cmdList, BufferHandle buffer);
-    void ValidateSetResourceGroup(CommandList* cmdList, ResourceGroupHandle group);
 
     // Buffer operation validation
     void ValidateBufferCopy(BufferHandle src, BufferHandle dst, const BufferCopyRegion& region);

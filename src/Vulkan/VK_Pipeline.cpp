@@ -11,7 +11,8 @@ ResourcePool<VulkanPipeline, PipelineHandle>             g_PipelinePool;
 // SHADER
 ShaderHandle VKCreateShader(const ShaderDesc& desc) {
     RENDERX_ASSERT_MSG(desc.bytecode.size() > 0, "VKCreateShader: bytecode is empty");
-    RENDERX_ASSERT_MSG(desc.bytecode.size() % sizeof(uint32_t) == 0, "VKCreateShader: bytecode size not aligned to uint32_t");
+    RENDERX_ASSERT_MSG(desc.bytecode.size() % sizeof(uint32_t) == 0,
+                       "VKCreateShader: bytecode size not aligned to uint32_t");
     RENDERX_ASSERT_MSG(!desc.entryPoint.empty(), "VKCreateShader: entryPoint is empty");
 
     VkShaderModuleCreateInfo ci{};
@@ -21,7 +22,8 @@ ShaderHandle VKCreateShader(const ShaderDesc& desc) {
 
     VkShaderModule shaderModule;
     auto&          ctx = GetVulkanContext();
-    RENDERX_ASSERT_MSG(ctx.device && ctx.device->logical() != VK_NULL_HANDLE, "VKCreateShader: device is VK_NULL_HANDLE");
+    RENDERX_ASSERT_MSG(ctx.device && ctx.device->logical() != VK_NULL_HANDLE,
+                       "VKCreateShader: device is VK_NULL_HANDLE");
 
     VkResult result = vkCreateShaderModule(ctx.device->logical(), &ci, nullptr, &shaderModule);
     if (!CheckVk(result, "VKCreateShader: Failed to create shader module")) {
@@ -42,18 +44,18 @@ void VKDestroyShader(ShaderHandle& handle) {
 }
 
 // Pipeline LAyout Creation
-PipelineLayoutHandle VKCreatePipelineLayout(const ResourceGroupLayoutHandle* playouts, uint32_t resourceGroupLayoutCount) {
-    if (resourceGroupLayoutCount <= 0)
-        RENDERX_WARN("resourcegrouplayoutcount is zero");
+PipelineLayoutHandle VKCreatePipelineLayout(const SetLayoutHandle* playouts, uint32_t LayoutCount) {
+    if (LayoutCount == 0)
+        RENDERX_WARN("setlayoutCount is zero");
     if (playouts == nullptr)
         RENDERX_WARN("playouts pointer is null");
     auto&                              ctx = GetVulkanContext();
     std::vector<VkDescriptorSetLayout> setLayouts;
-    for (uint32_t i = 0; i < resourceGroupLayoutCount; ++i) {
-        auto layout = g_ResourceGroupLayoutPool.get(playouts[i]);
+    for (uint32_t i = 0; i < LayoutCount; ++i) {
+        auto layout = g_SetLayoutPool.get(playouts[i]);
         if (!layout)
             continue;
-        setLayouts.push_back(layout->layout);
+        setLayouts.push_back(layout->vkLayout);
     }
 
     //  Pipeline Layout
@@ -66,23 +68,11 @@ PipelineLayoutHandle VKCreatePipelineLayout(const ResourceGroupLayoutHandle* pla
     VK_CHECK(lres);
     RENDERX_ASSERT_MSG(pipelinelayout != VK_NULL_HANDLE, "Failed to create pipeline layout");
 
-    // Debug naming
-    // TODO
-    // if (desc.&& desc.debugName[0] != '\0') {
-    //	VkDebugUtilsObjectNameInfoEXT nameInfo = {};
-    //	nameInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
-    //	nameInfo.objectType = VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT;
-    //	nameInfo.objectHandle = (uint64_t)pipelinelayout;
-    //	nameInfo.pObjectName = desc.debugName;
-    //	// vkSetDebugUtilsObjectNameEXT(m_device, &nameInfo);
-    //}
-
     VulkanPipelineLayout rxPipelneLayout{};
     rxPipelneLayout.layout     = pipelinelayout;
     rxPipelneLayout.setlayouts = setLayouts;
 
-    // handle
-    return g_PipelineLayoutPool.allocate(rxPipelneLayout);
+    return g_PipelineLayoutPool.allocate(std::move(rxPipelneLayout));
 }
 
 // GRAPHICS PIPELINE
@@ -154,8 +144,8 @@ PipelineHandle VKCreateGraphicsPipeline(PipelineDesc& desc) {
     rast.sType       = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
     rast.polygonMode = ToVulkanPolygonMode(desc.rasterizer.fillMode);
     rast.cullMode    = ToVulkanCullMode(desc.rasterizer.cullMode);
-    rast.frontFace   = desc.rasterizer.frontCounterClockwise ? VK_FRONT_FACE_COUNTER_CLOCKWISE : VK_FRONT_FACE_CLOCKWISE;
-    rast.lineWidth   = 1.0f;
+    rast.frontFace = desc.rasterizer.frontCounterClockwise ? VK_FRONT_FACE_COUNTER_CLOCKWISE : VK_FRONT_FACE_CLOCKWISE;
+    rast.lineWidth = 1.0f;
 
     //  Multisample
     VkPipelineMultisampleStateCreateInfo ms{};

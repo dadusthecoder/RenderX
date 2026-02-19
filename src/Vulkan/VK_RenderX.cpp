@@ -31,8 +31,6 @@ void VKBackendInit(const InitDesc& window) {
     ctx.transferQueue = new VulkanCommandQueue(
         ctx.device->logical(), ctx.device->transferQueue(), ctx.device->transferFamily(), QueueType::TRANSFER);
     ctx.allocator             = new VulkanAllocator(ctx.instance->getInstance(), ctx.device->physical(), ctx.device->logical());
-    ctx.descriptorPoolManager = new VulkanDescriptorPoolManager(ctx);
-    ctx.descriptorSetManager  = new VulkanDescriptorManager(ctx);
     ctx.stagingAllocator      = new VulkanStagingAllocator(ctx);
     ctx.immediateUploader     = new VulkanImmediateUploader(ctx);
     ctx.deferredUploader      = new VulkanDeferredUploader(ctx);

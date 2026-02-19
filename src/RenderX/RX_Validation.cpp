@@ -409,13 +409,13 @@ void ValidationLayer::ValidateTextureDesc(const TextureDesc& desc) {
     // Validate depth/stencil formats
     bool isDepthStencil = desc.format == Format::D24_UNORM_S8_UINT || desc.format == Format::D32_SFLOAT;
 
-    if (isDepthStencil && !Has(desc.usage, TextureUsageFlags::DEPTH_STENCIL)) {
+    if (isDepthStencil && !Has(desc.usage, TextureUsage::DEPTH_STENCIL)) {
         Report(ValidationSeverity::WARNING,
                ValidationCategory::RESOURCE,
                "Depth/stencil format without DEPTH_STENCIL usage flag");
     }
 
-    if (!isDepthStencil && Has(desc.usage, TextureUsageFlags::DEPTH_STENCIL)) {
+    if (!isDepthStencil && Has(desc.usage, TextureUsage::DEPTH_STENCIL)) {
         Report(ValidationSeverity::_ERROR,
                ValidationCategory::RESOURCE,
                "DEPTH_STENCIL usage requires depth/stencil format");
@@ -576,111 +576,6 @@ void ValidationLayer::ValidatePipelineDesc(const PipelineDesc& desc) {
     }
 }
 
-// Resource group validation
-void ValidationLayer::RegisterResourceGroup(ResourceGroupHandle handle, const ResourceGroupDesc& desc) {
-    if (!IsCategoryEnabled(ValidationCategory::DESCRIPTOR))
-        return;
-
-    std::lock_guard<std::mutex> lock(mutex_);
-
-    ResourceInfo info;
-    info.handleId      = handle.id;
-    info.state         = ResourceState::CREATED;
-    info.creationFrame = currentFrame_;
-    info.lastUsedFrame = currentFrame_;
-
-    resourceGroups_[handle.id] = info;
-}
-
-void ValidationLayer::UnregisterResourceGroup(ResourceGroupHandle handle) {
-    if (!IsCategoryEnabled(ValidationCategory::DESCRIPTOR))
-        return;
-
-    std::lock_guard<std::mutex> lock(mutex_);
-
-    auto it = resourceGroups_.find(handle.id);
-    if (it == resourceGroups_.end()) {
-        Report(ValidationSeverity::_ERROR,
-               ValidationCategory::HANDLE,
-               fmt::format("Attempting to destroy non-existent resource group 0x{:016X}", handle.id));
-        return;
-    }
-
-    resourceGroups_.erase(it);
-}
-
-bool ValidationLayer::ValidateResourceGroup(ResourceGroupHandle handle, const char* context) {
-    if (!IsCategoryEnabled(ValidationCategory::HANDLE))
-        return true;
-
-    std::lock_guard<std::mutex> lock(mutex_);
-
-    if (!handle.IsValid()) {
-        Report(ValidationSeverity::_ERROR,
-               ValidationCategory::HANDLE,
-               fmt::format("Invalid resource group handle in {}", context ? context : "unknown context"));
-        return false;
-    }
-
-    auto it = resourceGroups_.find(handle.id);
-    if (it == resourceGroups_.end()) {
-        Report(
-            ValidationSeverity::_ERROR,
-            ValidationCategory::HANDLE,
-            fmt::format("Resource group 0x{:016X} not found ({})", handle.id, context ? context : "unknown context"));
-        return false;
-    }
-
-    it->second.lastUsedFrame = currentFrame_;
-    return true;
-}
-
-void ValidationLayer::ValidateResourceGroupDesc(const ResourceGroupDesc& desc) {
-    if (!IsCategoryEnabled(ValidationCategory::DESCRIPTOR))
-        return;
-
-    if (!desc.pipelinelayout.IsValid()) {
-        Report(
-            ValidationSeverity::_ERROR, ValidationCategory::DESCRIPTOR, "Resource group has invalid pipeline layout");
-    }
-
-    if (!desc.layout.IsValid()) {
-        Report(ValidationSeverity::_ERROR, ValidationCategory::DESCRIPTOR, "Resource group has invalid layout");
-    }
-
-    // Validate resource handles
-    for (const auto& resource : desc.Resources) {
-        switch (resource.type) {
-        case ResourceType::CONSTANT_BUFFER:
-        case ResourceType::STORAGE_BUFFER:
-        case ResourceType::RW_STORAGE_BUFFER:
-            if (!resource.bufferView.IsValid()) {
-                Report(ValidationSeverity::_ERROR,
-                       ValidationCategory::DESCRIPTOR,
-                       fmt::format("Resource group binding {} has invalid buffer view", resource.binding));
-            }
-            break;
-
-        case ResourceType::TEXTURE_SRV:
-        case ResourceType::TEXTURE_UAV:
-            if (!resource.textureView.IsValid()) {
-                Report(ValidationSeverity::_ERROR,
-                       ValidationCategory::DESCRIPTOR,
-                       fmt::format("Resource group binding {} has invalid texture view", resource.binding));
-            }
-            break;
-
-        case ResourceType::COMBINED_TEXTURE_SAMPLER:
-            if (!resource.combinedHandles.texture.IsValid() || !resource.combinedHandles.sampler.IsValid()) {
-                Report(ValidationSeverity::_ERROR,
-                       ValidationCategory::DESCRIPTOR,
-                       fmt::format("Resource group binding {} has invalid combined texture/sampler", resource.binding));
-            }
-            break;
-        }
-    }
-}
-
 // Command list validation
 void ValidationLayer::RegisterCommandList(CommandList* cmdList) {
     if (!IsCategoryEnabled(ValidationCategory::COMMAND_LIST))
@@ -747,7 +642,6 @@ void ValidationLayer::OnCommandListBegin(CommandList* cmdList) {
     info->boundPipeline      = PipelineHandle(0);
     info->boundVertexBuffers.clear();
     info->boundIndexBuffer = BufferHandle(0);
-    info->boundResourceGroups.clear();
 }
 
 void ValidationLayer::OnCommandListEnd(CommandList* cmdList) {
@@ -817,7 +711,6 @@ void ValidationLayer::OnCommandListReset(CommandList* cmdList) {
     info->boundPipeline      = PipelineHandle(0);
     info->boundVertexBuffers.clear();
     info->boundIndexBuffer = BufferHandle(0);
-    info->boundResourceGroups.clear();
 }
 
 // Command recording validation
@@ -1109,28 +1002,6 @@ void ValidationLayer::ValidateSetIndexBuffer(CommandList* cmdList, BufferHandle 
     }
 
     info->boundIndexBuffer = buffer;
-}
-
-void ValidationLayer::ValidateSetResourceGroup(CommandList* cmdList, ResourceGroupHandle group) {
-    if (!IsCategoryEnabled(ValidationCategory::DESCRIPTOR))
-        return;
-
-    if (!ValidateResourceGroup(group, "SetResourceGroup")) {
-        return;
-    }
-
-    std::lock_guard<std::mutex> lock(mutex_);
-
-    auto* info = GetCommandListInfo(cmdList);
-    if (!info)
-        return;
-
-    if (info->state != CommandListState::RECORDING) {
-        Report(ValidationSeverity::_ERROR, ValidationCategory::STATE, "SetResourceGroup outside recording state");
-        return;
-    }
-
-    info->boundResourceGroups.push_back(group);
 }
 
 // Buffer operation validation
