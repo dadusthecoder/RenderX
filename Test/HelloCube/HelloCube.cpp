@@ -88,13 +88,11 @@ int main() {
                                 .addAttribute(Rx::VertexAttribute::Vec3(1, 0, sizeof(float) * 3)); // color
 
     // Shaders
-    auto vertShader = Rx::CreateShader(Rx::ShaderDesc::FromBytecode(
-        Rx::PipelineStage::VERTEX,
-        Files::ReadBinaryFile("D:/dev/cpp/RenderX/Test/HelloTriangle/Shaders/bsc.vert.spv")));
+    auto vertShader = Rx::CreateShader(
+        Rx::ShaderDesc::FromBytecode(Rx::PipelineStage::VERTEX, Files::ReadBinaryFile("Shaders/Bin/bsc.vert.spv")));
 
-    auto fragShader = Rx::CreateShader(Rx::ShaderDesc::FromBytecode(
-        Rx::PipelineStage::FRAGMENT,
-        Files::ReadBinaryFile("D:/dev/cpp/RenderX/Test/HelloTriangle/Shaders/bsc.frag.spv")));
+    auto fragShader = Rx::CreateShader(
+        Rx::ShaderDesc::FromBytecode(Rx::PipelineStage::FRAGMENT, Files::ReadBinaryFile("Shaders/Bin/bsc.frag.spv")));
 
     // Swapchain
     int swapWidth, swapHeight;
@@ -112,7 +110,7 @@ int main() {
 
     // Pipeline layout
     // Pipeline layout now takes SetLayoutHandle instead of ResourceGroupLayoutHandle
-    auto pipelineLayout = Rx::CreatePipelineLayout(&setLayout, 1);
+    auto pipelineLayout = Rx::CreatePipelineLayout(&setLayout, 1, nullptr, 0);
 
     // ---- Pipeline ---------------------------------------------------------------------------
     auto pipeline = Rx::CreateGraphicsPipeline(Rx::PipelineDesc()
@@ -180,6 +178,9 @@ int main() {
     Mvp   mvp{};
     float angle = 0.0f;
 
+    Rx::FlushUploads();
+    Rx::PrintHandles();
+
     while (!glfwWindowShouldClose(window)) {
         auto& frame = frames[currentFrame];
 
@@ -201,7 +202,7 @@ int main() {
             glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
         glm::mat4 proj =
             glm::perspective(glm::radians(60.0f), (float)currentWidth / (float)currentHeight, 0.1f, 100.0f);
-        proj[1][1] *= -1.0f; // Vulkan clip space Y flip
+        // proj[1][1] *= -1.0f; // Vulkan clip space Y flip
 
         mvp.mvp = proj * view * model;
         memcpy(frame.uniformMappedPtr, &mvp, sizeof(Mvp));
@@ -236,11 +237,12 @@ int main() {
 
         // VK backend: vkCmdBindDescriptorSets(set=0, frame.descriptorSet)
         frame.graphicsList->setDescriptorSet(0, frame.descriptorSet);
-        
+        frame.graphicsList->setViewport(0, 0, (int)currentWidth, (int)currentHeight);
+        frame.graphicsList->setScissor(0, 0, currentWidth, currentHeight);
         frame.graphicsList->beginRendering(
             Rx::RenderingDesc(currentWidth, currentHeight)
                 .addColorAttachment(Rx::AttachmentDesc::RenderTarget(swapchain->GetImageView(currentImageIndex)))
-                .setDepthStencil(Rx::DepthStencilAttachmentDesc::Default(swapchain->GetDepthView(currentImageIndex))));
+                .setDepthStencil(Rx::DepthStencilAttachmentDesc::Clear(swapchain->GetDepthView(currentImageIndex))));
 
         frame.graphicsList->drawIndexed(36);
         frame.graphicsList->endRendering();

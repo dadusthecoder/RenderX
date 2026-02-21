@@ -8,12 +8,12 @@ FramebufferHandle VKCreateFramebuffer(const FramebufferDesc& desc) {
     RENDERX_ASSERT_MSG(ctx.device != VK_NULL_HANDLE, "VKCreateFramebuffer: device is VK_NULL_HANDLE");
     RENDERX_ASSERT(desc.width > 0 && desc.height > 0);
 
-    const bool               hasDepth = desc.depthStencilAttachment.IsValid();
+    const bool               hasDepth = desc.depthStencilAttachment.isValid();
     std::vector<VkImageView> attachments;
     attachments.reserve(desc.colorAttachments.size() + (hasDepth ? 1u : 0u));
 
     for (const auto& tex : desc.colorAttachments) {
-        RENDERX_ASSERT(tex.IsValid());
+        RENDERX_ASSERT(tex.isValid());
         auto* vkTexView = g_TextureViewPool.get(tex);
         RENDERX_ASSERT(vkTexView != nullptr && vkTexView->view != VK_NULL_HANDLE);
         attachments.push_back(vkTexView->view);

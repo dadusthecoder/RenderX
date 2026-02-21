@@ -49,13 +49,35 @@ void VulkanCommandList::close() {
 void VulkanCommandList::setPipeline(const PipelineHandle& pipeline) {
     PROFILE_FUNCTION();
     auto* p = g_PipelinePool.get(pipeline);
-    if (p == nullptr || p->pipeline == VK_NULL_HANDLE) {
+    if (p == nullptr || p->vkPipeline == VK_NULL_HANDLE) {
         RENDERX_WARN("VulkanCommandList::setPipeline: invalid pipeline handle");
         return;
     }
-    vkCmdBindPipeline(m_CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, p->pipeline);
-    m_CurrentPipeline       = pipeline;
-    m_CurrentPipelineLayout = p->layout;
+    vkCmdBindPipeline(m_CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, p->vkPipeline);
+    m_CurrentPipelineHandle       = pipeline;
+    m_CurrentPipelineLayoutHandle = p->layout;
+
+    // Cache push constant state for later pushConstants() calls
+    // Grab the layout from the VulkanPipelineLayout stored alongside the pipeline.
+    auto* layout = g_PipelineLayoutPool.get(p->layout);
+    if (layout) {
+        m_BoundPipelineLayout   = layout->vkLayout;
+        m_PushRangeCount        = layout->pushRangeCount;
+        m_HasMultiplePushRanges = (layout->pushRangeCount > 1);
+
+        // Build the union of all stage flags — used for the simple single-range case
+        m_PushConstantStages = 0;
+        for (uint32_t i = 0; i < layout->pushRangeCount; i++) {
+            m_PushConstantStages |= layout->pushRanges[i].stageFlags;
+
+            // Cache individual ranges for the multi-range case
+            if (i < VulkanPipelineLayout::MAX_PUSH_RANGES) {
+                m_PushRanges[i].offset     = layout->pushRanges[i].offset;
+                m_PushRanges[i].size       = layout->pushRanges[i].size;
+                m_PushRanges[i].stageFlags = layout->pushRanges[i].stageFlags;
+            }
+        }
+    }
 }
 
 void VulkanCommandList::setVertexBuffer(const BufferHandle& buffer, uint64_t offset) {
@@ -74,7 +96,7 @@ void VulkanCommandList::setVertexBuffer(const BufferHandle& buffer, uint64_t off
     vkCmdBindVertexBuffers(m_CommandBuffer, 0, 1, &buf, &offs);
 }
 
-void VulkanCommandList::setIndexBuffer(const BufferHandle& buffer, uint64_t offset) {
+void VulkanCommandList::setIndexBuffer(const BufferHandle& buffer, uint64_t offset, Format indextype) {
     PROFILE_FUNCTION();
     m_IndexBuffer       = buffer;
     m_IndexBufferOffset = offset;
@@ -85,8 +107,7 @@ void VulkanCommandList::setIndexBuffer(const BufferHandle& buffer, uint64_t offs
         return;
     }
 
-    // Assume 32-bit indices for now
-    vkCmdBindIndexBuffer(m_CommandBuffer, ib->buffer, static_cast<VkDeviceSize>(offset), VK_INDEX_TYPE_UINT32);
+    vkCmdBindIndexBuffer(m_CommandBuffer, ib->buffer, static_cast<VkDeviceSize>(offset), ToVulkanIndexType(indextype));
 }
 
 void VulkanCommandList::draw(uint32_t vertexCount,
@@ -142,10 +163,10 @@ void VulkanCommandList::beginRendering(const RenderingDesc& desc) {
         att.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
         att.clearValue                  = {};
-        att.clearValue.color.float32[0] = 1.0f;
-        att.clearValue.color.float32[1] = 1.0f;
-        att.clearValue.color.float32[2] = 1.0f;
-        att.clearValue.color.float32[3] = 1.0f;
+        att.clearValue.color.float32[0] = desc.clearColor.color.r;
+        att.clearValue.color.float32[1] = desc.clearColor.color.g;
+        att.clearValue.color.float32[2] = desc.clearColor.color.b;
+        att.clearValue.color.float32[3] = desc.clearColor.color.a;
 
         colorAttachments.push_back(att);
     }
@@ -199,32 +220,29 @@ void VulkanCommandList::writeBuffer(BufferHandle handle, const void* data, uint3
     vkCmdUpdateBuffer(m_CommandBuffer, buf->buffer, static_cast<VkDeviceSize>(offset), size, data);
 }
 
-
 void VulkanCommandList::setFramebuffer(FramebufferHandle handle) {
     VulkanFramebuffer* framebuffer = g_FramebufferPool.get(handle);
     RENDERX_ASSERT_MSG(framebuffer, "framebuffer handle {} is invalid or was not created", handle.id);
     RENDERX_ERROR("Function not implemented for the vulkan backend yet");
 }
 
-void VulkanCommandList::copyBufferToTexture(BufferHandle             srcBuffer,
-                                            TextureHandle            dstTexture,
-                                            const TextureCopyRegion& region) {
+void VulkanCommandList::copyBufferToTexture(BufferHandle       srcBuffer,
+                                            TextureHandle      dstTexture,
+                                            const TextureCopy& region) {
     RENDERX_ERROR("is not implemented for the Vulkan backend yet");
 }
 
-void VulkanCommandList::copyTexture(TextureHandle            srcTexture,
-                                    TextureHandle            dstTexture,
-                                    const TextureCopyRegion& region) {
+void VulkanCommandList::copyTexture(TextureHandle srcTexture, TextureHandle dstTexture, const TextureCopy& region) {
     RENDERX_ERROR("is not implemented for the Vulkan backend yet");
 }
 
-void VulkanCommandList::copyBuffer(BufferHandle src, BufferHandle dst, const BufferCopyRegion& region) {
+void VulkanCommandList::copyBuffer(BufferHandle src, BufferHandle dst, const BufferCopy& region) {
     RENDERX_ERROR("is not implemented for the Vulkan backend yet");
 }
 
-void VulkanCommandList::copyTextureToBuffer(TextureHandle            srcTexture,
-                                            BufferHandle             dstBuffer,
-                                            const TextureCopyRegion& region) {
+void VulkanCommandList::copyTextureToBuffer(TextureHandle      srcTexture,
+                                            BufferHandle       dstBuffer,
+                                            const TextureCopy& region) {
     RENDERX_ERROR("is not implemented for the Vulkan backend yet");
 }
 
@@ -294,6 +312,36 @@ void VulkanCommandList::Barrier(const Memory_Barrier* memoryBarriers,
     dependencyInfo.pImageMemoryBarriers    = vkImage;
 
     vkCmdPipelineBarrier2(m_CommandBuffer, &dependencyInfo);
+}
+
+// VulkanCommandList.cpp
+
+void VulkanCommandList::setViewport(const Viewport& vp) {
+    // Vulkan uses top-left origin with Y flipped relative to OpenGL.
+    // We flip by setting y = vp.y + vp.height and height = -vp.height.
+    // This makes NDC +Y point up consistently with OpenGL/GLM conventions
+    // without needing to touch projection matrices.
+    VkViewport vkVP{};
+    vkVP.x        = static_cast<float>(vp.x);
+    vkVP.y        = static_cast<float>(vp.y + vp.height); // flip origin to bottom-left
+    vkVP.width    = static_cast<float>(vp.width);
+    vkVP.height   = static_cast<float>(-vp.height); // negative height = Y-flip
+    vkVP.minDepth = vp.minDepth;
+    vkVP.maxDepth = vp.maxDepth;
+
+    vkCmdSetViewport(m_CommandBuffer, 0, 1, &vkVP);
+}
+
+void VulkanCommandList::setScissor(const Scissor& sc) {
+    // Scissor rect must stay in positive (non-flipped) coordinates —
+    // Vulkan scissor is always top-left origin regardless of viewport flip.
+    VkRect2D rect{};
+    rect.offset.x      = sc.x;
+    rect.offset.y      = sc.y;
+    rect.extent.width  = static_cast<uint32_t>(sc.width);
+    rect.extent.height = static_cast<uint32_t>(sc.height);
+
+    vkCmdSetScissor(m_CommandBuffer, 0, 1, &rect);
 }
 
 // void VulkanCommandList::flushBarriers() {

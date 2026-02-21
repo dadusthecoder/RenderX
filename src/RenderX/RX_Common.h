@@ -220,8 +220,11 @@ namespace Rx {
     /* Pipeline Layout */                                                                                              \
     X(PipelineLayoutHandle,                                                                                            \
       CreatePipelineLayout,                                                                                            \
-      (const SetLayoutHandle* layouts, uint32_t layoutCount),                                                          \
-      (layouts, layoutCount))                                                                                          \
+      (const SetLayoutHandle*   layouts,                                                                               \
+       uint32_t                 layoutCount,                                                                           \
+       const PushConstantRange* pushRanges,                                                                            \
+       uint32_t                 pushRangeCount),                                                                                       \
+      (layouts, layoutCount, pushRanges, pushRangeCount))                                                              \
                                                                                                                        \
     /* Pipeline Graphics */                                                                                            \
     X(PipelineHandle, CreateGraphicsPipeline, (PipelineDesc & desc), (desc))                                           \
@@ -280,7 +283,14 @@ namespace Rx {
       (sets, writes, setCount, writeCounts))                                                                           \
     X(DescriptorHeapHandle, CreateDescriptorHeap, (const DescriptorHeapDesc& desc), (desc))                            \
     X(void, DestroyDescriptorHeap, (DescriptorHeapHandle & handle), (handle))                                          \
-    X(DescriptorPointer, GetDescriptorHeapPtr, (DescriptorHeapHandle heap, uint32_t index), (heap, index))
+    X(DescriptorPointer, GetDescriptorHeapPtr, (DescriptorHeapHandle heap, uint32_t index), (heap, index))             \
+    X(SamplerHandle, CreateSampler, (const SamplerDesc& desc), (desc))                                                 \
+    X(void, DestroySampler, (SamplerHandle & handle), (handle))                                                        \
+    X(void, DestroyBuffer, (BufferHandle & handle), (handle))                                                          \
+    X(void, DestroyPipeline, (PipelineHandle & handle), (handle))                                                      \
+    X(void, DestroyPipelineLayout, (PipelineLayoutHandle & handle), (handle))                                          \
+    X(void, FlushUploads, (), ())                                                                                      \
+    X(void, PrintHandles, (), ())
 
 // Base Handle Template
 template <typename Tag> struct Handle {
@@ -292,7 +302,7 @@ public:
         : id(key) {}
     Handle() = default;
 
-    bool IsValid() const { return id != INVALID; }
+    bool isValid() const { return id != INVALID; }
 
     // operators
     bool operator==(const Handle& o) const { return id == o.id; }
@@ -421,11 +431,12 @@ enum class StoreOp {
     STORE,
     DONT_CARE
 };
-enum class TextureWrap {
+enum class AddressMode {
     REPEAT,
     MIRRORED_REPEAT,
     CLAMP_TO_EDGE,
-    CLAMP_TO_BORDER
+    CLAMP_TO_BORDER,
+    MIRROR_CLAMP_TO_EDGE
 };
 enum class Topology {
     POINTS,
@@ -435,7 +446,7 @@ enum class Topology {
     TRIANGLE_STRIP,
     TRIANGLE_FAN
 };
-enum class CompareFunc {
+enum class CompareOp {
     NEVER,
     LESS,
     EQUAL,
@@ -445,6 +456,14 @@ enum class CompareFunc {
     GREATER_EQUAL,
     ALWAYS
 };
+enum class BorderColor : uint8_t {
+    FLOAT_TRANSPARENT_BLACK,
+    INT_TRANSPARENT_BLACK,
+    FLOAT_OPAQUE_BLACK,
+    INT_OPAQUE_BLACK,
+    FLOAT_OPAQUE_WHITE,
+    INT_OPAQUE_WHITE,
+};
 enum class BlendOp {
     ADD,
     SUBTRACT,
@@ -452,6 +471,22 @@ enum class BlendOp {
     MIN,
     MAX
 };
+
+enum class BlendFunc {
+    ZERO,
+    ONE,
+    SRC_COLOR,
+    ONE_MINUS_SRC_COLOR,
+    DST_COLOR,
+    ONE_MINUS_DST_COLOR,
+    SRC_ALPHA,
+    ONE_MINUS_SRC_ALPHA,
+    DST_ALPHA,
+    ONE_MINUS_DST_ALPHA,
+    CONSTANT_COLOR,
+    ONE_MINUS_CONSTANT_COLOR
+};
+
 enum class CullMode {
     NONE,
     FRONT,
@@ -484,7 +519,15 @@ enum class Format : uint16_t {
     BC1_RGBA_UNORM,
     BC1_RGBA_SRGB,
     BC3_UNORM,
-    BC3_SRGB
+    BC3_SRGB,
+
+    // Index Types
+    //@note Do not use this format , for the  buffers creation
+    // valid uasges : CommandList::setIndexBuffer( , /*indexType*/ Format::UINT32|UINT64)
+    // passing this to the bufferDesc Will be considered as undefined behaviour
+    // i put the enum in here cuse it is easy to remember
+    UINT32,
+    UINT16
 };
 
 enum class Filter {
@@ -496,27 +539,11 @@ enum class Filter {
     LINEAR_MIPMAP_LINEAR
 };
 
-enum class BlendFunc {
-    ZERO,
-    ONE,
-    SRC_COLOR,
-    ONE_MINUS_SRC_COLOR,
-    DST_COLOR,
-    ONE_MINUS_DST_COLOR,
-    SRC_ALPHA,
-    ONE_MINUS_SRC_ALPHA,
-    DST_ALPHA,
-    ONE_MINUS_DST_ALPHA,
-    CONSTANT_COLOR,
-    ONE_MINUS_CONSTANT_COLOR
-};
-
-// TODO-----------------------------------------------------------------------
-/*@note each usage of this enum depends on where it is being used
-e.g. In Buffer desc The memory type ....
-so only use valid flags each usages has different valid flags
-*/
-//---------------------------------------------------------------------------
+/* @note Context-sensitive enum.
+ *        Valid flags depend on where this enum is used.
+ *        Each usage site defines its own allowed subset.
+ *        Providing invalid flags results in undefined behavior.
+ */
 enum class MemoryType : uint8_t {
     GPU_ONLY   = 1 << 0, // Device-local, no CPU access
     CPU_TO_GPU = 1 << 1, // Host-visible, optimized for CPU writes
@@ -562,21 +589,7 @@ enum class PipelineStage : uint16_t {
 };
 ENABLE_BITMASK_OPERATORS(PipelineStage)
 
-enum class ResourceGroupFlags : uint8_t {
-    NONE   = 0,               // No special flags
-    STATIC = 1 << 0,          // Long-lived (per-scene /
-                              // per-material)
-    DYNAMIC = 1 << 1,         // Frequently updated
-                              // (per-frame / per-draw)
-    DYNAMIC_UNIFORM = 1 << 2, // Dynamic uniform buffers (Vulkan
-                              // dynamic offsets)
-    BINDLESS = 1 << 3,        // Bindless descriptors
-    BUFFER   = 1 << 4         // Descriptor-buffer based APIs
-                              // (e.g. VK_EXT_descriptor_buffer)
-};
-ENABLE_BITMASK_OPERATORS(ResourceGroupFlags)
-
-enum class BufferUsage : uint16_t {
+enum class BufferFlags : uint16_t {
     VERTEX       = 1 << 0,
     INDEX        = 1 << 1,
     UNIFORM      = 1 << 2,
@@ -586,9 +599,10 @@ enum class BufferUsage : uint16_t {
     TRANSFER_DST = 1 << 6,
     STATIC       = 1 << 8,
     DYNAMIC      = 1 << 9,
-    STREAMING    = 1 << 10
+    STREAMING    = 1 << 10,
+    NONE         = 1 << 11
 };
-ENABLE_BITMASK_OPERATORS(BufferUsage)
+ENABLE_BITMASK_OPERATORS(BufferFlags)
 
 enum class AccessFlags : uint32_t {
     NONE                   = 0,
@@ -892,6 +906,18 @@ struct TextureBarrier {
         return barrier;
     }
 
+    static TextureBarrier ShaderReadToDepthStencil(TextureHandle texture) {
+        TextureBarrier barrier(texture,
+                               TextureLayout::SHADER_READ_ONLY,
+                               TextureLayout::DEPTH_STENCIL_ATTACHMENT,
+                               PipelineStage::TOP_OF_PIPE,
+                               AccessFlags::NONE,
+                               PipelineStage::EARLY_FRAGMENT_TESTS,
+                               AccessFlags::DEPTH_STENCIL_WRITE);
+        barrier.range.aspect = TextureAspect::IMAGE_ASPECT_DEPTH;
+        return barrier;
+    }
+
     // Render target to shader read
     static TextureBarrier ColorAttachmentToShaderRead(TextureHandle texture) {
         return TextureBarrier(texture,
@@ -1125,9 +1151,9 @@ struct VertexInputState {
     }
 };
 
-inline bool IsValidBufferFlags(BufferUsage flags) {
-    bool hasStatic  = Has(flags, BufferUsage::STATIC);
-    bool hasDynamic = Has(flags, BufferUsage::DYNAMIC);
+inline bool IsValidBufferFlags(BufferFlags flags) {
+    bool hasStatic  = Has(flags, BufferFlags::STATIC);
+    bool hasDynamic = Has(flags, BufferFlags::DYNAMIC);
 
     if (hasStatic && hasDynamic) {
         return false;
@@ -1135,8 +1161,8 @@ inline bool IsValidBufferFlags(BufferUsage flags) {
 
     // Must have at least one usage flag (not just
     // Static/Dynamic)
-    BufferUsage usageMask = BufferUsage::VERTEX | BufferUsage::INDEX | BufferUsage::UNIFORM | BufferUsage::STORAGE |
-                            BufferUsage::INDIRECT | BufferUsage::TRANSFER_SRC | BufferUsage::TRANSFER_DST;
+    BufferFlags usageMask = BufferFlags::VERTEX | BufferFlags::INDEX | BufferFlags::UNIFORM | BufferFlags::STORAGE |
+                            BufferFlags::INDIRECT | BufferFlags::TRANSFER_SRC | BufferFlags::TRANSFER_DST;
 
     if (!Has(usageMask, flags)) {
         return false; // Must have at least one
@@ -1147,159 +1173,313 @@ inline bool IsValidBufferFlags(BufferUsage flags) {
 }
 
 struct BufferDesc {
-    BufferUsage usage;
-    MemoryType  memoryType;
-    size_t      size;
+    BufferFlags usage        = BufferFlags::NONE;
+    MemoryType  memoryType   = MemoryType::GPU_ONLY;
+    size_t      size         = 0;
     uint32_t    bindingCount = 0;
     const void* initialData  = nullptr;
+    const char* debugName    = nullptr;
 
     BufferDesc() = default;
 
-    BufferDesc(BufferUsage usage, MemoryType memType, size_t sz, const void* data = nullptr)
-        : usage(usage),
-          memoryType(memType),
-          size(sz),
-          initialData(data) {}
-
-    // Factory methods for common buffer types
-    static BufferDesc VertexBuffer(size_t size, MemoryType memType = MemoryType::GPU_ONLY, const void* data = nullptr) {
-        return BufferDesc(BufferUsage::VERTEX | BufferUsage::TRANSFER_DST, memType, size, data);
+    BufferDesc& setUsage(BufferFlags flags) {
+        usage = flags;
+        return *this;
+    }
+    BufferDesc& addUsage(BufferFlags flags) {
+        usage = usage | flags;
+        return *this;
+    }
+    BufferDesc& setMemoryType(MemoryType type) {
+        memoryType = type;
+        return *this;
+    }
+    BufferDesc& setSize(size_t sz) {
+        size = sz;
+        return *this;
+    }
+    BufferDesc& setInitialData(const void* data) {
+        initialData = data;
+        return *this;
+    }
+    BufferDesc& setDebugName(const char* name) {
+        debugName = name;
+        return *this;
     }
 
-    static BufferDesc IndexBuffer(size_t size, MemoryType memType = MemoryType::GPU_ONLY, const void* data = nullptr) {
-        return BufferDesc(BufferUsage::INDEX | BufferUsage::TRANSFER_DST, memType, size, data);
+    static BufferDesc VertexBuffer(size_t sz, MemoryType mem = MemoryType::GPU_ONLY, const void* data = nullptr) {
+        return BufferDesc()
+            .setUsage(BufferFlags::VERTEX | BufferFlags::TRANSFER_DST)
+            .setMemoryType(mem)
+            .setSize(sz)
+            .setInitialData(data);
     }
 
-    static BufferDesc
-    UniformBuffer(size_t size, MemoryType memType = MemoryType::CPU_TO_GPU, const void* data = nullptr) {
-        BufferDesc desc(BufferUsage::UNIFORM, memType, size, data);
-        return desc;
+    static BufferDesc IndexBuffer(size_t sz, MemoryType mem = MemoryType::GPU_ONLY, const void* data = nullptr) {
+        return BufferDesc()
+            .setUsage(BufferFlags::INDEX | BufferFlags::TRANSFER_DST)
+            .setMemoryType(mem)
+            .setSize(sz)
+            .setInitialData(data);
     }
 
-    static BufferDesc
-    StorageBuffer(size_t size, MemoryType memType = MemoryType::GPU_ONLY, const void* data = nullptr) {
-        return BufferDesc(BufferUsage::STORAGE, memType, size, data);
+    static BufferDesc UniformBuffer(size_t sz, MemoryType mem = MemoryType::CPU_TO_GPU, const void* data = nullptr) {
+        return BufferDesc().setUsage(BufferFlags::UNIFORM).setMemoryType(mem).setSize(sz).setInitialData(data);
     }
 
-    static BufferDesc StagingBuffer(size_t size) {
-        return BufferDesc(BufferUsage::TRANSFER_SRC, MemoryType::CPU_TO_GPU, size, nullptr);
+    static BufferDesc StorageBuffer(size_t sz, MemoryType mem = MemoryType::GPU_ONLY, const void* data = nullptr) {
+        return BufferDesc()
+            .setUsage(BufferFlags::STORAGE | BufferFlags::TRANSFER_DST)
+            .setMemoryType(mem)
+            .setSize(sz)
+            .setInitialData(data);
     }
 
-    static BufferDesc ReadbackBuffer(size_t size) {
-        return BufferDesc(BufferUsage::TRANSFER_DST, MemoryType::GPU_TO_CPU, size, nullptr);
+    // Read-write storage — compute writes, graphics reads
+    static BufferDesc StorageBufferRW(size_t sz, MemoryType mem = MemoryType::GPU_ONLY) {
+        return BufferDesc()
+            .setUsage(BufferFlags::STORAGE | BufferFlags::TRANSFER_SRC | BufferFlags::TRANSFER_DST)
+            .setMemoryType(mem)
+            .setSize(sz);
     }
 
-    // Dynamic buffers (frequently updated)
-    static BufferDesc DynamicVertexBuffer(size_t size) {
-        return BufferDesc(BufferUsage::VERTEX | BufferUsage::DYNAMIC, MemoryType::CPU_TO_GPU, size, nullptr);
+    // Indirect draw/dispatch argument buffer — written by compute, read by GPU
+    static BufferDesc IndirectBuffer(size_t sz, MemoryType mem = MemoryType::GPU_ONLY) {
+        return BufferDesc()
+            .setUsage(BufferFlags::INDIRECT | BufferFlags::STORAGE | BufferFlags::TRANSFER_DST)
+            .setMemoryType(mem)
+            .setSize(sz);
     }
 
-    static BufferDesc DynamicUniformBuffer(size_t size) {
-        return BufferDesc(BufferUsage::UNIFORM | BufferUsage::DYNAMIC, MemoryType::CPU_TO_GPU, size, nullptr);
+    // CPU → GPU upload staging
+    static BufferDesc StagingBuffer(size_t sz) {
+        return BufferDesc().setUsage(BufferFlags::TRANSFER_SRC).setMemoryType(MemoryType::CPU_TO_GPU).setSize(sz);
+    }
+
+    // GPU → CPU readback (query results, screenshots, compute output)
+    static BufferDesc ReadbackBuffer(size_t sz) {
+        return BufferDesc().setUsage(BufferFlags::TRANSFER_DST).setMemoryType(MemoryType::GPU_TO_CPU).setSize(sz);
+    }
+
+    // Frequently updated vertex data — skinning output, particles
+    static BufferDesc DynamicVertexBuffer(size_t sz) {
+        return BufferDesc()
+            .setUsage(BufferFlags::VERTEX | BufferFlags::DYNAMIC)
+            .setMemoryType(MemoryType::CPU_TO_GPU)
+            .setSize(sz);
+    }
+
+    // Frequently updated uniforms — per-frame constants
+    static BufferDesc DynamicUniformBuffer(size_t sz) {
+        return BufferDesc()
+            .setUsage(BufferFlags::UNIFORM | BufferFlags::DYNAMIC)
+            .setMemoryType(MemoryType::CPU_TO_GPU)
+            .setSize(sz);
     }
 };
 
-struct BufferCopyRegion {
-    uint32_t srcOffset = 0;
-    uint32_t dstOffset = 0;
-    uint32_t size      = 0;
+struct BufferCopy {
+    uint64_t srcOffset = 0;
+    uint64_t dstOffset = 0;
+    uint64_t size      = 0;
 
-    BufferCopyRegion() = default;
-    BufferCopyRegion(uint32_t src, uint32_t dst, uint32_t sz)
-        : srcOffset(src),
-          dstOffset(dst),
-          size(sz) {}
+    BufferCopy() = default;
 
-    static BufferCopyRegion FullBuffer(uint32_t size) { return BufferCopyRegion(0, 0, size); }
+    BufferCopy& setSrcOffset(uint64_t off) {
+        srcOffset = off;
+        return *this;
+    }
+    BufferCopy& setDstOffset(uint64_t off) {
+        dstOffset = off;
+        return *this;
+    }
+    BufferCopy& setSize(uint64_t sz) {
+        size = sz;
+        return *this;
+    }
+
+    // Copy entire buffer from start to start
+    static BufferCopy FullBuffer(uint64_t sz) { return BufferCopy().setSize(sz); }
+
+    // Copy a sub-range, same offset in both src and dst
+    static BufferCopy Range(uint64_t offset, uint64_t sz) {
+        return BufferCopy().setSrcOffset(offset).setDstOffset(offset).setSize(sz);
+    }
+
+    // Copy from src offset into dst at a different offset
+    static BufferCopy Region(uint64_t srcOff, uint64_t dstOff, uint64_t sz) {
+        return BufferCopy().setSrcOffset(srcOff).setDstOffset(dstOff).setSize(sz);
+    }
 };
 
 struct BufferViewDesc {
     BufferHandle buffer;
-    uint32_t     offset = 0;
-    uint32_t     range  = 0; // 0 = whole buffer
+    uint64_t     offset    = 0;
+    uint64_t     range     = 0; // 0 = whole buffer (VK_WHOLE_SIZE equivalent)
+    const char*  debugName = nullptr;
 
     BufferViewDesc() = default;
-    BufferViewDesc(BufferHandle buf, uint32_t off = 0, uint32_t rng = 0)
-        : buffer(buf),
-          offset(off),
-          range(rng) {}
 
-    static BufferViewDesc WholeBuffer(BufferHandle buffer) { return BufferViewDesc(buffer, 0, 0); }
+    explicit BufferViewDesc(BufferHandle buf)
+        : buffer(buf) {}
+
+    BufferViewDesc& setOffset(uint64_t off) {
+        offset = off;
+        return *this;
+    }
+    BufferViewDesc& setRange(uint64_t r) {
+        range = r;
+        return *this;
+    }
+    BufferViewDesc& setDebugName(const char* name) {
+        debugName = name;
+        return *this;
+    }
+
+    // View the entire buffer from offset 0
+    static BufferViewDesc WholeBuffer(BufferHandle buf) { return BufferViewDesc(buf); }
+
+    // View a sub-range — e.g. one element in a structured buffer
+    static BufferViewDesc SubRange(BufferHandle buf, uint64_t off, uint64_t sz) {
+        return BufferViewDesc(buf).setOffset(off).setRange(sz);
+    }
+
+    // View one element of a tightly-packed array buffer
+    // stride = sizeof(Element), index = which element
+    static BufferViewDesc Element(BufferHandle buf, uint64_t stride, uint64_t index) {
+        return BufferViewDesc(buf).setOffset(stride * index).setRange(stride);
+    }
 };
 
 struct SamplerDesc {
-    Filter      minFilter;
-    Filter      magFilter;
-    TextureWrap wrapU;
-    TextureWrap wrapV;
-    TextureWrap wrapW;
-    float       maxAnisotropy;
-    bool        enableCompare;
-    CompareFunc compareFunc;
-    Vec4        borderColor;
+    // Filtering
+    Filter minFilter = Filter::LINEAR;
+    Filter magFilter = Filter::LINEAR;
+    Filter mipFilter = Filter::LINEAR;
 
-    SamplerDesc()
-        : minFilter(Filter::LINEAR),
-          magFilter(Filter::LINEAR),
-          wrapU(TextureWrap::REPEAT),
-          wrapV(TextureWrap::REPEAT),
-          wrapW(TextureWrap::REPEAT),
-          maxAnisotropy(1.0f),
-          enableCompare(false),
-          compareFunc(CompareFunc::NEVER),
-          borderColor(0.0f, 0.0f, 0.0f, 1.0f) {}
+    // Addressing
+    AddressMode addressU    = AddressMode::REPEAT;
+    AddressMode addressV    = AddressMode::REPEAT;
+    AddressMode addressW    = AddressMode::REPEAT;
+    BorderColor borderColor = BorderColor::FLOAT_TRANSPARENT_BLACK;
 
-    // Common sampler presets
-    static SamplerDesc LinearRepeat() {
-        SamplerDesc desc;
-        desc.minFilter = Filter::LINEAR;
-        desc.magFilter = Filter::LINEAR;
-        desc.wrapU = desc.wrapV = desc.wrapW = TextureWrap::REPEAT;
-        return desc;
+    // Mip control
+    float mipLodBias = 0.0f;
+    float minLod     = 0.0f;
+    float maxLod     = 1000.0f; // VK_LOD_CLAMP_NONE equivalent
+
+    // Anisotropy — 0 or 1 disables it
+    float maxAnisotropy = 0.0f;
+
+    // Comparison — for shadow/depth samplers
+    bool      comparisonEnable = false;
+    CompareOp compareOp        = CompareOp::ALWAYS;
+
+    // Unnormalized coordinates — rarely needed, mostly for pixel-exact lookups
+    bool unnormalizedCoords = false;
+
+    const char* debugName = nullptr;
+
+    SamplerDesc& setFilter(Filter min, Filter mag) {
+        minFilter = min;
+        magFilter = mag;
+        return *this;
+    }
+    SamplerDesc& setMipFilter(Filter f) {
+        mipFilter = f;
+        return *this;
+    }
+    SamplerDesc& setAddressMode(AddressMode uvw) {
+        addressU = addressV = addressW = uvw;
+        return *this;
+    }
+    SamplerDesc& setAddressMode(AddressMode u, AddressMode v, AddressMode w = AddressMode::REPEAT) {
+        addressU = u;
+        addressV = v;
+        addressW = w;
+        return *this;
+    }
+    SamplerDesc& setBorderColor(BorderColor c) {
+        borderColor = c;
+        return *this;
+    }
+    SamplerDesc& setMaxAnisotropy(float a) {
+        maxAnisotropy = a;
+        return *this;
+    }
+    SamplerDesc& setLodRange(float min, float max) {
+        minLod = min;
+        maxLod = max;
+        return *this;
+    }
+    SamplerDesc& setLodBias(float bias) {
+        mipLodBias = bias;
+        return *this;
+    }
+    SamplerDesc& enableComparison(CompareOp op) {
+        comparisonEnable = true;
+        compareOp        = op;
+        return *this;
+    }
+    SamplerDesc& setUnnormalizedCoords(bool v) {
+        unnormalizedCoords = v;
+        return *this;
+    }
+    SamplerDesc& setDebugName(const char* name) {
+        debugName = name;
+        return *this;
     }
 
-    static SamplerDesc LinearClamp() {
-        SamplerDesc desc;
-        desc.minFilter = Filter::LINEAR;
-        desc.magFilter = Filter::LINEAR;
-        desc.wrapU = desc.wrapV = desc.wrapW = TextureWrap::CLAMP_TO_EDGE;
-        return desc;
+    // Trilinear + repeat — good default for most scene textures
+    static SamplerDesc Trilinear() {
+        return SamplerDesc{}
+            .setFilter(Filter::LINEAR, Filter::LINEAR)
+            .setMipFilter(Filter::LINEAR)
+            .setAddressMode(AddressMode::REPEAT);
     }
 
-    static SamplerDesc NearestRepeat() {
-        SamplerDesc desc;
-        desc.minFilter = Filter::NEAREST;
-        desc.magFilter = Filter::NEAREST;
-        desc.wrapU = desc.wrapV = desc.wrapW = TextureWrap::REPEAT;
-        return desc;
-    }
-
-    static SamplerDesc NearestClamp() {
-        SamplerDesc desc;
-        desc.minFilter = Filter::NEAREST;
-        desc.magFilter = Filter::NEAREST;
-        desc.wrapU = desc.wrapV = desc.wrapW = TextureWrap::CLAMP_TO_EDGE;
-        return desc;
-    }
-
+    // Trilinear + anisotropic — best quality for scene textures
     static SamplerDesc Anisotropic(float maxAniso = 16.0f) {
-        SamplerDesc desc;
-        desc.minFilter     = Filter::LINEAR_MIPMAP_LINEAR;
-        desc.magFilter     = Filter::LINEAR;
-        desc.maxAnisotropy = maxAniso;
-        desc.wrapU = desc.wrapV = desc.wrapW = TextureWrap::REPEAT;
-        return desc;
+        return SamplerDesc{}
+            .setFilter(Filter::LINEAR, Filter::LINEAR)
+            .setMipFilter(Filter::LINEAR)
+            .setAddressMode(AddressMode::REPEAT)
+            .setMaxAnisotropy(maxAniso);
     }
 
-    static SamplerDesc ShadowMap() {
-        SamplerDesc desc;
-        desc.minFilter = Filter::LINEAR;
-        desc.magFilter = Filter::LINEAR;
-        desc.wrapU = desc.wrapV = desc.wrapW = TextureWrap::CLAMP_TO_BORDER;
-        desc.enableCompare                   = true;
-        desc.compareFunc                     = CompareFunc::LESS;
-        desc.borderColor                     = Vec4(1.0f);
-        return desc;
+    // Nearest + clamp — pixel art, UI, lookup tables
+    static SamplerDesc NearestClamp() {
+        return SamplerDesc{}
+            .setFilter(Filter::NEAREST, Filter::NEAREST)
+            .setMipFilter(Filter::NEAREST)
+            .setAddressMode(AddressMode::CLAMP_TO_EDGE);
+    }
+
+    // Linear + clamp — post-process, screen-space effects
+    static SamplerDesc LinearClamp() {
+        return SamplerDesc{}
+            .setFilter(Filter::LINEAR, Filter::LINEAR)
+            .setMipFilter(Filter::LINEAR)
+            .setAddressMode(AddressMode::CLAMP_TO_EDGE);
+    }
+
+    // PCF shadow sampler — comparison, clamp to white border
+    static SamplerDesc Shadow() {
+        return SamplerDesc{}
+            .setFilter(Filter::LINEAR, Filter::LINEAR)
+            .setMipFilter(Filter::NEAREST)
+            .setAddressMode(AddressMode::CLAMP_TO_BORDER)
+            .setBorderColor(BorderColor::FLOAT_OPAQUE_WHITE)
+            .enableComparison(CompareOp::LESS_EQUAL);
+    }
+
+    // Cubemap sampler — clamp to edge, no seams
+    static SamplerDesc Cubemap(float maxAniso = 0.0f) {
+        return SamplerDesc{}
+            .setFilter(Filter::LINEAR, Filter::LINEAR)
+            .setMipFilter(Filter::LINEAR)
+            .setAddressMode(AddressMode::CLAMP_TO_EDGE)
+            .setMaxAnisotropy(maxAniso);
     }
 };
 
@@ -1325,8 +1505,10 @@ struct TextureDesc {
     Format       format;
     TextureUsage usage;
     MemoryType   memoryType;
-    bool         generateMips;
+    const void*  initialData;
+    uint32_t     size;
     const char*  debugName;
+    bool         generateMips;
 
     // Constructors
     TextureDesc(uint32_t    w   = 1,
@@ -1344,7 +1526,9 @@ struct TextureDesc {
           usage(TextureUsage::SAMPLED),
           memoryType(MemoryType::GPU_ONLY),
           generateMips(false),
-          debugName(nullptr) {}
+          debugName(nullptr),
+          initialData(nullptr),
+          size(0) {}
 
     TextureDesc(const IVec2& size, Format fmt = Format::RGBA8_UNORM, TextureType t = TextureType::TEXTURE_2D)
         : TextureDesc(size.x, size.y, fmt, t) {}
@@ -1408,6 +1592,12 @@ struct TextureDesc {
         debugName = name;
         return *this;
     }
+
+    TextureDesc& setInitialData(const void* data, uint32_t insize) {
+        initialData = data;
+        size        = insize;
+        return *this;
+    }
 };
 
 struct TextureViewDesc {
@@ -1419,6 +1609,29 @@ struct TextureViewDesc {
     uint32_t      baseArrayLayer;
     uint32_t      arrayLayerCount;
     const char*   debugName;
+
+    TextureViewDesc& setViewType(TextureType type) {
+        viewType = type;
+        return *this;
+    }
+    TextureViewDesc& setFormat(Format f) {
+        format = f;
+        return *this;
+    }
+    TextureViewDesc& setMipRange(uint32_t base, uint32_t count) {
+        baseMipLevel  = base;
+        mipLevelCount = count;
+        return *this;
+    }
+    TextureViewDesc& setLayerRange(uint32_t base, uint32_t count) {
+        baseArrayLayer  = base;
+        arrayLayerCount = count;
+        return *this;
+    }
+    TextureViewDesc& setDebugName(const char* name) {
+        debugName = name;
+        return *this;
+    }
 
     TextureViewDesc()
         : baseMipLevel(0),
@@ -1436,14 +1649,8 @@ struct TextureViewDesc {
           debugName(nullptr) {}
 
     static TextureViewDesc Default(TextureHandle texture, Format informat = Format::UNDEFINED) {
-        Rx::TextureViewDesc textureViewInfo{};
-        textureViewInfo.viewType = TextureType::TEXTURE_2D;
-        textureViewInfo.arrayLayerCount = 1;
-        textureViewInfo.baseArrayLayer  = 0;
-        textureViewInfo.mipLevelCount   = 1;
-        textureViewInfo.baseMipLevel    = 0;
-        textureViewInfo.texture         = texture;
-        return textureViewInfo;
+        Rx::TextureViewDesc desc(texture);
+        return desc;
     }
 
     static TextureViewDesc SingleMip(TextureHandle texture, uint32_t mipLevel) {
@@ -1469,52 +1676,159 @@ struct TextureViewDesc {
     }
 };
 
-struct TextureCopyRegion {
-    uint32_t srcMipLevel   = 0;
-    uint32_t srcArrayLayer = 0;
-    IVec3    srcOffset     = IVec3(0);
+struct TextureCopy {
 
-    uint32_t dstMipLevel   = 0;
-    uint32_t dstArrayLayer = 0;
-    IVec3    dstOffset     = IVec3(0);
+    uint32_t srcMipLevel;
+    uint32_t dstMipLevel;
+    uint32_t srcArrayLayer;
+    uint32_t dstArrayLayer;
+    IVec3    srcOffset;
+    IVec3    dstOffset;
+    IVec3    extent;
 
-    IVec3 extent = IVec3(0);
+    TextureCopy& setSrcMip(uint32_t mip) {
+        srcMipLevel = mip;
+        return *this;
+    }
+    TextureCopy& setSrcLayer(uint32_t layer) {
+        srcArrayLayer = layer;
+        return *this;
+    }
+    TextureCopy& setSrcOffset(IVec3 off) {
+        srcOffset = off;
+        return *this;
+    }
+    TextureCopy& setDstMip(uint32_t mip) {
+        dstMipLevel = mip;
+        return *this;
+    }
+    TextureCopy& setDstLayer(uint32_t layer) {
+        dstArrayLayer = layer;
+        return *this;
+    }
+    TextureCopy& setDstOffset(IVec3 off) {
+        dstOffset = off;
+        return *this;
+    }
+    TextureCopy& setExtent(IVec3 ext) {
+        extent = ext;
+        return *this;
+    }
+    TextureCopy& setExtent(uint32_t w, uint32_t h, uint32_t d = 1) {
+        extent = IVec3(w, h, d);
+        return *this;
+    }
 
-    static TextureCopyRegion FullTexture(uint32_t width, uint32_t height, uint32_t depth = 1) {
-        TextureCopyRegion region;
-        region.extent = IVec3(width, height, depth);
-        return region;
+    // Copy a full 2D/3D texture at mip 0, layer 0
+    static TextureCopy FullTexture(uint32_t w, uint32_t h, uint32_t d = 1) {
+        return TextureCopy()
+            .setExtent(w, h, d)
+            .setSrcOffset(IVec3(0))
+            .setDstOffset(IVec3(0))
+            .setSrcMip(0)
+            .setDstMip(0)
+            .setSrcLayer(0)
+            .setDstLayer(0);
+    }
+
+    // Copy a specific mip level in full
+    static TextureCopy FullMip(uint32_t w, uint32_t h, uint32_t mip, uint32_t d = 1) {
+        return TextureCopy().setSrcMip(mip).setDstMip(mip).setExtent(
+            w >> mip ? w >> mip : 1, h >> mip ? h >> mip : 1, d);
+    }
+
+    // Copy one array layer to another (same or different texture)
+    static TextureCopy Layer(uint32_t w, uint32_t h, uint32_t srcLayer, uint32_t dstLayer) {
+        return TextureCopy().setSrcLayer(srcLayer).setDstLayer(dstLayer).setExtent(w, h);
+    }
+
+    // Copy a sub-region at the same location in both src and dst
+    static TextureCopy Region(IVec3 offset, IVec3 ext) {
+        return TextureCopy().setSrcOffset(offset).setDstOffset(offset).setExtent(ext);
+    }
+
+    // Copy a sub-region to a different location in dst
+    static TextureCopy Blit(IVec3 srcOff, IVec3 dstOff, IVec3 ext) {
+        return TextureCopy().setSrcOffset(srcOff).setDstOffset(dstOff).setExtent(ext);
     }
 };
 
 struct ShaderDesc {
-    PipelineStage        type;
-    std::string          source;
+    PipelineStage        stage = PipelineStage::VERTEX;
     std::vector<uint8_t> bytecode;
-    std::string          entryPoint;
+    std::string          source;
+    std::string          entryPoint = "main";
+    const char*          debugName  = nullptr;
 
-    ShaderDesc(PipelineStage t = PipelineStage::VERTEX, const std::string& src = "")
-        : type(t),
-          source(src),
-          entryPoint("main") {}
+    ShaderDesc() = default;
 
-    ShaderDesc(PipelineStage t, const std::vector<uint8_t>& code, const std::string entry = "main")
-        : type(t),
-          bytecode(code),
-          entryPoint(entry) {}
-
-    // Factory methods
-    static ShaderDesc FromSource(PipelineStage stage, const std::string& source) { return ShaderDesc(stage, source); }
-
-    static ShaderDesc FromBytecode(PipelineStage stage, const std::vector<uint8_t>& bytecode) {
-        return ShaderDesc(stage, bytecode);
+    ShaderDesc& setStage(PipelineStage s) {
+        stage = s;
+        return *this;
+    }
+    ShaderDesc& setEntryPoint(const std::string& ep) {
+        entryPoint = ep;
+        return *this;
+    }
+    ShaderDesc& setDebugName(const char* name) {
+        debugName = name;
+        return *this;
+    }
+    ShaderDesc& setBytecode(const std::vector<uint8_t>& code) {
+        bytecode = code;
+        source.clear();
+        return *this;
+    }
+    ShaderDesc& setSource(const std::string& src) {
+        source = src;
+        bytecode.clear();
+        return *this;
     }
 
-    static ShaderDesc VertexShader(const std::string& source) { return ShaderDesc(PipelineStage::VERTEX, source); }
+    static ShaderDesc FromBytecode(PipelineStage s, const std::vector<uint8_t>& code, const char* debugName = nullptr) {
+        ShaderDesc desc;
+        desc.stage     = s;
+        desc.bytecode  = code;
+        desc.debugName = debugName;
+        return desc;
+    }
 
-    static ShaderDesc FragmentShader(const std::string& source) { return ShaderDesc(PipelineStage::FRAGMENT, source); }
+    static ShaderDesc FromSource(PipelineStage s, const std::string& src, const char* debugName = nullptr) {
+        ShaderDesc desc;
+        desc.stage     = s;
+        desc.source    = src;
+        desc.debugName = debugName;
+        return desc;
+    }
 
-    static ShaderDesc ComputeShader(const std::string& source) { return ShaderDesc(PipelineStage::COMPUTE, source); }
+    // Load SPIR-V from file path — reads binary and stores as bytecode
+    static ShaderDesc FromFile(PipelineStage s, const std::string& path, const char* debugName = nullptr) {
+        ShaderDesc desc;
+        desc.stage     = s;
+        desc.debugName = debugName ? debugName : path.c_str();
+
+        std::ifstream file(path, std::ios::binary | std::ios::ate);
+        RENDERX_ASSERT_MSG(file.is_open(), "ShaderDesc::FromFile: failed to open '{}'", path);
+
+        size_t fileSize = static_cast<size_t>(file.tellg());
+        RENDERX_ASSERT_MSG(
+            fileSize % 4 == 0, "ShaderDesc::FromFile: '{}' is not a valid SPIR-V file (size not multiple of 4)", path);
+
+        desc.bytecode.resize(fileSize);
+        file.seekg(0);
+        file.read(reinterpret_cast<char*>(desc.bytecode.data()), fileSize);
+
+        return desc;
+    }
+
+    // Stage-specific convenience constructors
+    static ShaderDesc Vertex(const std::vector<uint8_t>& code) { return FromBytecode(PipelineStage::VERTEX, code); }
+    static ShaderDesc Fragment(const std::vector<uint8_t>& code) { return FromBytecode(PipelineStage::FRAGMENT, code); }
+    static ShaderDesc Compute(const std::vector<uint8_t>& code) { return FromBytecode(PipelineStage::COMPUTE, code); }
+
+    bool hasBytecode() const { return !bytecode.empty(); }
+    bool hasSource() const { return !source.empty(); }
+    bool isValid() const { return hasBytecode() || hasSource(); }
 };
 
 // Render state
@@ -1572,17 +1886,17 @@ struct RasterizerState {
 };
 
 struct DepthStencilState {
-    bool        depthEnable;
-    bool        depthWriteEnable;
-    bool        stencilEnable;
-    CompareFunc depthFunc;
-    uint8_t     stencilReadMask;
-    uint8_t     stencilWriteMask;
+    bool      depthEnable;
+    bool      depthWriteEnable;
+    bool      stencilEnable;
+    CompareOp depthFunc;
+    uint8_t   stencilReadMask;
+    uint8_t   stencilWriteMask;
 
     DepthStencilState()
         : depthEnable(true),
           depthWriteEnable(true),
-          depthFunc(CompareFunc::LESS),
+          depthFunc(CompareOp::LESS),
           stencilEnable(false),
           stencilReadMask(0xFF),
           stencilWriteMask(0xFF) {}
@@ -1606,7 +1920,7 @@ struct DepthStencilState {
 
     static DepthStencilState DepthEqual() {
         DepthStencilState state;
-        state.depthFunc = CompareFunc::EQUAL;
+        state.depthFunc = CompareOp::EQUAL;
         return state;
     }
 };
@@ -1651,7 +1965,7 @@ struct BlendState {
         return state;
     }
 
-    static BlendState additive() {
+    static BlendState Additive() {
         BlendState state;
         state.enable   = true;
         state.srcColor = BlendFunc::ONE;
@@ -1696,6 +2010,7 @@ struct PipelineDesc {
     Format              depthFormat = Format::UNDEFINED;
     // classic vulkan style Renderpass path
     RenderPassHandle renderPass;
+    const char*      debugName = nullptr;
 
     PipelineDesc()
         : primitiveType(Topology::TRIANGLES),
@@ -1745,77 +2060,222 @@ struct PipelineDesc {
         depthFormat = format;
         return *this;
     }
+
+    PipelineDesc& setDebugName(const char* name) {
+        debugName = name;
+        return *this;
+    }
 };
 
 struct ClearValue {
-    ClearColor color;
+    ClearColor color   = {0.0f, 0.0f, 0.0f, 1.0f};
     float      depth   = 1.0f;
     uint8_t    stencil = 0;
 
     ClearValue() = default;
-    ClearValue(const ClearColor& col)
-        : color(col) {}
-    ClearValue(float d, uint8_t s = 0)
-        : depth(d),
-          stencil(s) {}
 
-    static ClearValue Color(const ClearColor& col) { return ClearValue(col); }
+    ClearValue& setColor(float r, float g, float b, float a = 1.0f) {
+        color = {r, g, b, a};
+        return *this;
+    }
+    ClearValue& setColor(const ClearColor& col) {
+        color = col;
+        return *this;
+    }
+    ClearValue& setDepth(float d) {
+        depth = d;
+        return *this;
+    }
+    ClearValue& setStencil(uint8_t s) {
+        stencil = s;
+        return *this;
+    }
 
-    static ClearValue Depth(float d = 1.0f) { return ClearValue(d); }
+    static ClearValue Color(float r, float g, float b, float a = 1.0f) { return ClearValue().setColor(r, g, b, a); }
+    static ClearValue Color(const ClearColor& col) { return ClearValue().setColor(col); }
 
-    static ClearValue DepthStencil(float d, uint8_t s) { return ClearValue(d, s); }
+    // Common color presets
+    static ClearValue Black() { return Color(0.0f, 0.0f, 0.0f, 1.0f); }
+    static ClearValue White() { return Color(1.0f, 1.0f, 1.0f, 1.0f); }
+    static ClearValue Transparent() { return Color(0.0f, 0.0f, 0.0f, 0.0f); }
+
+    static ClearValue Depth(float d = 1.0f) { return ClearValue().setDepth(d); }
+    static ClearValue Stencil(uint8_t s) { return ClearValue().setStencil(s); }
+    static ClearValue DepthStencil(float d = 1.0f, uint8_t s = 0) { return ClearValue().setDepth(d).setStencil(s); }
 };
 
-// Render pass description
 struct AttachmentDesc {
+    TextureViewHandle handle;
     Format            format  = Format::BGRA8_SRGB;
     LoadOp            loadOp  = LoadOp::CLEAR;
     StoreOp           storeOp = StoreOp::STORE;
-    TextureViewHandle handle;
+    ClearValue        clear   = ClearValue::Black();
 
-    AttachmentDesc(Format fmt = Format::BGRA8_SRGB)
-        : format(fmt) {}
+    AttachmentDesc() = default;
 
+    AttachmentDesc& setView(TextureViewHandle v) {
+        handle = v;
+        return *this;
+    }
+    AttachmentDesc& setFormat(Format f) {
+        format = f;
+        return *this;
+    }
+    AttachmentDesc& setLoadOp(LoadOp op) {
+        loadOp = op;
+        return *this;
+    }
+    AttachmentDesc& setStoreOp(StoreOp op) {
+        storeOp = op;
+        return *this;
+    }
+    AttachmentDesc& setClearColor(float r, float g, float b, float a = 1.0f) {
+        clear = ClearValue::Color(r, g, b, a);
+        return *this;
+    }
+    AttachmentDesc& setClearColor(const ClearColor& col) {
+        clear = ClearValue::Color(col);
+        return *this;
+    }
+
+    // Clear to black, store result — standard render target
     static AttachmentDesc RenderTarget(TextureViewHandle view, Format fmt = Format::BGRA8_SRGB) {
-        AttachmentDesc desc(fmt);
+        AttachmentDesc desc;
         desc.handle  = view;
+        desc.format  = fmt;
         desc.loadOp  = LoadOp::CLEAR;
         desc.storeOp = StoreOp::STORE;
         return desc;
     }
 
-    static AttachmentDesc LoadAndStore(TextureViewHandle view, Format fmt = Format::BGRA8_SRGB) {
-        AttachmentDesc desc(fmt);
+    // Clear to a specific color, store result
+    static AttachmentDesc Clear(TextureViewHandle view, const ClearColor& color, Format fmt = Format::BGRA8_SRGB) {
+        AttachmentDesc desc;
         desc.handle  = view;
+        desc.format  = fmt;
+        desc.loadOp  = LoadOp::CLEAR;
+        desc.storeOp = StoreOp::STORE;
+        desc.clear   = ClearValue::Color(color);
+        return desc;
+    }
+
+    // Load existing contents, store result — compositing, overlays
+    static AttachmentDesc LoadAndStore(TextureViewHandle view, Format fmt = Format::BGRA8_SRGB) {
+        AttachmentDesc desc;
+        desc.handle  = view;
+        desc.format  = fmt;
         desc.loadOp  = LoadOp::LOAD;
         desc.storeOp = StoreOp::STORE;
+        return desc;
+    }
+
+    // Load existing contents, discard after — intermediate passes
+    static AttachmentDesc Transient(TextureViewHandle view, Format fmt = Format::BGRA8_SRGB) {
+        AttachmentDesc desc;
+        desc.handle  = view;
+        desc.format  = fmt;
+        desc.loadOp  = LoadOp::LOAD;
+        desc.storeOp = StoreOp::DONT_CARE;
+        return desc;
+    }
+
+    // Don't care about existing contents, don't store — scratch/temp targets
+    static AttachmentDesc DontCare(TextureViewHandle view, Format fmt = Format::BGRA8_SRGB) {
+        AttachmentDesc desc;
+        desc.handle  = view;
+        desc.format  = fmt;
+        desc.loadOp  = LoadOp::DONT_CARE;
+        desc.storeOp = StoreOp::DONT_CARE;
         return desc;
     }
 };
 
 struct DepthStencilAttachmentDesc {
     TextureViewHandle handle;
-    Format            format         = Format::D24_UNORM_S8_UINT;
+    Format            format         = Format::D32_SFLOAT;
     LoadOp            depthLoadOp    = LoadOp::CLEAR;
     StoreOp           depthStoreOp   = StoreOp::STORE;
     LoadOp            stencilLoadOp  = LoadOp::DONT_CARE;
     StoreOp           stencilStoreOp = StoreOp::DONT_CARE;
+    float             clearDepth     = 1.0f;
+    uint8_t           clearStencil   = 0;
 
-    DepthStencilAttachmentDesc(Format format = Format::D24_UNORM_S8_UINT)
-        : format(format) {}
+    DepthStencilAttachmentDesc() = default;
 
-    static DepthStencilAttachmentDesc Default(TextureViewHandle view, Format fmt = Format::D24_UNORM_S8_UINT) {
-        DepthStencilAttachmentDesc desc(fmt);
-        desc.handle = view;
+    DepthStencilAttachmentDesc& setView(TextureViewHandle v) {
+        handle = v;
+        return *this;
+    }
+    DepthStencilAttachmentDesc& setFormat(Format f) {
+        format = f;
+        return *this;
+    }
+    DepthStencilAttachmentDesc& setClearDepth(float d) {
+        clearDepth = d;
+        return *this;
+    }
+    DepthStencilAttachmentDesc& setClearStencil(uint8_t s) {
+        clearStencil = s;
+        return *this;
+    }
+
+    DepthStencilAttachmentDesc& setDepthOps(LoadOp load, StoreOp store) {
+        depthLoadOp  = load;
+        depthStoreOp = store;
+        return *this;
+    }
+    DepthStencilAttachmentDesc& setStencilOps(LoadOp load, StoreOp store) {
+        stencilLoadOp  = load;
+        stencilStoreOp = store;
+        return *this;
+    }
+
+    // Clear depth to 1.0, store — standard depth buffer
+    static DepthStencilAttachmentDesc Clear(TextureViewHandle view, Format fmt = Format::D32_SFLOAT) {
+        DepthStencilAttachmentDesc desc;
+        desc.handle       = view;
+        desc.format       = fmt;
+        desc.depthLoadOp  = LoadOp::CLEAR;
+        desc.depthStoreOp = StoreOp::STORE;
         return desc;
     }
 
-    static DepthStencilAttachmentDesc DepthReadOnly(TextureViewHandle view, Format fmt = Format::D24_UNORM_S8_UINT) {
-        DepthStencilAttachmentDesc desc(fmt);
+    // Clear depth + stencil
+    static DepthStencilAttachmentDesc ClearDepthStencil(TextureViewHandle view,
+                                                        Format            fmt = Format::D24_UNORM_S8_UINT) {
+        DepthStencilAttachmentDesc desc;
+        desc.handle         = view;
+        desc.format         = fmt;
+        desc.depthLoadOp    = LoadOp::CLEAR;
+        desc.depthStoreOp   = StoreOp::STORE;
+        desc.stencilLoadOp  = LoadOp::CLEAR;
+        desc.stencilStoreOp = StoreOp::STORE;
+        return desc;
+    }
+
+    // Load depth, no write — depth prepass result used for shading
+    static DepthStencilAttachmentDesc DepthReadOnly(TextureViewHandle view, Format fmt = Format::D32_SFLOAT) {
+        DepthStencilAttachmentDesc desc;
         desc.handle       = view;
+        desc.format       = fmt;
         desc.depthLoadOp  = LoadOp::LOAD;
         desc.depthStoreOp = StoreOp::DONT_CARE;
         return desc;
+    }
+
+    // Load depth, keep it — for passes that read and write depth
+    static DepthStencilAttachmentDesc DepthLoadStore(TextureViewHandle view, Format fmt = Format::D32_SFLOAT) {
+        DepthStencilAttachmentDesc desc;
+        desc.handle       = view;
+        desc.format       = fmt;
+        desc.depthLoadOp  = LoadOp::LOAD;
+        desc.depthStoreOp = StoreOp::STORE;
+        return desc;
+    }
+
+    // Shadow map — clear, store depth, stencil irrelevant
+    static DepthStencilAttachmentDesc ShadowMap(TextureViewHandle view, Format fmt = Format::D32_SFLOAT) {
+        return Clear(view, fmt);
     }
 };
 
@@ -1825,8 +2285,7 @@ struct RenderPassDesc {
     bool                        hasDepthStencil;
 
     RenderPassDesc()
-        : depthStencilAttachment(Format::D24_UNORM_S8_UINT),
-          hasDepthStencil(false) {}
+        : hasDepthStencil(false) {}
 
     RenderPassDesc& addColorAttachment(const AttachmentDesc& attachment) {
         colorAttachments.push_back(attachment);
@@ -1878,8 +2337,9 @@ struct RenderingDesc {
     int                         width;
     int                         height;
     std::vector<AttachmentDesc> colorAttachments;
-    DepthStencilAttachmentDesc  depthStencilAttachment{Format::D24_UNORM_S8_UINT};
+    DepthStencilAttachmentDesc  depthStencilAttachment;
     bool                        hasDepthStencil;
+    ClearColor                  clearColor = ClearColor::White();
 
     RenderingDesc(int w = 0, int h = 0)
         : width(w),
@@ -1900,6 +2360,11 @@ struct RenderingDesc {
     RenderingDesc& setSize(int w, int h) {
         width  = w;
         height = h;
+        return *this;
+    }
+
+    RenderingDesc& setClearColor(ClearColor clearcolor) {
+        clearColor = clearcolor;
         return *this;
     }
 };
@@ -1946,7 +2411,6 @@ struct Binding {
           partiallyBound(false),
           nonUniformIndex(false) {}
 
-    // ── Standard bindings ────────────────────────────────────────────────
     static Binding ConstantBuffer(uint32_t slot, PipelineStage s = PipelineStage::ALL_GRAPHICS) {
         Binding b;
         b.slot   = slot;
@@ -1997,7 +2461,7 @@ struct Binding {
         return b;
     }
 
-    // ── Bindless — sets all required flags automatically ──────────────────
+    // [Bindless] sets all required flags automatically
     static Binding Bindless(uint32_t slot, ResourceType type, uint32_t maxCount = UINT32_MAX) {
         Binding b;
         b.slot            = slot;
@@ -2036,117 +2500,96 @@ struct SetLayoutMemoryInfo {
     uint64_t bindingOffsets[SetLayoutDesc::MAX_BINDINGS];
 };
 
+/*
+ * @note .
+ *  DescriptorPoolFlags defines allocation policy and descriptor path.
+ *  Exactly one allocation policy flag must be specified.
+ *  Exactly one descriptor path flag must be specifi
+ *  Allocation policy flags:
+ *    - LINEAR
+ *    - POOL
+ *    - MAN
+ *  Descriptor path flags:
+ *    - DESCRIPTOR_SETS
+ *    - DESCRIPTOR_BUFFER
+ *    - BINDL
+ *  Policy flags are mutually exclusive.
+ *  Descriptor path flags are mutually exclusi
+ *  Valid combinations require:
+ *    (one allocation policy) | (one descriptor path)
+ *  Providing invalid or conflicting flag combinations results
+ *  in undefined behavior.
+ */
 enum class DescriptorPoolFlags : uint32_t {
-    // DescriptorPoolFlags defines the allocation strategy and descriptor path
-    // for a descriptor pool. The combination of these flags determines how the
-    // pool behaves on each backend.
-    //
-    // Valid combinations:
-    //   LINEAR   | DESCRIPTOR_SETS    , per-frame sets, reset each frame
-    //   POOL     | DESCRIPTOR_SETS    , persistent sets, alloc/free individually
-    //   MANUAL   | DESCRIPTOR_SETS    , user-managed set slots
-    //   LINEAR   | DESCRIPTOR_BUFFER  , per-frame buffer descriptors
-    //   MANUAL   | DESCRIPTOR_BUFFER  , user-managed buffer offsets
-    //   LINEAR   | BINDLESS           , rarely needed, table is usually persistent
-    //            | BINDLESS           , global table, no allocation policy needed
-    //
-    // Invalid combinations:
-    //   LINEAR   | POOL               , mutually exclusive policies
-    //   LINEAR   | MANUAL             , mutually exclusive policies
-    //   POOL     | MANUAL             , mutually exclusive policies
-    //   DESCRIPTOR_SETS | DESCRIPTOR_BUFFER , mutually exclusive paths
+    //  Allocation policy (pick exactly one)
+    LINEAR = 1 << 0, // Linear/bump allocation. Reset per frame.
+    POOL   = 1 << 1, // Free-list allocation. Individual free supported.
+    MANUAL = 1 << 2, // User-managed offsets. No internal allocation.
 
-    // -------Allocation policy -----------------------------------------------------------
-    // Pick exactly one. Defines how descriptor memory is suballocated.
-
-    // Bump allocator. Alloc advances a pointer. Reset moves it back to zero.
-    // Best for: per-frame sets that are discarded at the end of each frame.
-    // VK:    vkResetDescriptorPool resets the pool
-    // D3D12: internal write pointer reset
-    LINEAR = 1 << 0,
-
-    // Fixed-size slot allocator. Individual sets can be freed and reused.
-    // Best for: long-lived sets with unpredictable lifetimes (materials, objects).
-    // VK:    VkDescriptorPool created with VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT
-    // D3D12: internal slot freelist over the staging heap range
-    POOL = 1 << 1,
-
-    // No allocation policy. User provides an explicit byte offset per allocation.
-    // Best for: custom allocators, GPU-driven descriptor placement, ring buffers.
-    // VK:    user manages VkDescriptorPool offsets manually
-    // D3D12: user manages heap slot indices manually
-    MANUAL = 1 << 2,
-
-    //------ Descriptor path ----------------------------------------------------------
-    // The following enums define the underlying descriptor storage model.
-    // Classic descriptor set model. Works on every device, no extensions needed.
-    // VK:    VkDescriptorPool → VkDescriptorSet
-    //        Alloc:  vkAllocateDescriptorSets
-    //        Write:  vkUpdateDescriptorSets
-    //        Bind:   vkCmdBindDescriptorSets
-    // D3D12: Emulated using two internal heaps:
-    //        stagingHeap (CPU-only, not shader-visible) — descriptors written here
-    //        gpuHeap     (shader-visible)               — copied here at bind time
-    //        Alloc:  advance write pointer in staging heap
-    //        Write:  CreateSRV/CBV/UAV into staging heap CPU handle
-    //        Bind:   CopyDescriptorsSimple(staging → gpu) +
-    //                SetGraphicsRootDescriptorTable(gpuHandle)
-    DESCRIPTOR_SETS = 1 << 3,
-
-    // Buffer-backed descriptor memory. This path has the lowest CPU overhead at high draw counts.
-    // VK:    Requires VK_EXT_descriptor_buffer.
-    // Descriptors are raw bytes stored in a VkBuffer.
-    // Write:  vkGetDescriptorEXT into mapped buffer memory
-    // Bind:   vkCmdBindDescriptorBuffersEXT + vkCmdSetDescriptorBufferOffsetsEXT
-    // D3D12: This is D3D12's natural model — no emulation needed.
-    // Descriptors live directly in a shader-visible descriptor heap.
-    // Write:  CreateSRV/CBV/UAV directly into GPU heap CPU handle
-    // Bind:   SetDescriptorHeaps + SetGraphicsRootDescriptorTable
-    DESCRIPTOR_BUFFER = 1 << 4,
-
-    // Global bindless table. One large descriptor array indexed in shaders.
-    // No per-draw descriptor binding — shaders index directly by slot number.
-    // VK:    Large VkDescriptorSet with UPDATE_AFTER_BIND arrays.
-    //        Requires VK_EXT_descriptor_indexing.
-    //        Bind:   vkCmdBindDescriptorSets once per command list (set 0)
-    //        Shader: texture2D tex[] indexed with nonuniformEXT(slot)
-    // D3D12: GPU-visible descriptor heap, SM6.6 ResourceDescriptorHeap[].
-    //        Bind:   SetDescriptorHeaps once per command list
-    //        Shader: ResourceDescriptorHeap[slot] — no explicit bind per draw
-    BINDLESS = 1 << 5,
+    // Descriptor path (pick exactly one)
+    DESCRIPTOR_SETS   = 1 << 3, // Classic descriptor set model.
+    DESCRIPTOR_BUFFER = 1 << 4, // Buffer-backed descriptor memory.
+    BINDLESS          = 1 << 5, // Global bindless table.
 };
+
 ENABLE_BITMASK_OPERATORS(DescriptorPoolFlags)
 
+/*
+ * @note DescriptorPoolDesc.
+ *Required fields depend on the selected DescriptorPoolFlags.
+ * Each descriptor path defines its own required and ignored members.
+ *Common rules:
+ *   - flags must contain exactly one allocation policy.
+ *   - flags must contain exactly one descriptor path.
+ *   - capacity interpretation depends on allocation policy.
+ *Allocation policy:
+ *   LINEAR / POOL  → capacity = max descriptor sets.
+ *   MANUAL         → capacity = byte capacity.
+ *Descriptor path requirements:
+ *  DESCRIPTOR_SETS:
+ *       - layout must be valid.
+ *       - heap and heapOffset are ignored.
+ *  DESCRIPTOR_BUFFER:
+ *       - heap must be valid.
+ *       - layout required if allocation is set-count based.
+ *Providing invalid or inconsistent combinations results in
+ * undefined behavior.
+ *The RHI does not validate all invariants in shipping builds.
+ */
 struct DescriptorPoolDesc {
-
+    // Combined allocation policy + descriptor path flags.
     DescriptorPoolFlags flags = DescriptorPoolFlags::POOL | DescriptorPoolFlags::DESCRIPTOR_SETS;
-    uint32_t            capacity; // max sets (LINEAR/POOL) or max bytes (MANUAL)
 
-    // DESCRIPTOR_SETS specific
-    // The layout is needed so the RHI can compute correct pool type counts
-    // VK: VkDescriptorPoolSize array — must know how many of each type
+    // Capacity:
+    //   LINEAR / POOL → maximum descriptor sets.
+    //   MANUAL        → maximum byte size.
+    uint32_t capacity = 0;
+
+    // ---- DESCRIPTOR_SETS specific ----
+
     SetLayoutHandle layout;
-
-    // UPDATE_AFTER_BIND pool
-    // VK: VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT
-    // D3D12: no-op, always supported
+    // Enables update-after-bind behavior.
+    // Ignored for paths that do not support it.
     bool updateAfterBind = false;
 
-    // DESCRIPTOR_BUFFER specific
-    // Which heap this arena suballocates from
-    DescriptorHeapHandle heap;
-    uint64_t             heapOffset = 0;
+    // ---- DESCRIPTOR_BUFFER specific ----
 
-    // POOL specific — size of each slot in bytes
+    // Descriptor heap backing this pool.
+    // Required for DESCRIPTOR_BUFFER path.
+    DescriptorHeapHandle heap;
+
+    // Base offset into heap when using MANUAL policy.
+    uint64_t heapOffset = 0;
+
+    // ---- POOL specific ----
+
+    // Slot size in bytes for POOL policy when required.
     uint32_t slotSize = 0;
 
+    // Optional debug label.
     const char* debugName = nullptr;
 
-    // ── Named constructors for DESCRIPTOR_SETS mode ──────────────────────
-
-    // Per-frame linear pool — reset at start of each frame
-    // VK:    VkDescriptorPool, reset with vkResetDescriptorPool
-    // D3D12: CPU heap range, write pointer reset
+    // Per-frame linear descriptor sets.
     static DescriptorPoolDesc PerFrame(SetLayoutHandle layout, uint32_t maxSets) {
         DescriptorPoolDesc d;
         d.flags    = DescriptorPoolFlags::DESCRIPTOR_SETS | DescriptorPoolFlags::LINEAR;
@@ -2155,9 +2598,7 @@ struct DescriptorPoolDesc {
         return d;
     }
 
-    // Persistent pool — alloc/free individual sets
-    // VK:    VkDescriptorPool with FREE_DESCRIPTOR_SET_BIT
-    // D3D12: CPU heap with internal slot tracking
+    // Persistent alloc/free descriptor sets.
     static DescriptorPoolDesc Persistent(SetLayoutHandle layout, uint32_t maxSets) {
         DescriptorPoolDesc d;
         d.flags    = DescriptorPoolFlags::DESCRIPTOR_SETS | DescriptorPoolFlags::POOL;
@@ -2166,10 +2607,9 @@ struct DescriptorPoolDesc {
         return d;
     }
 
-    // UPDATE_AFTER_BIND — for streaming / bindless-style sets
+    // Update-after-bind descriptor sets.
     static DescriptorPoolDesc Dynamic(SetLayoutHandle layout, uint32_t maxSets) {
         DescriptorPoolDesc d;
-
         d.flags           = DescriptorPoolFlags::DESCRIPTOR_SETS | DescriptorPoolFlags::LINEAR;
         d.layout          = layout;
         d.capacity        = maxSets;
@@ -2177,12 +2617,9 @@ struct DescriptorPoolDesc {
         return d;
     }
 
-    // ── Named constructors for DESCRIPTOR_BUFFER mode ────────────────────
-
-    // Buffer-backed arena — lowest CPU overhead per bind
+    // Buffer-backed descriptor arena.
     static DescriptorPoolDesc Buffer(DescriptorHeapHandle heap, SetLayoutHandle layout, uint32_t maxSets) {
         DescriptorPoolDesc d;
-
         d.flags    = DescriptorPoolFlags::DESCRIPTOR_BUFFER | DescriptorPoolFlags::LINEAR;
         d.heap     = heap;
         d.layout   = layout;
@@ -2190,10 +2627,9 @@ struct DescriptorPoolDesc {
         return d;
     }
 
-    // Manual buffer arena — user controls all offsets
+    // Manual buffer-backed descriptor arena.
     static DescriptorPoolDesc BufferManual(DescriptorHeapHandle heap, uint64_t offset, uint32_t byteCapacity) {
         DescriptorPoolDesc d;
-
         d.flags      = DescriptorPoolFlags::DESCRIPTOR_BUFFER | DescriptorPoolFlags::MANUAL;
         d.heap       = heap;
         d.heapOffset = offset;
@@ -2304,6 +2740,43 @@ struct DescriptorWrite {
 struct DescriptorTable {};
 //---------------------------------------------------------------
 
+struct PushConstantRange {
+    PipelineStage stages = PipelineStage::NONE;
+    uint32_t      offset = 0;
+    uint32_t      size   = 0;
+
+    PushConstantRange() = default;
+    PushConstantRange(PipelineStage stages, uint32_t size, uint32_t offset = 0)
+        : stages(stages),
+          offset(offset),
+          size(size) {}
+
+    // Push constants visible to vertex shader only
+    static PushConstantRange Vertex(uint32_t size, uint32_t offset = 0) {
+        return {PipelineStage::VERTEX, size, offset};
+    }
+
+    // Push constants visible to fragment shader only
+    static PushConstantRange Fragment(uint32_t size, uint32_t offset = 0) {
+        return {PipelineStage::FRAGMENT, size, offset};
+    }
+
+    // Push constants visible to both vertex and fragment
+    static PushConstantRange VertexFragment(uint32_t size, uint32_t offset = 0) {
+        return {PipelineStage::VERTEX | PipelineStage::FRAGMENT, size, offset};
+    }
+
+    // Push constants visible to compute shader
+    static PushConstantRange Compute(uint32_t size, uint32_t offset = 0) {
+        return {PipelineStage::COMPUTE, size, offset};
+    }
+
+    // Push constants visible to all stages — convenient but slightly over-declares
+    static PushConstantRange AllStages(uint32_t size, uint32_t offset = 0) {
+        return {PipelineStage::ALL_GRAPHICS | PipelineStage::COMPUTE, size, offset};
+    }
+};
+
 // Statistics and debug info for a single frame.
 struct RenderStats {
     uint32_t drawCalls;
@@ -2388,27 +2861,24 @@ class RENDERX_EXPORT CommandList {
 public:
     virtual ~CommandList() = default;
 
-    virtual void open()  = 0;
-    virtual void close() = 0;
+    virtual void open()                                                                                             = 0;
+    virtual void close()                                                                                            = 0;
+    virtual void setPipeline(const PipelineHandle& pipeline)                                                        = 0;
+    virtual void setVertexBuffer(const BufferHandle& buffer, uint64_t offset = 0)                                   = 0;
+    virtual void setIndexBuffer(const BufferHandle& buffer, uint64_t offset = 0, Format indextype = Format::UINT32) = 0;
+    virtual void setFramebuffer(FramebufferHandle handle)                                                           = 0;
+    virtual void setViewport(const Viewport& viewport)                                                              = 0;
+    virtual void setScissor(const Scissor& scissor)                                                                 = 0;
+    virtual void beginRenderPass(RenderPassHandle pass, const void* clearValues, uint32_t clearCount)               = 0;
+    virtual void endRenderPass()                                                                                    = 0;
+    virtual void beginRendering(const RenderingDesc& desc)                                                          = 0;
+    virtual void endRendering()                                                                                     = 0;
+    virtual void writeBuffer(BufferHandle handle, const void* data, uint32_t offset, uint32_t size)                 = 0;
+    virtual void copyBuffer(BufferHandle src, BufferHandle dst, const BufferCopy& region)                           = 0;
+    virtual void copyTexture(TextureHandle srcTexture, TextureHandle dstTexture, const TextureCopy& region)         = 0;
 
-    virtual void setPipeline(const PipelineHandle& pipeline)                      = 0;
-    virtual void setVertexBuffer(const BufferHandle& buffer, uint64_t offset = 0) = 0;
-    virtual void setIndexBuffer(const BufferHandle& buffer, uint64_t offset = 0)  = 0;
-    virtual void setFramebuffer(FramebufferHandle handle)                         = 0;
-
-    virtual void beginRenderPass(RenderPassHandle pass, const void* clearValues, uint32_t clearCount) = 0;
-    virtual void endRenderPass()                                                                      = 0;
-
-    virtual void beginRendering(const RenderingDesc& desc) = 0;
-    virtual void endRendering()                            = 0;
-
-    virtual void writeBuffer(BufferHandle handle, const void* data, uint32_t offset, uint32_t size)               = 0;
-    virtual void copyBuffer(BufferHandle src, BufferHandle dst, const BufferCopyRegion& region)                   = 0;
-    virtual void copyTexture(TextureHandle srcTexture, TextureHandle dstTexture, const TextureCopyRegion& region) = 0;
-    virtual void
-    copyBufferToTexture(BufferHandle srcBuffer, TextureHandle dstTexture, const TextureCopyRegion& region) = 0;
-    virtual void
-    copyTextureToBuffer(TextureHandle srcTexture, BufferHandle dstBuffer, const TextureCopyRegion& region) = 0;
+    virtual void copyBufferToTexture(BufferHandle srcBuffer, TextureHandle dstTexture, const TextureCopy& region) = 0;
+    virtual void copyTextureToBuffer(TextureHandle srcTexture, BufferHandle dstBuffer, const TextureCopy& region) = 0;
 
     // Barrier
     virtual void Barrier(const Memory_Barrier* memoryBarriers,
@@ -2416,15 +2886,15 @@ public:
                          const BufferBarrier*  bufferBarriers,
                          uint32_t              bufferCount,
                          const TextureBarrier* imageBarriers,
-                         uint32_t              imageCount) = 0;
-
-    virtual void
-    draw(uint32_t vertexCount, uint32_t instanceCount = 1, uint32_t firstVertex = 0, uint32_t firstInstance = 0) = 0;
+                         uint32_t              imageCount)            = 0;
     virtual void drawIndexed(uint32_t indexCount,
                              int32_t  vertexOffset  = 0,
                              uint32_t instanceCount = 1,
                              uint32_t firstIndex    = 0,
-                             uint32_t firstInstance = 0)                                                         = 0;
+                             uint32_t firstInstance = 0) = 0;
+
+    virtual void
+    draw(uint32_t vertexCount, uint32_t instanceCount = 1, uint32_t firstVertex = 0, uint32_t firstInstance = 0) = 0;
 
     //---- Classic set binding ------------------------------------------------------
     // DESCRIPTOR_SETS arena: vkCmdBindDescriptorSets / SetGraphicsRootDescriptorTable
@@ -2470,6 +2940,11 @@ public:
     //        Check Descriptor::Caps::pushDescriptors before using
     // D3D12: Falls back to inline root descriptor for buffers
     virtual void pushDescriptor(uint32_t slot, const DescriptorWrite* writes, uint32_t count) = 0;
+
+    void setViewport(int x, int y, int w, int h, float minDepth = 0.0f, float maxDepth = 1.0f) {
+        setViewport(Viewport(x, y, w, h, minDepth, maxDepth));
+    }
+    void setScissor(int x, int y, int w, int h) { setScissor(Scissor(x, y, w, h)); }
 };
 
 // Synchronization dependency between queues
@@ -2593,14 +3068,14 @@ public:
     virtual uint32_t          AcquireNextImage()                      = 0;
     virtual void              Present(uint32_t imageIndex)            = 0;
     virtual void              Resize(uint32_t width, uint32_t height) = 0;
-    virtual TextureHandle     GetImage(uint32_t imageIndex) const     = 0;
-    virtual TextureHandle     GetDepth(uint32_t imageindex) const     = 0;
-    virtual TextureViewHandle GetImageView(uint32_t imageindex) const = 0;
-    virtual TextureViewHandle GetDepthView(uint32_t imageindex) const = 0;
     virtual Format            GetFormat() const                       = 0;
     virtual uint32_t          GetWidth() const                        = 0;
     virtual uint32_t          GetHeight() const                       = 0;
     virtual uint32_t          GetImageCount() const                   = 0;
+    virtual TextureHandle     GetImage(uint32_t imageIndex) const     = 0;
+    virtual TextureHandle     GetDepth(uint32_t imageindex) const     = 0;
+    virtual TextureViewHandle GetImageView(uint32_t imageindex) const = 0;
+    virtual TextureViewHandle GetDepthView(uint32_t imageindex) const = 0;
 };
 
 } // namespace Rx

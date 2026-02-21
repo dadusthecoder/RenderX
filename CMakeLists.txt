@@ -1,21 +1,16 @@
 cmake_minimum_required(VERSION 3.10)
 
-project(RenderX VERSION 1.0.2)
+if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
+    set(CMAKE_TOOLCHAIN_FILE 
+        "D:/dev/cpp/vcpkg/scripts/buildsystems/vcpkg.cmake"
+        CACHE STRING ""
+    )
+endif()
 
+project(RenderX VERSION 1.0.1)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-
-option(RX_BUILD_VULKAN "Enable Vulkan backend" ON)
-option(RX_BUILD_OPENGL "Enable OpenGL backend" OFF)
-option(RX_BUILD_DLL "Build Shared" ON)
-
-if(CMAKE_SIZEOF_VOID_P EQUAL 8)
-    message(STATUS "Building 64-bit")
-else()
-    message(FATAL_ERROR "RenderX requires 64-bit build.")
-endif()
-
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
@@ -30,15 +25,29 @@ foreach(CONFIG Debug Release RelWithDebInfo MinSizeRel)
     set(CMAKE_OBJECT_OUTPUT_DIRECTORY_${CONFIG_UPPER} "${CMAKE_BINARY_DIR}/bin-int/${CONFIG}/${PROJECT_NAME}")
 endforeach()
 
+option(RX_BUILD_VULKAN "Enable Vulkan backend" ON)
+option(RX_BUILD_OPENGL "Enable OpenGL backend" OFF) 
+option(RX_BUILD_DLL "Build Shared" ON)
+option(RX_BUILD_TESTS "Build Tests" ON)
+
+if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+    message(STATUS "Building 64-bit")
+else()
+    message(FATAL_ERROR "RenderX requires 64-bit build.")
+endif()
+
 add_subdirectory(External/glm)
 add_subdirectory(External/spdlog)
-add_subdirectory(External/glfw)
 add_subdirectory(External_local/ProLog)
-add_subdirectory(Test/HelloTriangle)
+
+if(RX_BUILD_TESTS)
+    add_subdirectory(Test/HelloCube)
+    add_subdirectory(Test/HelloModels)
+endif()
 
 file(GLOB_RECURSE CORE_SOURCES
-    "${CMAKE_SOURCE_DIR}/src/RenderX/*.cpp"
-    "${CMAKE_SOURCE_DIR}/src/RenderX/*.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/RenderX/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/RenderX/*.h"
 )
 
 if(NOT RX_BUILD_VULKAN AND NOT RX_BUILD_OPENGL)
@@ -49,16 +58,16 @@ set(SOURCES ${CORE_SOURCES})
 
 if(RX_BUILD_VULKAN)
     file(GLOB_RECURSE VULKAN_SOURCES
-        "${CMAKE_SOURCE_DIR}/src/Vulkan/*.cpp"
-        "${CMAKE_SOURCE_DIR}/src/Vulkan/*.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/Vulkan/*.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/Vulkan/*.h"
     )
     list(APPEND SOURCES ${VULKAN_SOURCES})
 endif()
 
 if(RX_BUILD_OPENGL)
     file(GLOB_RECURSE OPENGL_SOURCES
-        "${CMAKE_SOURCE_DIR}/src/OpenGL/*.cpp"
-        "${CMAKE_SOURCE_DIR}/src/OpenGL/*.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/OpenGL/*.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/OpenGL/*.h"
     )
     list(APPEND SOURCES ${OPENGL_SOURCES})
 endif()
@@ -112,27 +121,17 @@ target_compile_options(RenderX PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/utf-8>)
 target_link_directories(RenderX PUBLIC External_local/ProLog/bin)
 
 target_include_directories(${PROJECT_NAME}
-    PRIVATE "${CMAKE_SOURCE_DIR}/External/VulkanMemoryAllocator/include"
-    PRIVATE "${CMAKE_SOURCE_DIR}/External/spdlog/include"
-
-    PUBLIC "${CMAKE_SOURCE_DIR}/src"
-    PUBLIC "${CMAKE_SOURCE_DIR}/External/glm"
-    PUBLIC "${CMAKE_SOURCE_DIR}/External/glfw/include"
-    PUBLIC "${CMAKE_SOURCE_DIR}/External_local/ProLog/include"
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/External/VulkanMemoryAllocator/include"
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/External/spdlog/include"
+    PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src"
+    PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/External/glm"
+    PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/External_local/ProLog/include"
 )
 
 target_link_libraries(${PROJECT_NAME}
     PRIVATE glm
-    PRIVATE glfw
-
     PUBLIC spdlog
     PUBLIC ProLog
 )
 
-add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-    "$<TARGET_FILE:${PROJECT_NAME}>"
-    "${CMAKE_BINARY_DIR}/test/HelloTriangle/$<CONFIG>"
-    COMMENT "Copying RenderX.dll to HelloTriangle test project..."
-)
 

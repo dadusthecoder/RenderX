@@ -183,12 +183,12 @@ public:
     void ValidateSetIndexBuffer(CommandList* cmdList, BufferHandle buffer);
 
     // Buffer operation validation
-    void ValidateBufferCopy(BufferHandle src, BufferHandle dst, const BufferCopyRegion& region);
+    void ValidateBufferCopy(BufferHandle src, BufferHandle dst, const BufferCopy& region);
     void ValidateBufferWrite(BufferHandle buffer, uint32_t offset, uint32_t size);
 
     // Texture operation validation
-    void ValidateTextureCopy(TextureHandle src, TextureHandle dst, const TextureCopyRegion& region);
-    void ValidateBufferToTextureCopy(BufferHandle src, TextureHandle dst, const TextureCopyRegion& region);
+    void ValidateTextureCopy(TextureHandle src, TextureHandle dst, const TextureCopy& region);
+    void ValidateBufferToTextureCopy(BufferHandle src, TextureHandle dst, const TextureCopy& region);
 
     // Render pass validation
     void ValidateRenderPassDesc(const RenderPassDesc& desc);

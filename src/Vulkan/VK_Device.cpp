@@ -130,8 +130,9 @@ void VulkanDevice::logDeviceInfo(uint32_t index, const DeviceInfo& info) const {
     RENDERX_INFO("    Max Image Dimension 2D: {}", props.limits.maxImageDimension2D);
     RENDERX_INFO("    Max Framebuffer Width: {}", props.limits.maxFramebufferWidth);
     RENDERX_INFO("    Max Framebuffer Height: {}", props.limits.maxFramebufferHeight);
-    RENDERX_INFO(
-        "    Max Viewport Dimensions: {}x{}", props.limits.maxViewportDimensions[0], props.limits.maxViewportDimensions[1]);
+    RENDERX_INFO("    Max Viewport Dimensions: {}x{}",
+                 props.limits.maxViewportDimensions[0],
+                 props.limits.maxViewportDimensions[1]);
     RENDERX_INFO("    Max Bound Descriptor Sets: {}", props.limits.maxBoundDescriptorSets);
     RENDERX_INFO("    Max Per-Stage Descriptor Samplers: {}", props.limits.maxPerStageDescriptorSamplers);
     RENDERX_INFO("    Max Per-Stage Descriptor Uniform Buffers: {}", props.limits.maxPerStageDescriptorUniformBuffers);
@@ -349,40 +350,43 @@ void VulkanDevice::createLogicalDevice(const std::vector<const char*>& requiredE
         queues.push_back(q);
     }
 
-    // add here
-    VkPhysicalDeviceDynamicRenderingFeatures dynamicRendering{};
-    dynamicRendering.sType            = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES;
-    dynamicRendering.dynamicRendering = VK_TRUE;
+    VkPhysicalDeviceFeatures2 features2{};
+    features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
 
-    VkPhysicalDeviceSynchronization2Features sync2{};
-    sync2.sType            = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES;
-    sync2.synchronization2 = VK_TRUE;
-    sync2.pNext            = &dynamicRendering;
+    VkPhysicalDeviceVulkan11Features features11{};
+    features11.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
 
-    VkPhysicalDeviceBufferDeviceAddressFeatures bufferAddressFeatures{};
-    bufferAddressFeatures.sType               = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
-    bufferAddressFeatures.bufferDeviceAddress = VK_TRUE;
-    bufferAddressFeatures.pNext               = &sync2;
+    VkPhysicalDeviceVulkan12Features features12{};
+    features12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
 
-    VkPhysicalDeviceTimelineSemaphoreFeatures timelineFeatures{};
-    timelineFeatures.sType             = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES;
-    timelineFeatures.pNext             = &bufferAddressFeatures;
-    timelineFeatures.timelineSemaphore = VK_TRUE;
+    VkPhysicalDeviceVulkan13Features features13{};
+    features13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
 
-    VkPhysicalDeviceDescriptorIndexingFeatures indexing{};
-    indexing.sType                                        = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
-    indexing.pNext                                        = &timelineFeatures;
-    indexing.descriptorBindingPartiallyBound              = VK_TRUE;
-    indexing.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE;
-    indexing.runtimeDescriptorArray                       = VK_TRUE;
-    indexing.descriptorBindingVariableDescriptorCount     = VK_TRUE;
+    features2.pNext  = &features11;
+    features11.pNext = &features12;
+    features12.pNext = &features13;
+
+    vkGetPhysicalDeviceFeatures2(m_PhysicalDevice, &features2);
+
+    features2.features.samplerAnisotropy = VK_TRUE;
+
+    features13.dynamicRendering = VK_TRUE;
+    features13.synchronization2 = VK_TRUE;
+
+    features12.timelineSemaphore                            = VK_TRUE;
+    features12.bufferDeviceAddress                          = VK_TRUE;
+    features12.descriptorIndexing                           = VK_TRUE;
+    features12.runtimeDescriptorArray                       = VK_TRUE;
+    features12.descriptorBindingPartiallyBound              = VK_TRUE;
+    features12.descriptorBindingVariableDescriptorCount     = VK_TRUE;
+    features12.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE;
 
     VkDeviceCreateInfo info{};
     info.sType                   = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     info.queueCreateInfoCount    = uint32_t(queues.size());
     info.pQueueCreateInfos       = queues.data();
     info.pEnabledFeatures        = nullptr;
-    info.pNext                   = &indexing;
+    info.pNext                   = &features2; // important;
     info.enabledExtensionCount   = uint32_t(requiredExtensions.size());
     info.ppEnabledExtensionNames = requiredExtensions.data();
     info.enabledLayerCount       = uint32_t(requiredLayers.size());
@@ -401,7 +405,7 @@ void VulkanDevice::createLogicalDevice(const std::vector<const char*>& requiredE
 void VulkanDevice::queryLimits() {
     VkPhysicalDeviceProperties props{};
     vkGetPhysicalDeviceProperties(m_PhysicalDevice, &props);
-    m_Limits = props.limits;
+    m_VkLimits = props.limits;
 }
 
 VulkanDevice::VulkanDevice(VkInstance                      instance,

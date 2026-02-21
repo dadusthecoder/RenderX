@@ -4,6 +4,8 @@
 namespace Rx {
 namespace RxVK {
 
+ResourcePool<VulkanSampler, SamplerHandle> g_SamplerPool;
+
 static uint32_t CalculateMipLevels(uint32_t width, uint32_t height, uint32_t depth = 1) {
     uint32_t maxDim    = std::max({width, height, depth});
     uint32_t mipLevels = 1;
@@ -87,7 +89,7 @@ TextureHandle VKCreateTexture(const TextureDesc& desc) {
     imageInfo.samples       = VK_SAMPLE_COUNT_1_BIT;
     imageInfo.sharingMode   = VK_SHARING_MODE_EXCLUSIVE;
     imageInfo.flags         = 0;
-    imageInfo.usage         = BuildImageUsageFlags(desc); // ← use desc flags directly
+    imageInfo.usage         = BuildImageUsageFlags(desc); // use desc flags directly
 
     if (desc.type == TextureType::TEXTURE_CUBE) {
         imageInfo.flags       |= VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
@@ -122,6 +124,11 @@ TextureHandle VKCreateTexture(const TextureDesc& desc) {
         texture.state.global.stencil = initialState;
     } else {
         texture.state.global.color = initialState;
+    }
+
+    if (desc.initialData) {
+        TextureCopy cpy = TextureCopy::FullTexture(desc.width, desc.height, desc.depth);
+        ctx.loadTimeStagingUploader->uploadTexture(texture.image, desc.initialData, desc.size, cpy);
     }
 
     return g_TexturePool.allocate(std::move(texture));
@@ -209,6 +216,162 @@ void VKDestroyTextureView(TextureViewHandle& handle) {
     }
 
     g_TextureViewPool.free(handle);
+}
+
+static VkFilter ToVkFilter(Filter f) {
+    switch (f) {
+    case Filter::NEAREST:
+        return VK_FILTER_NEAREST;
+    case Filter::LINEAR:
+        return VK_FILTER_LINEAR;
+    }
+    return VK_FILTER_LINEAR;
+}
+
+static VkSamplerMipmapMode ToVkMipFilter(Filter f) {
+    switch (f) {
+    case Filter::NEAREST:
+        return VK_SAMPLER_MIPMAP_MODE_NEAREST;
+    case Filter::LINEAR:
+        return VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    }
+    return VK_SAMPLER_MIPMAP_MODE_LINEAR;
+}
+
+static VkSamplerAddressMode ToVkAddressMode(AddressMode m) {
+    switch (m) {
+    case AddressMode::REPEAT:
+        return VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    case AddressMode::MIRRORED_REPEAT:
+        return VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+    case AddressMode::CLAMP_TO_EDGE:
+        return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    case AddressMode::CLAMP_TO_BORDER:
+        return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+    case AddressMode::MIRROR_CLAMP_TO_EDGE:
+        return VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE;
+    }
+    return VK_SAMPLER_ADDRESS_MODE_REPEAT;
+}
+
+static VkBorderColor ToVkBorderColor(BorderColor c) {
+    switch (c) {
+    case BorderColor::FLOAT_TRANSPARENT_BLACK:
+        return VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
+    case BorderColor::INT_TRANSPARENT_BLACK:
+        return VK_BORDER_COLOR_INT_TRANSPARENT_BLACK;
+    case BorderColor::FLOAT_OPAQUE_BLACK:
+        return VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK;
+    case BorderColor::INT_OPAQUE_BLACK:
+        return VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+    case BorderColor::FLOAT_OPAQUE_WHITE:
+        return VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
+    case BorderColor::INT_OPAQUE_WHITE:
+        return VK_BORDER_COLOR_INT_OPAQUE_WHITE;
+    }
+    return VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
+}
+
+static VkCompareOp ToVkCompareOp(CompareOp op) {
+    switch (op) {
+    case CompareOp::NEVER:
+        return VK_COMPARE_OP_NEVER;
+    case CompareOp::LESS:
+        return VK_COMPARE_OP_LESS;
+    case CompareOp::EQUAL:
+        return VK_COMPARE_OP_EQUAL;
+    case CompareOp::LESS_EQUAL:
+        return VK_COMPARE_OP_LESS_OR_EQUAL;
+    case CompareOp::GREATER:
+        return VK_COMPARE_OP_GREATER;
+    case CompareOp::NOT_EQUAL:
+        return VK_COMPARE_OP_NOT_EQUAL;
+    case CompareOp::GREATER_EQUAL:
+        return VK_COMPARE_OP_GREATER_OR_EQUAL;
+    case CompareOp::ALWAYS:
+        return VK_COMPARE_OP_ALWAYS;
+    }
+    return VK_COMPARE_OP_ALWAYS;
+}
+
+SamplerHandle VKCreateSampler(const SamplerDesc& desc) {
+    auto& ctx = GetVulkanContext();
+
+    // Query device limits for validation
+    const VkPhysicalDeviceLimits& limits = ctx.device->limits();
+
+    // Clamp anisotropy to what the device actually supports
+    float aniso       = desc.maxAnisotropy;
+    bool  enableAniso = (aniso > 1.0f) && limits.maxSamplerAnisotropy >= 1.0f;
+    if (enableAniso)
+        aniso = std::min(aniso, limits.maxSamplerAnisotropy);
+
+    VkSamplerCreateInfo info     = {};
+    info.sType                   = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    info.magFilter               = ToVkFilter(desc.magFilter);
+    info.minFilter               = ToVkFilter(desc.minFilter);
+    info.mipmapMode              = ToVkMipFilter(desc.mipFilter);
+    info.addressModeU            = ToVkAddressMode(desc.addressU);
+    info.addressModeV            = ToVkAddressMode(desc.addressV);
+    info.addressModeW            = ToVkAddressMode(desc.addressW);
+    info.mipLodBias              = desc.mipLodBias;
+    info.anisotropyEnable        = enableAniso ? VK_TRUE : VK_FALSE;
+    info.maxAnisotropy           = enableAniso ? aniso : 1.0f;
+    info.compareEnable           = desc.comparisonEnable ? VK_TRUE : VK_FALSE;
+    info.compareOp               = ToVkCompareOp(desc.compareOp);
+    info.minLod                  = desc.minLod;
+    info.maxLod                  = desc.maxLod;
+    info.borderColor             = ToVkBorderColor(desc.borderColor);
+    info.unnormalizedCoordinates = desc.unnormalizedCoords ? VK_TRUE : VK_FALSE;
+
+    // Unnormalized coords have strict constraints — validate early
+    if (desc.unnormalizedCoords) {
+        RENDERX_ASSERT_MSG(desc.minFilter == desc.magFilter,
+                           "VK_CreateSampler: unnormalized coords requires minFilter == magFilter");
+        RENDERX_ASSERT_MSG(desc.mipFilter == Filter::NEAREST && desc.minLod == 0.0f && desc.maxLod == 0.0f,
+                           "VK_CreateSampler: unnormalized coords requires NEAREST mip mode and lod 0..0");
+        RENDERX_ASSERT_MSG(!desc.comparisonEnable,
+                           "VK_CreateSampler: unnormalized coords cannot be used with comparison samplers");
+    }
+
+    // Comparison samplers must not use anisotropy
+    if (desc.comparisonEnable && enableAniso) {
+        RENDERX_WARN("VK_CreateSampler: comparison sampler '{}' had anisotropy enabled — disabling",
+                     desc.debugName ? desc.debugName : "(unnamed)");
+        info.anisotropyEnable = VK_FALSE;
+        info.maxAnisotropy    = 1.0f;
+    }
+
+    VulkanSampler sampler = {};
+
+    VkResult result = vkCreateSampler(ctx.device->logical(), &info, nullptr, &sampler.vkSampler);
+    if (result != VK_SUCCESS) {
+        RENDERX_ERROR("VK_CreateSampler: vkCreateSampler failed: {}", VkResultToString(result));
+        return {};
+    }
+
+    // // Debug label
+    // if (desc.debugName && ctx.device->debugUtilsEnabled()) {
+    //     VkDebugUtilsObjectNameInfoEXT nameInfo = {};
+    //     nameInfo.sType                         = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
+    //     nameInfo.objectType                    = VK_OBJECT_TYPE_SAMPLER;
+    //     nameInfo.objectHandle                  = reinterpret_cast<uint64_t>(sampler.sampler);
+    //     nameInfo.pObjectName                   = desc.debugName;
+    //     vkSetDebugUtilsObjectNameEXT(ctx.device->logical(), &nameInfo);
+    // }
+
+    return g_SamplerPool.allocate(sampler);
+}
+
+void VKDestroySampler(SamplerHandle& handle) {
+    auto* s = g_SamplerPool.get(handle);
+    if (!s)
+        return;
+
+    if (s->vkSampler != VK_NULL_HANDLE)
+        vkDestroySampler(GetVulkanContext().device->logical(), s->vkSampler, nullptr);
+
+    g_SamplerPool.free(handle);
 }
 
 } // namespace RxVK

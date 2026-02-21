@@ -179,6 +179,15 @@ struct DescriptorPoolSizes {
     uint32_t samplerCount              = 0;
     uint32_t combinedImageSamplerCount = 0;
     uint32_t maxSets                   = 0;
+    DescriptorPoolSizes(uint32_t max) {
+        uniformBufferCount        = max;
+        storageBufferCount        = max;
+        sampledImageCount         = max;
+        storageImageCount         = max;
+        samplerCount              = max;
+        combinedImageSamplerCount = max;
+        maxSets                   = max;
+    }
 };
 
 struct VulkanUploadContext {
@@ -189,12 +198,6 @@ struct VulkanUploadContext {
     uint32_t      offset     = 0;
 };
 
-struct VulkanResourceGroupLayout {
-    VkDescriptorSetLayout  layout = VK_NULL_HANDLE;
-    ResourceGroupFlags     flags  = ResourceGroupFlags::NONE;
-    DescriptorBindingModel model  = DescriptorBindingModel::Static;
-};
-
 struct VulkanDescriptorBuffer {
     VkBuffer        buffer     = VK_NULL_HANDLE;
     VmaAllocation   allocation = VK_NULL_HANDLE;
@@ -202,26 +205,25 @@ struct VulkanDescriptorBuffer {
     VkDeviceSize    stride     = 0;
 };
 
-struct VulkanResourceGroup {
-    DescriptorBindingModel model         = DescriptorBindingModel::Static;
-    ResourceGroupFlags     flags         = ResourceGroupFlags::NONE;
-    VkDescriptorSet        set           = VK_NULL_HANDLE;
-    uint32_t               dynamicOffset = 0;
-    std::vector<uint32_t>  bindlessIndices;
-    VulkanDescriptorBuffer descriptorBuffer;
-};
-
 struct VulkanPipelineLayout {
-    VkPipelineLayout                   layout;
+
+    struct StoredPushRange {
+        uint32_t           offset;
+        uint32_t           size;
+        VkShaderStageFlags stageFlags;
+    };
+
+    static constexpr uint32_t          MAX_PUSH_RANGES = 8;
+    VkPipelineLayout                   vkLayout;
     std::vector<VkDescriptorSetLayout> setlayouts;
     std::vector<Hash64>                setHashs;
-    bool                               isBound = false;
+    StoredPushRange                    pushRanges[MAX_PUSH_RANGES] = {};
+    uint32_t                           pushRangeCount;
 };
 
 struct VulkanPipeline {
-    VkPipeline           pipeline;
+    VkPipeline           vkPipeline;
     PipelineLayoutHandle layout;
-    bool                 isBound = false;
 };
 
 struct VulkanBufferConfig {
@@ -261,7 +263,7 @@ struct VulkanBuffer {
     VmaAllocationInfo allocInfo    = {};
     VkDeviceSize      size         = 0;
     uint32_t          bindingCount = 1;
-    BufferUsage       flags;
+    BufferFlags       flags;
     const char*       debugName = nullptr;
     VulkanAccessState state;
 };
@@ -300,6 +302,9 @@ struct VulkanTextureView {
     const char*     debugName       = nullptr;
 };
 
+struct VulkanSampler {
+    VkSampler vkSampler;
+};
 struct VulkanShader {
     std::string    entryPoint;
     PipelineStage  type;
@@ -371,36 +376,18 @@ struct VulkanSetLayout {
 // Stored per DescriptorPoolHandle
 // One pool can back many sets (LINEAR) or individual sets (POOL)
 struct VulkanDescriptorPool {
-    DescriptorPoolFlags flags;
 
-    //---- DESCRIPTOR_SETS path -------------------------------------------
-    // VK:    one VkDescriptorPool
-    // Alloc: vkAllocateDescriptorSets
-    // Free:  vkFreeDescriptorSets (POOL policy only)
-    // Reset: vkResetDescriptorPool (LINEAR policy)
-    VkDescriptorPool vkPool = VK_NULL_HANDLE;
-
-    //---- DESCRIPTOR_BUFFER path -----------------------------------------
-    // VK:    suballocated from a VulkanDescriptorHeap
-    // No VkDescriptorPool — descriptors are raw bytes in a VkBuffer
-    DescriptorHeapHandle heapHandle;
-    uint64_t             heapBaseOffset = 0; // byte offset into the heap where this pool starts
-    uint64_t             writePtr       = 0; // current allocation position in bytes (LINEAR)
-
-    // POOL policy freelist — stores slot indices (not byte offsets)
+    DescriptorPoolFlags   flags;
+    VkDescriptorPool      vkPool = VK_NULL_HANDLE;
+    DescriptorHeapHandle  heapHandle;
+    uint64_t              heapBaseOffset = 0; // byte offset into the heap where this pool starts
+    uint64_t              writePtr       = 0; // current allocation position in bytes (LINEAR)
     std::vector<uint32_t> freeSlots;
-
-    // Layout ref — needed so we know the stride per set
-    SetLayoutHandle layout;
-
-    // Stride per set in bytes — computed at creation from layout memory info
-    // LINEAR: each allocation is stridePerSet bytes
-    // POOL:   each slot is stridePerSet bytes
-    uint64_t stridePerSet = 0;
-    uint32_t capacity     = 0; // max sets
-
-    bool        updateAfterBind = false;
-    const char* debugName       = nullptr;
+    SetLayoutHandle       layout;
+    uint64_t              stridePerSet    = 0;
+    uint32_t              capacity        = 0; // max sets
+    bool                  updateAfterBind = false;
+    const char*           debugName       = nullptr;
 };
 
 // Stored per SetHandle
@@ -534,7 +521,7 @@ public:
     }
 
     void free(Tag& handle) {
-        RENDERX_ASSERT_MSG(handle.IsValid(), "ResourcePool::free: trying to free an invalid handle");
+        RENDERX_ASSERT_MSG(handle.isValid(), "ResourcePool::free: trying to free an invalid handle");
 
         uint64_t raw   = Decrypt(handle.id);
         auto     index = static_cast<ValueType>(raw & 0xFFFFFFFF);
@@ -549,7 +536,7 @@ public:
     }
 
     ResourceType* get(const Tag& handle) {
-        if (!handle.IsValid()) {
+        if (!handle.isValid()) {
             RENDERX_WARN("ResourcePool::get : invalid handle");
             return nullptr;
         }
@@ -574,8 +561,25 @@ public:
         }
     }
 
+    template <typename Fn> void ForEachAlive(Fn&& fn) {
+        for (ValueType i = 1; i < _My_resource.size(); ++i) {
+            // skip freed slots
+            if (std::find(_My_freelist.begin(), _My_freelist.end(), i) != _My_freelist.end())
+                continue;
+
+            uint32_t gen = _My_generation[i];
+
+            uint64_t raw = (static_cast<uint64_t>(gen) << 32) | static_cast<uint64_t>(i);
+
+            Tag handle;
+            handle.id = Encrypt(raw);
+
+            fn(_My_resource[i], handle);
+        }
+    }
+    
     bool IsAlive(const Tag& handle) const {
-        if (!handle.IsValid())
+        if (!handle.isValid())
             return false;
 
         uint64_t raw   = Decrypt(handle.id);
@@ -721,15 +725,16 @@ public:
                  const std::vector<const char*>& requiredLayers     = {});
     ~VulkanDevice();
 
-    VkPhysicalDevice              physical() const { return m_PhysicalDevice; }
-    VkDevice                      logical() const { return m_Device; }
-    VkQueue                       graphicsQueue() const { return m_GraphicsQueue; }
-    VkQueue                       computeQueue() const { return m_ComputeQueue; }
-    VkQueue                       transferQueue() const { return m_TransferQueue; }
-    uint32_t                      graphicsFamily() const { return m_GraphicsFamily; }
-    uint32_t                      computeFamily() const { return m_ComputeFamily; }
-    uint32_t                      transferFamily() const { return m_TransferFamily; }
-    const VkPhysicalDeviceLimits& limits() const { return m_Limits; }
+    VkPhysicalDevice                  physical() const { return m_PhysicalDevice; }
+    VkDevice                          logical() const { return m_Device; }
+    VkQueue                           graphicsQueue() const { return m_GraphicsQueue; }
+    VkQueue                           computeQueue() const { return m_ComputeQueue; }
+    VkQueue                           transferQueue() const { return m_TransferQueue; }
+    uint32_t                          graphicsFamily() const { return m_GraphicsFamily; }
+    uint32_t                          computeFamily() const { return m_ComputeFamily; }
+    uint32_t                          transferFamily() const { return m_TransferFamily; }
+    const VkPhysicalDeviceLimits&     limits() const { return m_VkLimits; }
+    const VkPhysicalDeviceProperties& VkProperties() { return m_VkProperties; }
 
 private:
     DeviceInfo gatherDeviceInfo(VkPhysicalDevice device) const;
@@ -742,17 +747,18 @@ private:
     void       queryLimits();
 
 private:
-    VkInstance             m_Instance       = VK_NULL_HANDLE;
-    VkSurfaceKHR           m_Surface        = VK_NULL_HANDLE;
-    VkPhysicalDevice       m_PhysicalDevice = VK_NULL_HANDLE;
-    VkDevice               m_Device         = VK_NULL_HANDLE;
-    VkQueue                m_GraphicsQueue  = VK_NULL_HANDLE;
-    VkQueue                m_ComputeQueue   = VK_NULL_HANDLE;
-    VkQueue                m_TransferQueue  = VK_NULL_HANDLE;
-    uint32_t               m_GraphicsFamily = UINT32_MAX;
-    uint32_t               m_ComputeFamily  = UINT32_MAX;
-    uint32_t               m_TransferFamily = UINT32_MAX;
-    VkPhysicalDeviceLimits m_Limits{};
+    VkInstance                 m_Instance       = VK_NULL_HANDLE;
+    VkSurfaceKHR               m_Surface        = VK_NULL_HANDLE;
+    VkPhysicalDevice           m_PhysicalDevice = VK_NULL_HANDLE;
+    VkDevice                   m_Device         = VK_NULL_HANDLE;
+    VkQueue                    m_GraphicsQueue  = VK_NULL_HANDLE;
+    VkQueue                    m_ComputeQueue   = VK_NULL_HANDLE;
+    VkQueue                    m_TransferQueue  = VK_NULL_HANDLE;
+    uint32_t                   m_GraphicsFamily = UINT32_MAX;
+    uint32_t                   m_ComputeFamily  = UINT32_MAX;
+    uint32_t                   m_TransferFamily = UINT32_MAX;
+    VkPhysicalDeviceLimits     m_VkLimits{};
+    VkPhysicalDeviceProperties m_VkProperties{};
 };
 
 class VulkanAllocator {
@@ -805,7 +811,10 @@ struct StagingChunk {
     uint64_t      lastSubmissionID = 0; // Last submission that used this chunk
 
     // Reset for reuse
-    void reset() { currentOffset = 0; }
+    void reset() {
+        currentOffset    = 0;
+        lastSubmissionID = 0;
+    }
 
     // Check if there's enough space for an allocation
     bool canAllocate(uint32_t requestedSize, uint32_t alignment = 256) const {
@@ -817,7 +826,12 @@ struct StagingChunk {
     StagingAllocation allocate(uint32_t requestedSize, uint32_t alignment = 256) {
         StagingAllocation alloc{};
         uint32_t          alignedOffset = (currentOffset + alignment - 1) & ~(alignment - 1);
-        RENDERX_ASSERT_MSG(alignedOffset + requestedSize <= size, "Staging allocation exceeds chunk size");
+        if (!(alignedOffset + requestedSize <= size)) {
+            RENDERX_ERROR("Staging allocation exceeds chunk size requested size {}, size {}",
+                          alignedOffset + requestedSize,
+                          size);
+        }
+
         alloc.buffer    = buffer;
         alloc.offset    = alignedOffset;
         alloc.size      = requestedSize;
@@ -842,13 +856,13 @@ private:
     void          destroyChunk(StagingChunk& chunk);
 
 private:
-    VulkanContext&            m_Ctx;
-    uint32_t                  m_ChunkSize;
-    StagingChunk*             m_CurrentChunk = nullptr;
-    std::deque<StagingChunk>  m_InFlightChunks;
-    std::vector<StagingChunk> m_FreeChunks;
-    std::vector<StagingChunk> m_AllChunks;
-    std::mutex                m_Mutex;
+    VulkanContext&           m_Ctx;
+    uint32_t                 m_ChunkSize;
+    StagingChunk*            m_CurrentChunk = nullptr;
+    std::deque<StagingChunk> m_InFlightChunks;
+    std::deque<StagingChunk> m_FreeChunks;
+    std::deque<StagingChunk> m_AllChunks;
+    std::mutex               m_Mutex;
 };
 
 struct ImmediateUploadContext {
@@ -864,10 +878,10 @@ public:
     ~VulkanImmediateUploader();
     bool
     uploadBuffer(VkBuffer dstBuffer, const void* data, uint32_t size, uint32_t dstOffset = 0, uint32_t alignment = 256);
-    bool uploadTexture(VkImage dstTexture, const void* data, uint32_t size, const TextureCopyRegion& region);
+    bool uploadTexture(VkImage dstTexture, const void* data, uint32_t size, const TextureCopy& region);
     void beginBatch();
     void uploadBufferBatched(VkBuffer dstBuffer, const void* data, uint32_t size, uint32_t dstOffset = 0);
-    void uploadTextureBatched(VkImage dstTexture, const void* data, uint32_t size, const TextureCopyRegion& region);
+    void uploadTextureBatched(VkImage dstTexture, const void* data, uint32_t size, const TextureCopy& region);
     bool endBatch(); // Returns true if successful
 private:
     void            ensureContext();
@@ -881,6 +895,59 @@ private:
     std::mutex             m_Mutex; // Protect immediate uploads
 };
 
+class VulkanLoadTimeStagingUploader {
+public:
+    explicit VulkanLoadTimeStagingUploader(VulkanContext& ctx);
+    ~VulkanLoadTimeStagingUploader();
+
+    // Non-copyable, non-movable
+    VulkanLoadTimeStagingUploader(const VulkanLoadTimeStagingUploader&)            = delete;
+    VulkanLoadTimeStagingUploader& operator=(const VulkanLoadTimeStagingUploader&) = delete;
+    VulkanLoadTimeStagingUploader(VulkanLoadTimeStagingUploader&&)                 = delete;
+    VulkanLoadTimeStagingUploader& operator=(VulkanLoadTimeStagingUploader&&)      = delete;
+
+    // Queue a buffer upload — data is copied to CPU-side staging immediately
+    void uploadBuffer(VkBuffer dst, const void* data, uint32_t size, uint32_t dstOffset = 0);
+
+    // Queue a texture upload — data is copied to CPU-side staging immediately
+    void uploadTexture(VkImage dst, const void* data, uint32_t size, const TextureCopy& region);
+
+    // Execute all queued uploads in a single GPU submission, then free staging memory.
+    // Call once after all assets are queued. Safe to call on empty queue (no-op).
+    void flush();
+
+    // Returns total bytes queued so far (before flush)
+    uint32_t pendingBytes() const { return m_TotalSize; }
+
+private:
+    uint32_t pushData(const void* data, uint32_t size, uint32_t alignment = 256);
+
+    struct BufferUpload {
+        VkBuffer dst;
+        uint32_t stagingOffset;
+        uint32_t dstOffset;
+        uint32_t size;
+    };
+
+    struct TextureUpload {
+        VkImage     dst;
+        uint32_t    stagingOffset;
+        uint32_t    size;
+        TextureCopy region;
+    };
+
+    VulkanContext& m_Ctx;
+
+    VkCommandPool   m_Pool  = VK_NULL_HANDLE;
+    VkCommandBuffer m_Cmd   = VK_NULL_HANDLE;
+    VkFence         m_Fence = VK_NULL_HANDLE;
+
+    std::vector<uint8_t>       m_CPUData; // all upload data packed linearly
+    std::vector<BufferUpload>  m_BufferUploads;
+    std::vector<TextureUpload> m_TextureUploads;
+    uint32_t                   m_TotalSize = 0;
+};
+
 struct DeferredUpload {
     StagingAllocation staging;
     BufferHandle      dstBuffer;
@@ -892,7 +959,7 @@ struct DeferredUpload {
 struct DeferredTextureUpload {
     StagingAllocation staging;
     TextureHandle     dstTexture;
-    TextureCopyRegion region;
+    TextureCopy       region;
     uint64_t          submissionID;
 };
 
@@ -901,7 +968,7 @@ public:
     VulkanDeferredUploader(VulkanContext& ctx);
     ~VulkanDeferredUploader();
     void     uploadBuffer(BufferHandle dstBuffer, const void* data, uint32_t size, uint32_t dstOffset = 0);
-    void     uploadTexture(TextureHandle dstTexture, const void* data, uint32_t size, const TextureCopyRegion& region);
+    void     uploadTexture(TextureHandle dstTexture, const void* data, uint32_t size, const TextureCopy& region);
     Timeline flush();
     void     retire(uint64_t completedSubmission);
 
@@ -921,7 +988,7 @@ public:
     void close() override;
     void setPipeline(const PipelineHandle& pipeline) override;
     void setVertexBuffer(const BufferHandle& buffer, uint64_t offset = 0) override;
-    void setIndexBuffer(const BufferHandle& buffer, uint64_t offset = 0) override;
+    void setIndexBuffer(const BufferHandle& buffer, uint64_t offset = 0, Format indextype = Format::UINT32) override;
 
     void draw(uint32_t vertexCount,
               uint32_t instanceCount = 1,
@@ -939,12 +1006,10 @@ public:
     void endRendering() override;
     void writeBuffer(BufferHandle handle, const void* data, uint32_t offset, uint32_t size) override;
     void setFramebuffer(FramebufferHandle handle) override;
-    void
-    copyBufferToTexture(BufferHandle srcBuffer, TextureHandle dstTexture, const TextureCopyRegion& region) override;
-    void copyTexture(TextureHandle srcTexture, TextureHandle dstTexture, const TextureCopyRegion& region) override;
-    void copyBuffer(BufferHandle src, BufferHandle dst, const BufferCopyRegion& region) override;
-    void
-    copyTextureToBuffer(TextureHandle srcTexture, BufferHandle dstBuffer, const TextureCopyRegion& region) override;
+    void copyBufferToTexture(BufferHandle srcBuffer, TextureHandle dstTexture, const TextureCopy& region) override;
+    void copyTexture(TextureHandle srcTexture, TextureHandle dstTexture, const TextureCopy& region) override;
+    void copyBuffer(BufferHandle src, BufferHandle dst, const BufferCopy& region) override;
+    void copyTextureToBuffer(TextureHandle srcTexture, BufferHandle dstBuffer, const TextureCopy& region) override;
     void Barrier(const Memory_Barrier* memoryBarriers,
                  uint32_t              memoryCount,
                  const BufferBarrier*  bufferBarriers,
@@ -964,6 +1029,8 @@ public:
     void setDescriptorBufferOffset(uint32_t slot, uint32_t bufferIndex, uint64_t byteOffset) override;
     void setDynamicOffset(uint32_t slot, uint32_t byteOffset) override;
     void pushDescriptor(uint32_t slot, const DescriptorWrite* writes, uint32_t count) override;
+    void setViewport(const Viewport& viewport) override;
+    void setScissor(const Scissor& scissor) override;
     // friends
     friend class VulkanCommandAllocator;
     friend class VulkanCommandQueue;
@@ -985,8 +1052,15 @@ private:
     QueueType       m_QueueType;
 
     // Track currently bound pipeline / layout so descriptor sets can be bound
-    PipelineHandle       m_CurrentPipeline;
-    PipelineLayoutHandle m_CurrentPipelineLayout;
+    PipelineHandle       m_CurrentPipelineHandle;
+    PipelineLayoutHandle m_CurrentPipelineLayoutHandle;
+    VulkanPipeline       m_CurrentPipeline;
+    VkPipelineLayout     m_BoundPipelineLayout;
+    uint32_t             m_PushRangeCount;
+    bool                 m_HasMultiplePushRanges;
+    VkShaderStageFlags   m_PushConstantStages;
+
+    VulkanPipelineLayout::StoredPushRange m_PushRanges[VulkanPipelineLayout::MAX_PUSH_RANGES];
 
     struct LocalTextureState {
         TextureHandle     handle;
@@ -1080,19 +1154,20 @@ public:
 };
 
 struct VulkanContext {
-    void*                        window = nullptr;
-    VulkanInstance*              instance;
-    VulkanDevice*                device;
-    VulkanSwapchain*             swapchain;
-    VulkanCommandQueue*          graphicsQueue;
-    VulkanCommandQueue*          computeQueue;
-    VulkanCommandQueue*          transferQueue;
-    VulkanAllocator*             allocator;
-    VulkanDescriptorManager*     descriptorSetManager;
-    VulkanDescriptorPoolManager* descriptorPoolManager;
-    VulkanStagingAllocator*      stagingAllocator;
-    VulkanImmediateUploader*     immediateUploader;
-    VulkanDeferredUploader*      deferredUploader;
+    void*                          window = nullptr;
+    VulkanInstance*                instance;
+    VulkanDevice*                  device;
+    VulkanSwapchain*               swapchain;
+    VulkanCommandQueue*            graphicsQueue;
+    VulkanCommandQueue*            computeQueue;
+    VulkanCommandQueue*            transferQueue;
+    VulkanAllocator*               allocator;
+    VulkanDescriptorManager*       descriptorSetManager;
+    VulkanDescriptorPoolManager*   descriptorPoolManager;
+    VulkanStagingAllocator*        stagingAllocator;
+    VulkanImmediateUploader*       immediateUploader;
+    VulkanDeferredUploader*        deferredUploader;
+    VulkanLoadTimeStagingUploader* loadTimeStagingUploader;
 };
 
 // Global Resource Pools
@@ -1105,10 +1180,11 @@ extern ResourcePool<VulkanPipeline, PipelineHandle>             g_PipelinePool;
 extern ResourcePool<VulkanPipelineLayout, PipelineLayoutHandle> g_PipelineLayoutPool;
 extern ResourcePool<VulkanRenderPass, RenderPassHandle>         g_RenderPassPool;
 extern ResourcePool<VulkanFramebuffer, FramebufferHandle>       g_FramebufferPool;
+extern ResourcePool<VulkanSet, SetHandle>                       g_SetPool;
 extern ResourcePool<VulkanSetLayout, SetLayoutHandle>           g_SetLayoutPool;
 extern ResourcePool<VulkanDescriptorPool, DescriptorPoolHandle> g_DescriptorPoolPool;
-extern ResourcePool<VulkanSet, SetHandle>                       g_SetPool;
 extern ResourcePool<VulkanDescriptorHeap, DescriptorHeapHandle> g_DescriptorHeapPool;
+extern ResourcePool<VulkanSampler, SamplerHandle>               g_SamplerPool;
 
 // Global Hash Storage
 // TODO implement better cache managenet
@@ -1120,7 +1196,7 @@ void           freeAllVulkanResources();
 void           VKShutdownCommon();
 
 // Create a Descriptor Pool
-inline VkDescriptorPool CreateDescriptorPool(const DescriptorPoolSizes& sizes, bool allowFree) {
+inline VkDescriptorPool CreateDescriptorPool(const DescriptorPoolSizes& sizes, bool allowFree, bool updateAfterBind) {
     std::vector<VkDescriptorPoolSize> poolSizes;
     auto&                             ctx = GetVulkanContext();
 
@@ -1137,9 +1213,14 @@ inline VkDescriptorPool CreateDescriptorPool(const DescriptorPoolSizes& sizes, b
     if (sizes.combinedImageSamplerCount > 0)
         poolSizes.push_back({VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, sizes.combinedImageSamplerCount});
 
+    VkDescriptorPoolCreateFlags flags = 0;
+    if (allowFree)
+        flags |= VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+    if (updateAfterBind)
+        flags |= VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
     VkDescriptorPoolCreateInfo poolInfo = {};
     poolInfo.sType                      = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    poolInfo.flags                      = allowFree ? VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT : 0;
+    poolInfo.flags                      = flags;
     poolInfo.maxSets                    = sizes.maxSets;
     poolInfo.poolSizeCount              = static_cast<uint32_t>(poolSizes.size());
     poolInfo.pPoolSizes                 = poolSizes.data();
@@ -1152,10 +1233,10 @@ inline VkDescriptorPool CreateDescriptorPool(const DescriptorPoolSizes& sizes, b
 
 // VMA Memory Allocation Conversion
 /// Convert RenderX MemoryType to VMA allocation info
-inline VmaAllocationCreateInfo ToVmaAllocationCreateInfo(MemoryType type, BufferUsage flags) {
+inline VmaAllocationCreateInfo ToVmaAllocationCreateInfo(MemoryType type, BufferFlags flags) {
     VmaAllocationCreateInfo allocInfo   = {};
-    bool                    isDynamic   = Has(flags, BufferUsage::DYNAMIC);
-    bool                    isStreaming = Has(flags, BufferUsage::STREAMING);
+    bool                    isDynamic   = Has(flags, BufferFlags::DYNAMIC);
+    bool                    isStreaming = Has(flags, BufferFlags::STREAMING);
 
     switch (type) {
     case MemoryType::GPU_ONLY:
@@ -1232,7 +1313,7 @@ inline VkMemoryPropertyFlags ToVulkanMemoryPropertyFlags(MemoryType type) {
 
 /// Extended allocation info with priority and dedicated allocation support
 inline VmaAllocationCreateInfo ToVmaAllocationCreateInfoEx(MemoryType  type,
-                                                           BufferUsage flags,
+                                                           BufferFlags flags,
                                                            float       priority            = 0.5f,
                                                            bool        dedicatedAllocation = false) {
     VmaAllocationCreateInfo allocInfo = ToVmaAllocationCreateInfo(type, flags);
@@ -1328,9 +1409,9 @@ inline bool IsHostVisible(MemoryType type) {
     return type == MemoryType::CPU_TO_GPU || type == MemoryType::GPU_TO_CPU || type == MemoryType::CPU_ONLY;
 }
 
-inline bool ShouldBePersistentlyMapped(MemoryType type, BufferUsage flags) {
-    bool isDynamic   = Has(flags, BufferUsage::DYNAMIC);
-    bool isStreaming = Has(flags, BufferUsage::STREAMING);
+inline bool ShouldBePersistentlyMapped(MemoryType type, BufferFlags flags) {
+    bool isDynamic   = Has(flags, BufferFlags::DYNAMIC);
+    bool isStreaming = Has(flags, BufferFlags::STREAMING);
 
     return IsHostVisible(type) && (isDynamic || isStreaming);
 }
@@ -1352,10 +1433,10 @@ inline const char* MemoryTypeToString(MemoryType type) {
     }
 }
 
-inline MemoryType GetRecommendedMemoryType(BufferUsage flags) {
-    if (Has(flags, BufferUsage::DYNAMIC) || Has(flags, BufferUsage::STREAMING)) {
+inline MemoryType GetRecommendedMemoryType(BufferFlags flags) {
+    if (Has(flags, BufferFlags::DYNAMIC) || Has(flags, BufferFlags::STREAMING)) {
         return MemoryType::CPU_TO_GPU;
-    } else if (Has(flags, BufferUsage::STATIC)) {
+    } else if (Has(flags, BufferFlags::STATIC)) {
         return MemoryType::GPU_ONLY;
     }
 
@@ -1404,8 +1485,28 @@ inline VkFormat ToVulkanFormat(Format format) {
         return VK_FORMAT_BC3_UNORM_BLOCK;
     case Format::BC3_SRGB:
         return VK_FORMAT_BC3_SRGB_BLOCK;
+
+    case Format::UINT32: {
+        RENDERX_ERROR("Using indesx type as the buffer format");
+        return VK_FORMAT_UNDEFINED;
+    }
+    case Format::UINT16: {
+        RENDERX_ERROR("Using index type as the buffer format");
+        return VK_FORMAT_UNDEFINED;
+    }
     default:
         return VK_FORMAT_UNDEFINED;
+    }
+}
+
+inline VkIndexType ToVulkanIndexType(Format fmt) {
+    switch (fmt) {
+    case Format::UINT32:
+        return VK_INDEX_TYPE_UINT32;
+    case Format::UINT16:
+        return VK_INDEX_TYPE_UINT16;
+    default:
+        return VK_INDEX_TYPE_UINT32;
     }
 }
 
@@ -1468,15 +1569,15 @@ inline VkSamplerMipmapMode ToVulkanMipmapMode(Filter filter) {
 }
 
 // Texture Wrap/Address Mode Conversion
-inline VkSamplerAddressMode ToVulkanAddressMode(TextureWrap wrap) {
+inline VkSamplerAddressMode ToVulkanAddressMode(AddressMode wrap) {
     switch (wrap) {
-    case TextureWrap::REPEAT:
+    case AddressMode::REPEAT:
         return VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    case TextureWrap::MIRRORED_REPEAT:
+    case AddressMode::MIRRORED_REPEAT:
         return VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
-    case TextureWrap::CLAMP_TO_EDGE:
+    case AddressMode::CLAMP_TO_EDGE:
         return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    case TextureWrap::CLAMP_TO_BORDER:
+    case AddressMode::CLAMP_TO_BORDER:
         return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
     default:
         return VK_SAMPLER_ADDRESS_MODE_REPEAT;
@@ -1504,23 +1605,23 @@ inline VkPrimitiveTopology ToVulkanTopology(Topology topology) {
 }
 
 // Compare Function Conversion
-inline VkCompareOp ToVulkanCompareOp(CompareFunc func) {
+inline VkCompareOp ToVulkanCompareOp(CompareOp func) {
     switch (func) {
-    case CompareFunc::NEVER:
+    case CompareOp::NEVER:
         return VK_COMPARE_OP_NEVER;
-    case CompareFunc::LESS:
+    case CompareOp::LESS:
         return VK_COMPARE_OP_LESS;
-    case CompareFunc::EQUAL:
+    case CompareOp::EQUAL:
         return VK_COMPARE_OP_EQUAL;
-    case CompareFunc::LESS_EQUAL:
+    case CompareOp::LESS_EQUAL:
         return VK_COMPARE_OP_LESS_OR_EQUAL;
-    case CompareFunc::GREATER:
+    case CompareOp::GREATER:
         return VK_COMPARE_OP_GREATER;
-    case CompareFunc::NOT_EQUAL:
+    case CompareOp::NOT_EQUAL:
         return VK_COMPARE_OP_NOT_EQUAL;
-    case CompareFunc::GREATER_EQUAL:
+    case CompareOp::GREATER_EQUAL:
         return VK_COMPARE_OP_GREATER_OR_EQUAL;
-    case CompareFunc::ALWAYS:
+    case CompareOp::ALWAYS:
         return VK_COMPARE_OP_ALWAYS;
     default:
         return VK_COMPARE_OP_LESS;
@@ -1659,22 +1760,22 @@ inline VkDescriptorType ToVulkanDescriptorType(ResourceType type) {
 }
 
 // Buffer Usage Flags Conversion
-inline VkBufferUsageFlags ToVulkanBufferUsage(BufferUsage flags) {
+inline VkBufferUsageFlags ToVulkanBufferUsage(BufferFlags flags) {
     VkBufferUsageFlags usage = 0;
 
-    if (Has(flags, BufferUsage::VERTEX))
+    if (Has(flags, BufferFlags::VERTEX))
         usage |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-    if (Has(flags, BufferUsage::INDEX))
+    if (Has(flags, BufferFlags::INDEX))
         usage |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
-    if (Has(flags, BufferUsage::UNIFORM))
+    if (Has(flags, BufferFlags::UNIFORM))
         usage |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-    if (Has(flags, BufferUsage::STORAGE))
+    if (Has(flags, BufferFlags::STORAGE))
         usage |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-    if (Has(flags, BufferUsage::INDIRECT))
+    if (Has(flags, BufferFlags::INDIRECT))
         usage |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
-    if (Has(flags, BufferUsage::TRANSFER_SRC))
+    if (Has(flags, BufferFlags::TRANSFER_SRC))
         usage |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-    if (Has(flags, BufferUsage::TRANSFER_DST))
+    if (Has(flags, BufferFlags::TRANSFER_DST))
         usage |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 
     return usage;
@@ -1698,7 +1799,7 @@ inline VmaMemoryUsage ToVmaMemoryUsage(MemoryType type) {
     }
 }
 
-inline VmaAllocationCreateFlags ToVmaAllocationFlags(MemoryType type, BufferUsage bufferFlags) {
+inline VmaAllocationCreateFlags ToVmaAllocationFlags(MemoryType type, BufferFlags bufferFlags) {
     VmaAllocationCreateFlags flags = 0;
 
     // Memory type specific flags
@@ -1723,7 +1824,7 @@ inline VmaAllocationCreateFlags ToVmaAllocationFlags(MemoryType type, BufferUsag
     }
 
     // Buffer-specific flags
-    if (Has(bufferFlags, BufferUsage::DYNAMIC)) {
+    if (Has(bufferFlags, BufferFlags::DYNAMIC)) {
         flags |= VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
         flags |= VMA_ALLOCATION_CREATE_MAPPED_BIT;
     }
@@ -1788,14 +1889,14 @@ inline VkImageViewType ToVulkanViewType(TextureType type) {
     }
 }
 
-inline uint32_t GetMinVulkanAlignment(BufferUsage usages) {
+inline uint32_t GetMinVulkanAlignment(BufferFlags usages) {
     auto&       ctx       = GetVulkanContext();
     const auto& limits    = ctx.device->limits();
     uint32_t    alignment = 1; // default: no special requirement
-    if (Has(usages, BufferUsage::UNIFORM)) {
+    if (Has(usages, BufferFlags::UNIFORM)) {
         alignment = std::max(alignment, static_cast<uint32_t>(limits.minUniformBufferOffsetAlignment));
     }
-    if (Has(usages, BufferUsage::STORAGE)) {
+    if (Has(usages, BufferFlags::STORAGE)) {
         alignment = std::max(alignment, static_cast<uint32_t>(limits.minStorageBufferOffsetAlignment));
     }
     // VERTEX / INDEX / INDIRECT / TRANSFER*

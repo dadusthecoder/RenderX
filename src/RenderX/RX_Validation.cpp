@@ -185,7 +185,7 @@ bool ValidationLayer::ValidateBuffer(BufferHandle handle, const char* context) {
 
     std::lock_guard<std::mutex> lock(mutex_);
 
-    if (!handle.IsValid()) {
+    if (!handle.isValid()) {
         Report(ValidationSeverity::_ERROR,
                ValidationCategory::HANDLE,
                fmt::format("Invalid buffer handle in {}", context ? context : "unknown context"));
@@ -224,9 +224,9 @@ void ValidationLayer::ValidateBufferDesc(const BufferDesc& desc) {
     }
 
     // Check for conflicting flags
-    bool hasStatic    = Has(desc.usage, BufferUsage::STATIC);
-    bool hasDynamic   = Has(desc.usage, BufferUsage::DYNAMIC);
-    bool hasStreaming = Has(desc.usage, BufferUsage::STREAMING);
+    bool hasStatic    = Has(desc.usage, BufferFlags::STATIC);
+    bool hasDynamic   = Has(desc.usage, BufferFlags::DYNAMIC);
+    bool hasStreaming = Has(desc.usage, BufferFlags::STREAMING);
 
     if ((hasStatic && hasDynamic) || (hasStatic && hasStreaming) || (hasDynamic && hasStreaming)) {
         Report(ValidationSeverity::_ERROR,
@@ -241,8 +241,8 @@ void ValidationLayer::ValidateBufferDesc(const BufferDesc& desc) {
                "GPU_ONLY memory with DYNAMIC usage may cause performance issues");
     }
 
-    if (desc.memoryType == MemoryType::CPU_TO_GPU && !Has(desc.usage, BufferUsage::UNIFORM) &&
-        !Has(desc.usage, BufferUsage::VERTEX)) {
+    if (desc.memoryType == MemoryType::CPU_TO_GPU && !Has(desc.usage, BufferFlags::UNIFORM) &&
+        !Has(desc.usage, BufferFlags::VERTEX)) {
         Report(ValidationSeverity::WARNING,
                ValidationCategory::RESOURCE,
                "CPU_TO_GPU memory typically used for UNIFORM or VERTEX buffers");
@@ -358,7 +358,7 @@ bool ValidationLayer::ValidateTexture(TextureHandle handle, const char* context)
 
     std::lock_guard<std::mutex> lock(mutex_);
 
-    if (!handle.IsValid()) {
+    if (!handle.isValid()) {
         Report(ValidationSeverity::_ERROR,
                ValidationCategory::HANDLE,
                fmt::format("Invalid texture handle in {}", context ? context : "unknown context"));
@@ -465,7 +465,7 @@ bool ValidationLayer::ValidateTextureView(TextureViewHandle handle, const char* 
 
     std::lock_guard<std::mutex> lock(mutex_);
 
-    if (!handle.IsValid()) {
+    if (!handle.isValid()) {
         Report(ValidationSeverity::_ERROR,
                ValidationCategory::HANDLE,
                fmt::format("Invalid texture view handle in {}", context ? context : "unknown context"));
@@ -527,7 +527,7 @@ bool ValidationLayer::ValidatePipeline(PipelineHandle handle, const char* contex
 
     std::lock_guard<std::mutex> lock(mutex_);
 
-    if (!handle.IsValid()) {
+    if (!handle.isValid()) {
         Report(ValidationSeverity::_ERROR,
                ValidationCategory::HANDLE,
                fmt::format("Invalid pipeline handle in {}", context ? context : "unknown context"));
@@ -559,17 +559,17 @@ void ValidationLayer::ValidatePipelineDesc(const PipelineDesc& desc) {
     bool hasFragment = false;
 
     for (const auto& shader : desc.shaders) {
-        if (!shader.IsValid()) {
+        if (!shader.isValid()) {
             Report(ValidationSeverity::_ERROR, ValidationCategory::PIPELINE, "Pipeline contains invalid shader handle");
         }
     }
 
-    if (!desc.layout.IsValid()) {
+    if (!desc.layout.isValid()) {
         Report(ValidationSeverity::_ERROR, ValidationCategory::PIPELINE, "Pipeline has invalid layout handle");
     }
 
     // Color format validation
-    if (desc.colorFromats.empty() && !desc.renderPass.IsValid()) {
+    if (desc.colorFromats.empty() && !desc.renderPass.isValid()) {
         Report(ValidationSeverity::WARNING,
                ValidationCategory::PIPELINE,
                "Pipeline has no color attachments and no render pass");
@@ -735,7 +735,7 @@ void ValidationLayer::ValidateDrawCall(CommandList* cmdList, uint32_t vertexCoun
                "Draw call must be inside render pass or rendering block");
     }
 
-    if (!info->boundPipeline.IsValid()) {
+    if (!info->boundPipeline.isValid()) {
         Report(ValidationSeverity::_ERROR, ValidationCategory::PIPELINE, "Draw call without bound pipeline");
     }
 
@@ -773,11 +773,11 @@ void ValidationLayer::ValidateDrawIndexed(CommandList* cmdList, uint32_t indexCo
                "Draw indexed call must be inside render pass or rendering block");
     }
 
-    if (!info->boundPipeline.IsValid()) {
+    if (!info->boundPipeline.isValid()) {
         Report(ValidationSeverity::_ERROR, ValidationCategory::PIPELINE, "Draw indexed call without bound pipeline");
     }
 
-    if (!info->boundIndexBuffer.IsValid()) {
+    if (!info->boundIndexBuffer.isValid()) {
         Report(ValidationSeverity::_ERROR, ValidationCategory::STATE, "Draw indexed call without bound index buffer");
     }
 
@@ -819,7 +819,7 @@ void ValidationLayer::ValidateBeginRenderPass(CommandList* cmdList, RenderPassHa
         return;
     }
 
-    if (!pass.IsValid()) {
+    if (!pass.isValid()) {
         Report(
             ValidationSeverity::_ERROR, ValidationCategory::HANDLE, "BeginRenderPass with invalid render pass handle");
         return;
@@ -962,7 +962,7 @@ void ValidationLayer::ValidateSetVertexBuffer(CommandList* cmdList, BufferHandle
     // Check buffer usage
     auto bufIt = buffers_.find(buffer.id);
     if (bufIt != buffers_.end()) {
-        if (!Has(bufIt->second.desc.usage, BufferUsage::VERTEX)) {
+        if (!Has(bufIt->second.desc.usage, BufferFlags::VERTEX)) {
             Report(ValidationSeverity::_ERROR,
                    ValidationCategory::RESOURCE,
                    "Buffer used as vertex buffer without VERTEX usage flag");
@@ -994,7 +994,7 @@ void ValidationLayer::ValidateSetIndexBuffer(CommandList* cmdList, BufferHandle 
     // Check buffer usage
     auto bufIt = buffers_.find(buffer.id);
     if (bufIt != buffers_.end()) {
-        if (!Has(bufIt->second.desc.usage, BufferUsage::INDEX)) {
+        if (!Has(bufIt->second.desc.usage, BufferFlags::INDEX)) {
             Report(ValidationSeverity::_ERROR,
                    ValidationCategory::RESOURCE,
                    "Buffer used as index buffer without INDEX usage flag");
@@ -1005,7 +1005,7 @@ void ValidationLayer::ValidateSetIndexBuffer(CommandList* cmdList, BufferHandle 
 }
 
 // Buffer operation validation
-void ValidationLayer::ValidateBufferCopy(BufferHandle src, BufferHandle dst, const BufferCopyRegion& region) {
+void ValidationLayer::ValidateBufferCopy(BufferHandle src, BufferHandle dst, const BufferCopy& region) {
     if (!IsCategoryEnabled(ValidationCategory::RESOURCE))
         return;
 
@@ -1020,13 +1020,13 @@ void ValidationLayer::ValidateBufferCopy(BufferHandle src, BufferHandle dst, con
 
     if (srcIt != buffers_.end() && dstIt != buffers_.end()) {
         // Check usage flags
-        if (!Has(srcIt->second.desc.usage, BufferUsage::TRANSFER_SRC)) {
+        if (!Has(srcIt->second.desc.usage, BufferFlags::TRANSFER_SRC)) {
             Report(ValidationSeverity::_ERROR,
                    ValidationCategory::RESOURCE,
                    "Source buffer missing TRANSFER_SRC usage flag");
         }
 
-        if (!Has(dstIt->second.desc.usage, BufferUsage::TRANSFER_DST)) {
+        if (!Has(dstIt->second.desc.usage, BufferFlags::TRANSFER_DST)) {
             Report(ValidationSeverity::_ERROR,
                    ValidationCategory::RESOURCE,
                    "Destination buffer missing TRANSFER_DST usage flag");
@@ -1096,7 +1096,7 @@ void ValidationLayer::ValidateRenderPassDesc(const RenderPassDesc& desc) {
     for (size_t i = 0; i < desc.colorAttachments.size(); ++i) {
         const auto& attachment = desc.colorAttachments[i];
 
-        if (!attachment.handle.IsValid()) {
+        if (!attachment.handle.isValid()) {
             Report(ValidationSeverity::_ERROR,
                    ValidationCategory::RENDER_PASS,
                    fmt::format("Color attachment {} has invalid texture view", i));
@@ -1110,7 +1110,7 @@ void ValidationLayer::ValidateRenderPassDesc(const RenderPassDesc& desc) {
     }
 
     if (desc.hasDepthStencil) {
-        if (!desc.depthStencilAttachment.handle.IsValid()) {
+        if (!desc.depthStencilAttachment.handle.isValid()) {
             Report(ValidationSeverity::_ERROR,
                    ValidationCategory::RENDER_PASS,
                    "Depth/stencil attachment has invalid texture view");
@@ -1122,7 +1122,7 @@ void ValidationLayer::ValidateFramebufferDesc(const FramebufferDesc& desc) {
     if (!IsCategoryEnabled(ValidationCategory::RENDER_PASS))
         return;
 
-    if (desc.colorAttachments.empty() && !desc.depthStencilAttachment.IsValid()) {
+    if (desc.colorAttachments.empty() && !desc.depthStencilAttachment.isValid()) {
         Report(ValidationSeverity::WARNING, ValidationCategory::RENDER_PASS, "Framebuffer with no attachments");
     }
 
@@ -1131,7 +1131,7 @@ void ValidationLayer::ValidateFramebufferDesc(const FramebufferDesc& desc) {
     }
 
     for (size_t i = 0; i < desc.colorAttachments.size(); ++i) {
-        if (!desc.colorAttachments[i].IsValid()) {
+        if (!desc.colorAttachments[i].isValid()) {
             Report(ValidationSeverity::_ERROR,
                    ValidationCategory::RENDER_PASS,
                    fmt::format("Color attachment {} has invalid texture view", i));

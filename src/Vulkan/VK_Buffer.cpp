@@ -63,8 +63,7 @@ BufferHandle VKCreateBuffer(const BufferDesc& desc) {
             // TEMP
             // to future me : Try to use the deffered uploader after you figure out the how to sync that with the users
             // frame loop may i should keep the beginframe and endframe api for rendering usage
-            ctx.immediateUploader->uploadBuffer(
-                vulkanBuffer.buffer, desc.initialData, (uint32_t)desc.size, 0, GetMinVulkanAlignment(desc.usage));
+            ctx.loadTimeStagingUploader->uploadBuffer(vulkanBuffer.buffer, desc.initialData, (uint32_t)desc.size, 0);
         } else {
             // Direct upload for dynamic and stream buffers
             void* ptr = nullptr;
@@ -98,7 +97,7 @@ BufferHandle VKCreateBuffer(const BufferDesc& desc) {
 void VKDestroyBuffer(BufferHandle& handle) {
     PROFILE_FUNCTION();
 
-    if (!handle.IsValid()) {
+    if (!handle.isValid()) {
         RENDERX_WARN("VKDestroyBuffer: invalid buffer handle");
         return;
     }
@@ -124,7 +123,7 @@ void VKDestroyBuffer(BufferHandle& handle) {
 }
 
 BufferViewHandle VKCreateBufferView(const BufferViewDesc& desc) {
-    if (!desc.buffer.IsValid()) {
+    if (!desc.buffer.isValid()) {
         RENDERX_ERROR("VKCreateBufferView: invalid buffer handle");
         return BufferViewHandle{};
     }
@@ -171,16 +170,35 @@ void VKDestroyBufferView(BufferViewHandle& handle) {
 }
 
 void* VKMapBuffer(BufferHandle handle) {
+    if (!handle.isValid()) {
+        RENDERX_WARN("VKMapBuffer: invalid buffer handle");
+        return nullptr;
+    }
+
+    if (!g_BufferPool.IsAlive(handle)) {
+        RENDERX_WARN("VKMapBuffer: buffer handle is stale");
+        return nullptr;
+    }
+
     auto* buffer = g_BufferPool.get(handle);
-    RENDERX_ASSERT_MSG(buffer, "Invalid BufferHandle");
-    RENDERX_ASSERT_MSG(buffer->allocation != VK_NULL_HANDLE, "Buffer has no allocation");
+    if (!buffer) {
+        RENDERX_WARN("VKMapBuffer: failed to retrieve buffer from pool");
+        return nullptr;
+    }
+
+    if (buffer->allocation == VK_NULL_HANDLE) {
+        RENDERX_WARN("VKMapBuffer: buffer has no allocation");
+        return nullptr;
+    }
+
     if (buffer->allocInfo.pMappedData) {
         return buffer->allocInfo.pMappedData;
     }
+
+    // Consider: attempt ctx.allocator->map() here if mapping is needed
     RENDERX_WARN("Failed to map buffer: id: {}", handle.id);
     return nullptr;
 }
-
 } // namespace RxVK
 
 } // namespace Rx

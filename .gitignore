@@ -92,6 +92,8 @@ tmp/
 *.sublime-project
 *.sublime-workspace
 .DS_Store
+.json
+.js 
 Thumbs.db
 ehthumbs.db
 Desktop.ini

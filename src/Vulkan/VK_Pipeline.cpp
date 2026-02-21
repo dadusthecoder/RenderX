@@ -31,7 +31,7 @@ ShaderHandle VKCreateShader(const ShaderDesc& desc) {
     }
     RENDERX_ASSERT_MSG(shaderModule != VK_NULL_HANDLE, "VKCreateShader: created shader module is null");
 
-    VulkanShader shader{desc.entryPoint, desc.type, shaderModule};
+    VulkanShader shader{desc.entryPoint, desc.stage, shaderModule};
     ShaderHandle handle = g_ShaderPool.allocate(shader);
     return handle;
 }
@@ -43,38 +43,82 @@ void VKDestroyShader(ShaderHandle& handle) {
     g_ShaderPool.free(handle);
 }
 
-// Pipeline LAyout Creation
-PipelineLayoutHandle VKCreatePipelineLayout(const SetLayoutHandle* playouts, uint32_t LayoutCount) {
-    if (LayoutCount == 0)
-        RENDERX_WARN("setlayoutCount is zero");
-    if (playouts == nullptr)
-        RENDERX_WARN("playouts pointer is null");
-    auto&                              ctx = GetVulkanContext();
-    std::vector<VkDescriptorSetLayout> setLayouts;
-    for (uint32_t i = 0; i < LayoutCount; ++i) {
-        auto layout = g_SetLayoutPool.get(playouts[i]);
-        if (!layout)
-            continue;
-        setLayouts.push_back(layout->vkLayout);
-    }
-
-    //  Pipeline Layout
-    VkPipelineLayout           pipelinelayout;
-    VkPipelineLayoutCreateInfo lci{};
-    lci.sType          = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    lci.setLayoutCount = (uint32_t)setLayouts.size();
-    lci.pSetLayouts    = setLayouts.data();
-    VkResult lres      = vkCreatePipelineLayout(ctx.device->logical(), &lci, nullptr, &pipelinelayout);
-    VK_CHECK(lres);
-    RENDERX_ASSERT_MSG(pipelinelayout != VK_NULL_HANDLE, "Failed to create pipeline layout");
-
-    VulkanPipelineLayout rxPipelneLayout{};
-    rxPipelneLayout.layout     = pipelinelayout;
-    rxPipelneLayout.setlayouts = setLayouts;
-
-    return g_PipelineLayoutPool.allocate(std::move(rxPipelneLayout));
+VkPushConstantRange ToVkPushConstantRange(const PushConstantRange& r) {
+    VkPushConstantRange vkr = {};
+    vkr.stageFlags          = MapShaderStage(r.stages);
+    vkr.offset              = r.offset;
+    vkr.size                = r.size;
+    return vkr;
 }
 
+// Pipeline LAyout Creation
+PipelineLayoutHandle VKCreatePipelineLayout(const SetLayoutHandle*   pLayouts,
+                                            uint32_t                 LayoutCount,
+                                            const PushConstantRange* pushRanges,
+                                            uint32_t                 pushRangeCount) {
+    if (LayoutCount == 0)
+        RENDERX_WARN("setlayoutCount is zero");
+    if (pLayouts == nullptr)
+        RENDERX_WARN("playouts pointer is null");
+
+    auto& ctx = GetVulkanContext();
+
+    // Translate set layouts
+    VkDescriptorSetLayout vkSetLayouts[16] = {};
+    RENDERX_ASSERT_MSG(LayoutCount <= 16, "VK_CreatePipelineLayout: too many set layouts (max 16)");
+    for (uint32_t i = 0; i < LayoutCount; i++) {
+        auto* sl = g_SetLayoutPool.get(pLayouts[i]);
+        RENDERX_ASSERT_MSG(sl, "VK_CreatePipelineLayout: invalid SetLayoutHandle at index {}", i);
+        vkSetLayouts[i] = sl->vkLayout;
+    }
+
+    // Translate push constant ranges
+    VkPushConstantRange vkRanges[VulkanPipelineLayout::MAX_PUSH_RANGES] = {};
+    RENDERX_ASSERT_MSG(pushRangeCount <= VulkanPipelineLayout::MAX_PUSH_RANGES,
+                       "VKCreatePipelineLayout: too many push constant ranges (max {})",
+                       VulkanPipelineLayout::MAX_PUSH_RANGES);
+
+    // Validate total size against device limit (guaranteed minimum is 128 bytes)
+    uint32_t totalSize = 0;
+    for (uint32_t i = 0; i < pushRangeCount; i++) {
+        vkRanges[i] = ToVkPushConstantRange(pushRanges[i]);
+        totalSize   = std::max(totalSize, pushRanges[i].offset + pushRanges[i].size);
+    }
+    RENDERX_ASSERT_MSG(totalSize <= ctx.device->limits().maxPushConstantsSize,
+                       "VKCreatePipelineLayout: push constant total size {} exceeds device limit {}",
+                       totalSize,
+                       ctx.device->limits().maxPushConstantsSize);
+
+    VkPipelineLayoutCreateInfo info = {};
+    info.sType                      = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    info.setLayoutCount             = LayoutCount;
+    info.pSetLayouts                = LayoutCount > 0 ? vkSetLayouts : nullptr;
+    info.pushConstantRangeCount     = pushRangeCount;
+    info.pPushConstantRanges        = pushRangeCount > 0 ? vkRanges : nullptr;
+
+    VulkanPipelineLayout layout = {};
+
+    VkResult result = vkCreatePipelineLayout(ctx.device->logical(), &info, nullptr, &layout.vkLayout);
+
+    if (result != VK_SUCCESS) {
+        RENDERX_ERROR("VK_CreatePipelineLayout: vkCreatePipelineLayout failed: {}", VkResultToString(result));
+        return {};
+    }
+
+    // Store push range metadata for later retrieval by setPipeline / pushConstants
+    layout.pushRangeCount = pushRangeCount;
+    for (uint32_t i = 0; i < pushRangeCount; i++) {
+        layout.pushRanges[i].offset     = pushRanges[i].offset;
+        layout.pushRanges[i].size       = pushRanges[i].size;
+        layout.pushRanges[i].stageFlags = vkRanges[i].stageFlags;
+    }
+
+    return g_PipelineLayoutPool.allocate(layout);
+}
+
+void VKDestroyPipelineLayout(PipelineLayoutHandle& handle) {
+    RENDERX_WARN("Not Implemented");
+}
 // GRAPHICS PIPELINE
 PipelineHandle VKCreateGraphicsPipeline(PipelineDesc& desc) {
     auto& ctx = GetVulkanContext();
@@ -121,23 +165,22 @@ PipelineHandle VKCreateGraphicsPipeline(PipelineDesc& desc) {
     inputAsm.sType    = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
     inputAsm.topology = ToVulkanTopology(desc.primitiveType);
 
-    // temp
-    // Viewport
-    VkViewport viewport{};
-    viewport.width    = (float)ctx.swapchain->GetWidth();
-    viewport.height   = (float)ctx.swapchain->GetHeight();
-    viewport.maxDepth = 1.0f;
+    static constexpr VkDynamicState kDynamicStates[] = {
+        VK_DYNAMIC_STATE_VIEWPORT,
+        VK_DYNAMIC_STATE_SCISSOR,
+    };
 
-    VkRect2D scissor{};
-    scissor.offset = {0, 0};
-    scissor.extent = {ctx.swapchain->GetWidth(), ctx.swapchain->GetHeight()};
+    VkPipelineDynamicStateCreateInfo dynamicState{};
+    dynamicState.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+    dynamicState.dynamicStateCount = 2;
+    dynamicState.pDynamicStates    = kDynamicStates;
 
-    VkPipelineViewportStateCreateInfo vp{};
-    vp.sType         = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-    vp.viewportCount = 1;
-    vp.pViewports    = &viewport;
-    vp.scissorCount  = 1;
-    vp.pScissors     = &scissor;
+    VkPipelineViewportStateCreateInfo viewportState{};
+    viewportState.sType         = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+    viewportState.viewportCount = 1;
+    viewportState.scissorCount  = 1;
+    viewportState.pViewports    = nullptr; // nullptr = dynamic
+    viewportState.pScissors     = nullptr; // nullptr = dynamic
 
     //  Rasterizer
     VkPipelineRasterizationStateCreateInfo rast{};
@@ -204,35 +247,42 @@ PipelineHandle VKCreateGraphicsPipeline(PipelineDesc& desc) {
     pci.pStages             = stages.data();
     pci.pVertexInputState   = &vertexInput;
     pci.pInputAssemblyState = &inputAsm;
-    pci.pViewportState      = &vp;
+    pci.pDynamicState       = &dynamicState;
+    pci.pViewportState      = &viewportState;
     pci.pRasterizationState = &rast;
     pci.pMultisampleState   = &ms;
     pci.pDepthStencilState  = &depth;
     pci.pColorBlendState    = &cb;
     pci.pNext               = &rci;
+
     // pci.renderPass = g_RenderPassPool.get(desc.renderPass)->renderPass;
     auto* layout = g_PipelineLayoutPool.get(desc.layout);
-    pci.layout   = layout->layout;
+
+    RENDERX_ASSERT_MSG(layout, "Invlaid layout handle");
+    pci.layout = layout->vkLayout;
 
     VkPipeline pipeline;
     if (vkCreateGraphicsPipelines(ctx.device->logical(), VK_NULL_HANDLE, 1, &pci, nullptr, &pipeline) != VK_SUCCESS) {
         RENDERX_CRITICAL("Failed to create graphics pipeline");
         // destroy the pipeline layout to avoid leaking it
-        if (layout->layout != VK_NULL_HANDLE) {
-            vkDestroyPipelineLayout(ctx.device->logical(), layout->layout, nullptr);
-            layout->isBound = false;
+        if (layout->vkLayout != VK_NULL_HANDLE) {
+            vkDestroyPipelineLayout(ctx.device->logical(), layout->vkLayout, nullptr);
             g_PipelineLayoutPool.free(desc.layout);
         }
         return {};
     }
 
     VulkanPipeline vkpipe{};
-    vkpipe.pipeline = pipeline;
-    vkpipe.layout   = desc.layout;
+    vkpipe.vkPipeline = pipeline;
+    vkpipe.layout     = desc.layout;
 
     auto handle = g_PipelinePool.allocate(vkpipe);
     RENDERX_INFO("Created Vulkan Graphics Pipeline with ID {}", handle.id);
     return handle;
+}
+
+void VKDestroyPipeline(PipelineHandle& handle) {
+    RENDERX_WARN("Not implemented");
 }
 } // namespace RxVK
 } // namespace Rx

@@ -11,17 +11,18 @@ void VKBackendInit(const InitDesc& window) {
     RENDERX_ASSERT_MSG(window.nativeWindowHandle != nullptr, "VKInit: window.nativeHandle is null");
     RENDERX_ASSERT_MSG(window.extensionCount >= 0, "VKInit: extensionCount is negative");
     if (window.extensionCount > 0) {
-        RENDERX_ASSERT_MSG(window.instanceExtensions != nullptr, "VKInit: instanceExtensions is null but extensionCount > 0");
+        RENDERX_ASSERT_MSG(window.instanceExtensions != nullptr,
+                           "VKInit: instanceExtensions is null but extensionCount > 0");
     }
 
     VulkanContext& ctx = GetVulkanContext();
     ctx.window         = window.nativeWindowHandle;
     ctx.instance       = new VulkanInstance(window);
-    ctx.device =
-        new VulkanDevice(ctx.instance->getInstance(),
-                         ctx.instance->getSurface(),
-                         std::vector<const char*>(g_RequestedDeviceExtensions.begin(), g_RequestedDeviceExtensions.end()),
-                         std::vector<const char*>(g_RequestedValidationLayers.begin(), g_RequestedValidationLayers.end()));
+    ctx.device         = new VulkanDevice(
+        ctx.instance->getInstance(),
+        ctx.instance->getSurface(),
+        std::vector<const char*>(g_RequestedDeviceExtensions.begin(), g_RequestedDeviceExtensions.end()),
+        std::vector<const char*>(g_RequestedValidationLayers.begin(), g_RequestedValidationLayers.end()));
 
     ctx.swapchain     = new VulkanSwapchain();
     ctx.graphicsQueue = new VulkanCommandQueue(
@@ -30,10 +31,11 @@ void VKBackendInit(const InitDesc& window) {
         ctx.device->logical(), ctx.device->computeQueue(), ctx.device->computeFamily(), QueueType::COMPUTE);
     ctx.transferQueue = new VulkanCommandQueue(
         ctx.device->logical(), ctx.device->transferQueue(), ctx.device->transferFamily(), QueueType::TRANSFER);
-    ctx.allocator             = new VulkanAllocator(ctx.instance->getInstance(), ctx.device->physical(), ctx.device->logical());
-    ctx.stagingAllocator      = new VulkanStagingAllocator(ctx);
-    ctx.immediateUploader     = new VulkanImmediateUploader(ctx);
-    ctx.deferredUploader      = new VulkanDeferredUploader(ctx);
+    ctx.allocator = new VulkanAllocator(ctx.instance->getInstance(), ctx.device->physical(), ctx.device->logical());
+    ctx.stagingAllocator        = new VulkanStagingAllocator(ctx);
+    ctx.immediateUploader       = new VulkanImmediateUploader(ctx);
+    ctx.deferredUploader        = new VulkanDeferredUploader(ctx);
+    ctx.loadTimeStagingUploader = new VulkanLoadTimeStagingUploader(ctx);
 }
 
 void VKBackendShutdown() {

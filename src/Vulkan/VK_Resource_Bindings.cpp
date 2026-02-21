@@ -84,8 +84,8 @@ SetLayoutHandle VKCreateSetLayout(const SetLayoutDesc& desc) {
     VK_CHECK(vkCreateDescriptorSetLayout(ctx.device->logical(), &layoutCI, nullptr, &internal.vkLayout));
 
     if (desc.debugName) {
-        //TODO---------------------------------------------------------------------
-        // set debug name via vkSetDebugUtilsObjectNameEXT if available
+        // TODO---------------------------------------------------------------------
+        //  set debug name via vkSetDebugUtilsObjectNameEXT if available
         //-------------------------------------------------------------------------
     }
 
@@ -126,28 +126,30 @@ DescriptorPoolHandle VKCreateDescriptorPool(const DescriptorPoolDesc& desc) {
     if (isDescriptorSets) {
         // ── Classic Vulkan pool path ─────────────────────────────────────
         // Get the layout to compute pool sizes
-        auto* layout = g_SetLayoutPool.get(desc.layout);
-        RENDERX_ASSERT_MSG(layout, "DescriptorPool: invalid SetLayoutHandle");
+        // auto* layout = g_SetLayoutPool.get(desc.layout);
+        // RENDERX_ASSERT_MSG(layout, "DescriptorPool: invalid SetLayoutHandle");
 
-        auto poolSizes = ComputePoolSizes(*layout, desc.capacity);
+        // VkDescriptorPoolSize poolSizes[7]
 
-        VkDescriptorPoolCreateInfo poolCI = {};
-        poolCI.sType                      = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-        poolCI.maxSets                    = desc.capacity;
-        poolCI.poolSizeCount              = poolSizes.count;
-        poolCI.pPoolSizes                 = poolSizes.sizes;
-        poolCI.flags                      = 0;
+        // VkDescriptorPoolCreateInfo poolCI = {};
+        // poolCI.sType                      = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        // poolCI.maxSets                    = desc.capacity;
+        // poolCI.poolSizeCount              = 16;
+        // poolCI.pPoolSizes                 = poolSizes;
+        // poolCI.flags                      = 0;
 
-        // POOL policy: individual sets can be freed
-        if (isPool) {
-            poolCI.flags |= VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
-        }
-        // UPDATE_AFTER_BIND: GPU can read while CPU writes
-        if (desc.updateAfterBind || layout->hasUpdateAfterBind) {
-            poolCI.flags |= VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
-        }
+        // // POOL policy: individual sets can be freed
+        // if (isPool) {
+        //     poolCI.flags |= VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+        // }
+        // // UPDATE_AFTER_BIND: GPU can read while CPU writes
+        // if (desc.updateAfterBind) {
+        //     poolCI.flags |= VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
+        // }
 
-        VK_CHECK(vkCreateDescriptorPool(ctx.device->logical(), &poolCI, nullptr, &internal.vkPool));
+        // VK_CHECK(vkCreateDescriptorPool(ctx.device->logical(), &poolCI, nullptr, &internal.vkPool));
+
+        internal.vkPool = CreateDescriptorPool(DescriptorPoolSizes(desc.capacity), isPool, desc.updateAfterBind);
 
     } else {
         // ---- Descriptor buffer path ----------------------------------------------
@@ -288,10 +290,7 @@ SetHandle VKAllocateSet(DescriptorPoolHandle poolHandle, SetLayoutHandle layoutH
 }
 
 // Batch allocation — one vkAllocateDescriptorSets call for DESCRIPTOR_SETS path
-void VKAllocateSets(DescriptorPoolHandle poolHandle,
-                     SetLayoutHandle      layoutHandle,
-                     SetHandle*           outSets,
-                     uint32_t             count) {
+void VKAllocateSets(DescriptorPoolHandle poolHandle, SetLayoutHandle layoutHandle, SetHandle* outSets, uint32_t count) {
     auto* pool   = g_DescriptorPoolPool.get(poolHandle);
     auto* layout = g_SetLayoutPool.get(layoutHandle);
     RENDERX_ASSERT_MSG(pool, "AllocateSets: invalid pool handle");
@@ -429,11 +428,12 @@ static void WriteVkDescriptorSingle(
     }
 
     case ResourceType::SAMPLER: {
-        // resourceHandle is a SamplerHandle id
-        // Samplers are stored separately — add a sampler pool lookup here
-        // For now store sampler VkSampler in a separate pool (to be wired up)
-        // placeholder:
-        RENDERX_ASSERT_MSG(false, "WriteSet: SAMPLER write not yet wired to sampler pool");
+        SamplerHandle spHandle;
+        spHandle.id   = resourceHandle;
+        auto* smapler = g_SamplerPool.get(spHandle);
+        RENDERX_ASSERT_MSG(smapler, "invalid sampler handle at slot");
+        imgInfo.sampler  = smapler->vkSampler;
+        write.pImageInfo = &imgInfo;
         break;
     }
 
@@ -469,9 +469,9 @@ void VKWriteSet(SetHandle setHandle, const DescriptorWrite* writes, uint32_t wri
     auto& ctx = GetVulkanContext();
 
     if (Has(set->poolFlags, DescriptorPoolFlags::DESCRIPTOR_SETS)) {
-    
-        // Stack-allocat for buffer/image infos
-        // 32 writes max 
+
+        // 32 writes max / for the sake os stack allocations 
+        // may be i will cange it to the vector in future 
         VkDescriptorBufferInfo bufInfos[32];
         VkDescriptorImageInfo  imgInfos[32];
         VkWriteDescriptorSet   vkWrites[32];
@@ -523,19 +523,30 @@ void VKWriteSet(SetHandle setHandle, const DescriptorWrite* writes, uint32_t wri
                 TextureViewHandle tvHandle;
                 tvHandle.id   = w.handle;
                 auto* texView = g_TextureViewPool.get(tvHandle);
-                RENDERX_ASSERT_MSG(texView, "WriteSet: invalid texture view handle at slot {}", w.slot);
-
+                RENDERX_ASSERT_MSG(texView, "invalid texture view handle at slot {}", w.slot);
                 imgInfos[imgIdx].imageView   = texView->view;
                 imgInfos[imgIdx].imageLayout = VK_IMAGE_LAYOUT_GENERAL;
                 imgInfos[imgIdx].sampler     = VK_NULL_HANDLE;
                 vkw.pImageInfo               = &imgInfos[imgIdx++];
                 break;
             }
-            default:
-                //TODO-------------------------------
-                // Skip unsupported types for now
+            case ResourceType::SAMPLER: {
+                SamplerHandle spHandle;
+                spHandle.id   = w.handle;
+                auto* smapler = g_SamplerPool.get(spHandle);
+                RENDERX_ASSERT_MSG(smapler, "invalid sampler handle at slot {}", w.slot);
+                imgInfos[imgIdx].sampler = smapler->vkSampler;
+                vkw.pImageInfo           = &imgInfos[imgIdx++];
+                break;
+            }
+
+            default: {
+                // TODO-------------------------------
+                //  Skip unsupported types for now
+                RENDERX_WARN("unsupported ResourceType {}", (uint32_t)w.type);
                 continue;
                 //-----------------------------------
+            }
             }
 
             writeIdx++;
@@ -667,7 +678,7 @@ void VKWriteSets(SetHandle** sets, const DescriptorWrite** writes, uint32_t setC
 
     if (writeIdx > 0) {
         // this is The whole point of WriteSets  one Vulkan call for all sets
-        // but i think this can aslo cause a lil bit of cpu overhead 
+        // but i think this can aslo cause a lil bit of cpu overhead
         vkUpdateDescriptorSets(ctx.device->logical(), writeIdx, vkWrites.data(), 0, nullptr);
     }
 }
@@ -778,14 +789,14 @@ void VulkanCommandList::setDescriptorSet(uint32_t slot, SetHandle setHandle) {
     RENDERX_ASSERT_MSG(set, "setDescriptorSet: invalid SetHandle");
 
     // We need the pipeline layout to bind against
-    auto* pipelineLayout = g_PipelineLayoutPool.get(m_CurrentPipelineLayout);
+    auto* pipelineLayout = g_PipelineLayoutPool.get(m_CurrentPipelineLayoutHandle);
     RENDERX_ASSERT_MSG(pipelineLayout, "setDescriptorSet: no pipeline bound — call setPipeline first");
 
     if (Has(set->poolFlags, DescriptorPoolFlags::DESCRIPTOR_SETS)) {
         // ── Classic VK path ──────────────────────────────────────────────
         vkCmdBindDescriptorSets(m_CommandBuffer,
                                 VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                pipelineLayout->layout,
+                                pipelineLayout->vkLayout,
                                 slot, // firstSet
                                 1,    // descriptorSetCount
                                 &set->vkSet,
@@ -829,7 +840,7 @@ void VulkanCommandList::setDescriptorSets(uint32_t firstSlot, const SetHandle* s
     auto* firstSet = g_SetPool.get(sets[0]);
     RENDERX_ASSERT_MSG(firstSet, "setDescriptorSets: invalid first SetHandle");
 
-    auto* pipelineLayout = g_PipelineLayoutPool.get(m_CurrentPipelineLayout);
+    auto* pipelineLayout = g_PipelineLayoutPool.get(m_CurrentPipelineLayoutHandle);
     RENDERX_ASSERT_MSG(pipelineLayout, "setDescriptorSets: no pipeline bound");
 
     if (Has(firstSet->poolFlags, DescriptorPoolFlags::DESCRIPTOR_SETS)) {
@@ -846,7 +857,7 @@ void VulkanCommandList::setDescriptorSets(uint32_t firstSlot, const SetHandle* s
         // One vkCmdBindDescriptorSets for all sets
         vkCmdBindDescriptorSets(m_CommandBuffer,
                                 VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                pipelineLayout->layout,
+                                pipelineLayout->vkLayout,
                                 firstSlot,
                                 count,
                                 vkSets,
@@ -888,19 +899,41 @@ void VulkanCommandList::pushConstants(uint32_t    slot,
                                       const void* data,
                                       uint32_t    sizeIn32BitWords,
                                       uint32_t    offsetIn32BitWords) {
-    auto* pipelineLayout = g_PipelineLayoutPool.get(m_CurrentPipelineLayout);
-    RENDERX_ASSERT_MSG(pipelineLayout, "pushConstants: no pipeline bound");
+    RENDERX_ASSERT_MSG(m_BoundPipelineLayout != VK_NULL_HANDLE,
+                       "pushConstants: no pipeline bound — call setPipeline before pushConstants");
+    RENDERX_ASSERT_MSG(data != nullptr, "pushConstants: data pointer is null");
+    RENDERX_ASSERT_MSG(sizeIn32BitWords > 0 && (sizeIn32BitWords % 4) == 0,
+                       "pushConstants: size must be > 0 and a multiple of 4 (got {})",
+                       sizeIn32BitWords);
+    RENDERX_ASSERT_MSG(
+        (offsetIn32BitWords % 4) == 0, "pushConstants: offset must be a multiple of 4 (got {})", offsetIn32BitWords);
 
-    vkCmdPushConstants(m_CommandBuffer,
-                       pipelineLayout->layout,
-                       VK_SHADER_STAGE_ALL, // or restrict to relevant stages
-                       offsetIn32BitWords * sizeof(uint32_t),
-                       sizeIn32BitWords * sizeof(uint32_t),
-                       data);
+    // We cache the stage flags that cover this offset+size range from
+    // the pipeline layout so we don't pass ALL_STAGES every time.
+    // For the common case (one push constant range covering all stages)
+    // this is just a single cached value.
+    VkShaderStageFlags stages = m_PushConstantStages;
+
+    // If the layout has multiple ranges, find the stages that cover [offset, offset+size)
+    if (m_HasMultiplePushRanges) {
+        stages = 0;
+        for (uint32_t i = 0; i < m_PushRangeCount; i++) {
+            const auto& r = m_PushRanges[i];
+            // Include this range if it overlaps [offset, offset+size)
+            if (r.offset < offsetIn32BitWords + sizeIn32BitWords && r.offset + r.size > offsetIn32BitWords)
+                stages |= r.stageFlags;
+        }
+        RENDERX_ASSERT_MSG(stages != 0,
+                           "pushConstants: no push constant range covers offset={} size={}",
+                           offsetIn32BitWords,
+                           sizeIn32BitWords);
+    }
+
+    vkCmdPushConstants(m_CommandBuffer, m_BoundPipelineLayout, stages, offsetIn32BitWords, sizeIn32BitWords, data);
 }
 
 void VulkanCommandList::setDescriptorBufferOffset(uint32_t slot, uint32_t bufferIndex, uint64_t byteOffset) {
-    auto* pipelineLayout = g_PipelineLayoutPool.get(m_CurrentPipelineLayout);
+    auto* pipelineLayout = g_PipelineLayoutPool.get(m_CurrentPipelineLayoutHandle);
     RENDERX_ASSERT_MSG(pipelineLayout, "setDescriptorBufferOffset: no pipeline bound");
 
     // vkCmdSetDescriptorBufferOffsetsEXT(
@@ -918,7 +951,7 @@ void VulkanCommandList::setDescriptorBufferOffset(uint32_t slot, uint32_t buffer
 }
 
 void VulkanCommandList::setDynamicOffset(uint32_t slot, uint32_t byteOffset) {
-    auto* pipelineLayout = g_PipelineLayoutPool.get(m_CurrentPipelineLayout);
+    auto* pipelineLayout = g_PipelineLayoutPool.get(m_CurrentPipelineLayoutHandle);
     RENDERX_ASSERT_MSG(pipelineLayout, "setDynamicOffset: no pipeline bound");
 
     // Re-bind the set that is currently bound at this slot with the new dynamic offset.
@@ -942,7 +975,7 @@ void VulkanCommandList::pushDescriptor(uint32_t slot, const DescriptorWrite* wri
     // Requires VK_KHR_push_descriptor
     // vkCmdPushDescriptorSetKHR — function pointer loaded at device init
 
-    auto* pipelineLayout = g_PipelineLayoutPool.get(m_CurrentPipelineLayout);
+    auto* pipelineLayout = g_PipelineLayoutPool.get(m_CurrentPipelineLayoutHandle);
     RENDERX_ASSERT_MSG(pipelineLayout, "pushDescriptor: no pipeline bound");
 
     // Build VkWriteDescriptorSet array then call vkCmdPushDescriptorSetKHR
@@ -965,7 +998,7 @@ void VulkanCommandList::setInlineCBV(uint32_t slot, BufferHandle bufHandle, uint
     auto* buf = g_BufferPool.get(bufHandle);
     RENDERX_ASSERT_MSG(buf, "setInlineCBV: invalid BufferHandle");
 
-    auto* pipelineLayout = g_PipelineLayoutPool.get(m_CurrentPipelineLayout);
+    auto* pipelineLayout = g_PipelineLayoutPool.get(m_CurrentPipelineLayoutHandle);
     RENDERX_ASSERT_MSG(pipelineLayout, "setInlineCBV: no pipeline bound");
 
     VkBufferDeviceAddressInfo addrInfo = {};
@@ -1016,15 +1049,15 @@ void VulkanCommandList::setInlineUAV(uint32_t slot, BufferHandle buf, uint64_t o
 //     setDescriptorSets         :   one vkCmdBindDescriptorSets for N sets
 //     pushConstants             :   vkCmdPushConstants
 
-//TODO-------------------------------------------------------------------------------
-// palceholdes (needs extension function pointers wired at device init):
-//     DESCRIPTOR_BUFFER write    : needs vkGetDescriptorEXT
-//     setDescriptorHeaps         : needs vkCmdBindDescriptorBuffersEXT
-//     setDescriptorBufferOffset  : needs vkCmdSetDescriptorBufferOffsetsEXT
-//     pushDescriptor             : needs vkCmdPushDescriptorSetKHR
-//     setInlineCBV/SRV/UAV       : needs push descriptor or device address path
-//     setDynamicOffset           : needs bound set tracking per slot
-//     setBindlessTable           : needs bindless backend
+// TODO-------------------------------------------------------------------------------
+//  palceholdes needs extension function pointers wired at device init:
+//      DESCRIPTOR_BUFFER write    : needs vkGetDescriptorEXT
+//      setDescriptorHeaps         : needs vkCmdBindDescriptorBuffersEXT
+//      setDescriptorBufferOffset  : needs vkCmdSetDescriptorBufferOffsetsEXT
+//      pushDescriptor             : needs vkCmdPushDescriptorSetKHR
+//      setInlineCBV/SRV/UAV       : needs push descriptor or device address path
+//      setDynamicOffset           : needs bound set tracking per slot
+//      setBindlessTable           : needs bindless backend
 //-----------------------------------------------------------------------------------
 
 } // namespace RxVK
