@@ -267,20 +267,19 @@ DefaultValidationConfig {
 #define RX_VALIDATE_BEGIN_FRAME() ::Rx::Validation::ValidationLayer::Get().BeginFrame()
 #define RX_VALIDATE_END_FRAME()   ::Rx::Validation::ValidationLayer::Get().EndFrame()
 
-#define RX_VALIDATE_ERROR(category, msg)                                                                               \
-    ::Rx::Validation::ValidationLayer::Get().Report(                                                                   \
+#define RX_VALIDATE_ERROR(category, msg)                                                                                         \
+    ::Rx::Validation::ValidationLayer::Get().Report(                                                                             \
         ::Rx::Validation::ValidationSeverity::ERROR, category, msg, __FILE__, __LINE__)
 
-#define RX_VALIDATE_WARNING(category, msg)                                                                             \
-    ::Rx::Validation::ValidationLayer::Get().Report(                                                                   \
+#define RX_VALIDATE_WARNING(category, msg)                                                                                       \
+    ::Rx::Validation::ValidationLayer::Get().Report(                                                                             \
         ::Rx::Validation::ValidationSeverity::WARNING, category, msg, __FILE__, __LINE__)
 
-#define RX_VALIDATE_INFO(category, msg)                                                                                \
-    ::Rx::Validation::ValidationLayer::Get().Report(                                                                   \
-        ::Rx::Validation::ValidationSeverity::INFO, category, msg, __FILE__, __LINE__)
+#define RX_VALIDATE_INFO(category, msg)                                                                                          \
+    ::Rx::Validation::ValidationLayer::Get().Report(::Rx::Validation::ValidationSeverity::INFO, category, msg, __FILE__, __LINE__)
 
 // Buffer validation macros
-#define RX_VALIDATE_BUFFER_REGISTER(handle, desc, name)                                                                \
+#define RX_VALIDATE_BUFFER_REGISTER(handle, desc, name)                                                                          \
     ::Rx::Validation::ValidationLayer::Get().RegisterBuffer(handle, desc, name)
 
 #define RX_VALIDATE_BUFFER_UNREGISTER(handle) ::Rx::Validation::ValidationLayer::Get().UnregisterBuffer(handle)
@@ -293,14 +292,13 @@ DefaultValidationConfig {
 
 #define RX_VALIDATE_BUFFER_UNMAP(handle) ::Rx::Validation::ValidationLayer::Get().OnBufferUnmap(handle)
 
-#define RX_VALIDATE_BUFFER_COPY(src, dst, region)                                                                      \
-    ::Rx::Validation::ValidationLayer::Get().ValidateBufferCopy(src, dst, region)
+#define RX_VALIDATE_BUFFER_COPY(src, dst, region) ::Rx::Validation::ValidationLayer::Get().ValidateBufferCopy(src, dst, region)
 
-#define RX_VALIDATE_BUFFER_WRITE(handle, offset, size)                                                                 \
+#define RX_VALIDATE_BUFFER_WRITE(handle, offset, size)                                                                           \
     ::Rx::Validation::ValidationLayer::Get().ValidateBufferWrite(handle, offset, size)
 
 // Texture validation macros
-#define RX_VALIDATE_TEXTURE_REGISTER(handle, desc, name)                                                               \
+#define RX_VALIDATE_TEXTURE_REGISTER(handle, desc, name)                                                                         \
     ::Rx::Validation::ValidationLayer::Get().RegisterTexture(handle, desc, name)
 
 #define RX_VALIDATE_TEXTURE_UNREGISTER(handle) ::Rx::Validation::ValidationLayer::Get().UnregisterTexture(handle)
@@ -309,20 +307,17 @@ DefaultValidationConfig {
 
 #define RX_VALIDATE_TEXTURE_DESC(desc) ::Rx::Validation::ValidationLayer::Get().ValidateTextureDesc(desc)
 
-#define RX_VALIDATE_TEXTURE_VIEW_REGISTER(handle, parent)                                                              \
+#define RX_VALIDATE_TEXTURE_VIEW_REGISTER(handle, parent)                                                                        \
     ::Rx::Validation::ValidationLayer::Get().RegisterTextureView(handle, parent)
 
-#define RX_VALIDATE_TEXTURE_VIEW_UNREGISTER(handle)                                                                    \
-    ::Rx::Validation::ValidationLayer::Get().UnregisterTextureView(handle)
+#define RX_VALIDATE_TEXTURE_VIEW_UNREGISTER(handle) ::Rx::Validation::ValidationLayer::Get().UnregisterTextureView(handle)
 
-#define RX_VALIDATE_TEXTURE_VIEW(handle, context)                                                                      \
-    ::Rx::Validation::ValidationLayer::Get().ValidateTextureView(handle, context)
+#define RX_VALIDATE_TEXTURE_VIEW(handle, context) ::Rx::Validation::ValidationLayer::Get().ValidateTextureView(handle, context)
 
-#define RX_VALIDATE_TEXTURE_COPY(src, dst, region)                                                                     \
-    ::Rx::Validation::ValidationLayer::Get().ValidateTextureCopy(src, dst, region)
+#define RX_VALIDATE_TEXTURE_COPY(src, dst, region) ::Rx::Validation::ValidationLayer::Get().ValidateTextureCopy(src, dst, region)
 
 // Pipeline validation macros
-#define RX_VALIDATE_PIPELINE_REGISTER(handle, desc, name)                                                              \
+#define RX_VALIDATE_PIPELINE_REGISTER(handle, desc, name)                                                                        \
     ::Rx::Validation::ValidationLayer::Get().RegisterPipeline(handle, desc, name)
 
 #define RX_VALIDATE_PIPELINE_UNREGISTER(handle) ::Rx::Validation::ValidationLayer::Get().UnregisterPipeline(handle)
@@ -332,13 +327,12 @@ DefaultValidationConfig {
 #define RX_VALIDATE_PIPELINE_DESC(desc) ::Rx::Validation::ValidationLayer::Get().ValidatePipelineDesc(desc)
 
 // Resource group validation macros
-#define RX_VALIDATE_RESOURCE_GROUP_REGISTER(handle, desc)                                                              \
+#define RX_VALIDATE_RESOURCE_GROUP_REGISTER(handle, desc)                                                                        \
     ::Rx::Validation::ValidationLayer::Get().RegisterResourceGroup(handle, desc)
 
-#define RX_VALIDATE_RESOURCE_GROUP_UNREGISTER(handle)                                                                  \
-    ::Rx::Validation::ValidationLayer::Get().UnregisterResourceGroup(handle)
+#define RX_VALIDATE_RESOURCE_GROUP_UNREGISTER(handle) ::Rx::Validation::ValidationLayer::Get().UnregisterResourceGroup(handle)
 
-#define RX_VALIDATE_RESOURCE_GROUP(handle, context)                                                                    \
+#define RX_VALIDATE_RESOURCE_GROUP(handle, context)                                                                              \
     ::Rx::Validation::ValidationLayer::Get().ValidateResourceGroup(handle, context)
 
 #define RX_VALIDATE_RESOURCE_GROUP_DESC(desc) ::Rx::Validation::ValidationLayer::Get().ValidateResourceGroupDesc(desc)
@@ -356,32 +350,31 @@ DefaultValidationConfig {
 
 #define RX_VALIDATE_CMD_RESET(cmdList) ::Rx::Validation::ValidationLayer::Get().OnCommandListReset(cmdList)
 
-#define RX_VALIDATE_DRAW(cmdList, vertexCount, instanceCount)                                                          \
+#define RX_VALIDATE_DRAW(cmdList, vertexCount, instanceCount)                                                                    \
     ::Rx::Validation::ValidationLayer::Get().ValidateDrawCall(cmdList, vertexCount, instanceCount)
 
-#define RX_VALIDATE_DRAW_INDEXED(cmdList, indexCount, instanceCount)                                                   \
+#define RX_VALIDATE_DRAW_INDEXED(cmdList, indexCount, instanceCount)                                                             \
     ::Rx::Validation::ValidationLayer::Get().ValidateDrawIndexed(cmdList, indexCount, instanceCount)
 
-#define RX_VALIDATE_SET_PIPELINE(cmdList, pipeline)                                                                    \
+#define RX_VALIDATE_SET_PIPELINE(cmdList, pipeline)                                                                              \
     ::Rx::Validation::ValidationLayer::Get().ValidateSetPipeline(cmdList, pipeline)
 
-#define RX_VALIDATE_SET_VERTEX_BUFFER(cmdList, buffer)                                                                 \
+#define RX_VALIDATE_SET_VERTEX_BUFFER(cmdList, buffer)                                                                           \
     ::Rx::Validation::ValidationLayer::Get().ValidateSetVertexBuffer(cmdList, buffer)
 
-#define RX_VALIDATE_SET_INDEX_BUFFER(cmdList, buffer)                                                                  \
+#define RX_VALIDATE_SET_INDEX_BUFFER(cmdList, buffer)                                                                            \
     ::Rx::Validation::ValidationLayer::Get().ValidateSetIndexBuffer(cmdList, buffer)
 
-#define RX_VALIDATE_SET_RESOURCE_GROUP(cmdList, group)                                                                 \
+#define RX_VALIDATE_SET_RESOURCE_GROUP(cmdList, group)                                                                           \
     ::Rx::Validation::ValidationLayer::Get().ValidateSetResourceGroup(cmdList, group)
 
 // Render pass validation macros
-#define RX_VALIDATE_BEGIN_RENDER_PASS(cmdList, pass)                                                                   \
+#define RX_VALIDATE_BEGIN_RENDER_PASS(cmdList, pass)                                                                             \
     ::Rx::Validation::ValidationLayer::Get().ValidateBeginRenderPass(cmdList, pass)
 
 #define RX_VALIDATE_END_RENDER_PASS(cmdList) ::Rx::Validation::ValidationLayer::Get().ValidateEndRenderPass(cmdList)
 
-#define RX_VALIDATE_BEGIN_RENDERING(cmdList, desc)                                                                     \
-    ::Rx::Validation::ValidationLayer::Get().ValidateBeginRendering(cmdList, desc)
+#define RX_VALIDATE_BEGIN_RENDERING(cmdList, desc) ::Rx::Validation::ValidationLayer::Get().ValidateBeginRendering(cmdList, desc)
 
 #define RX_VALIDATE_END_RENDERING(cmdList) ::Rx::Validation::ValidationLayer::Get().ValidateEndRendering(cmdList)
 

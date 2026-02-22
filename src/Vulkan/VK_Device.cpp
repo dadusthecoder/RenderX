@@ -71,7 +71,7 @@ void VulkanDevice::logDeviceInfo(uint32_t index, const DeviceInfo& info) const {
         vendor = "ARM";
         break;
     default:
-        vendor = fmt::format("0x{:04X}", props.vendorID).c_str();
+        vendor = (char*)fmt::format("0x{:04X}", props.vendorID).c_str();
         break;
     }
     RENDERX_INFO("  Vendor: {}", vendor);
@@ -130,9 +130,8 @@ void VulkanDevice::logDeviceInfo(uint32_t index, const DeviceInfo& info) const {
     RENDERX_INFO("    Max Image Dimension 2D: {}", props.limits.maxImageDimension2D);
     RENDERX_INFO("    Max Framebuffer Width: {}", props.limits.maxFramebufferWidth);
     RENDERX_INFO("    Max Framebuffer Height: {}", props.limits.maxFramebufferHeight);
-    RENDERX_INFO("    Max Viewport Dimensions: {}x{}",
-                 props.limits.maxViewportDimensions[0],
-                 props.limits.maxViewportDimensions[1]);
+    RENDERX_INFO(
+        "    Max Viewport Dimensions: {}x{}", props.limits.maxViewportDimensions[0], props.limits.maxViewportDimensions[1]);
     RENDERX_INFO("    Max Bound Descriptor Sets: {}", props.limits.maxBoundDescriptorSets);
     RENDERX_INFO("    Max Per-Stage Descriptor Samplers: {}", props.limits.maxPerStageDescriptorSamplers);
     RENDERX_INFO("    Max Per-Stage Descriptor Uniform Buffers: {}", props.limits.maxPerStageDescriptorUniformBuffers);
@@ -425,7 +424,7 @@ VulkanDevice::VulkanDevice(VkInstance                      instance,
     for (uint32_t i = 0; i < count; i++) {
         auto info  = gatherDeviceInfo(devices[i]);
         info.score = scoreDevice(info);
-        // logDeviceInfo(i, info);
+        logDeviceInfo(i, info);
         info.index = i;
         infos.push_back(info);
     }

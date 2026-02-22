@@ -282,10 +282,7 @@ bool VulkanImmediateUploader::uploadBuffer(
     return true;
 }
 
-bool VulkanImmediateUploader::uploadTexture(VkImage            dstTexture,
-                                            const void*        data,
-                                            uint32_t           size,
-                                            const TextureCopy& region) {
+bool VulkanImmediateUploader::uploadTexture(VkImage dstTexture, const void* data, uint32_t size, const TextureCopy& region) {
     // Allocate staging memory
     StagingAllocation staging = m_Ctx.stagingAllocator->allocate(size);
     if (!staging.mappedPtr) {
@@ -341,16 +338,8 @@ bool VulkanImmediateUploader::uploadTexture(VkImage            dstTexture,
     // here the when uloading data to the texture form backend
     // the backends lazily halts all the gpu stages
     //
-    vkCmdPipelineBarrier(cmd,
-                         VK_PIPELINE_STAGE_TRANSFER_BIT,
-                         VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-                         0,
-                         0,
-                         nullptr,
-                         0,
-                         nullptr,
-                         1,
-                         &barrier);
+    vkCmdPipelineBarrier(
+        cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
 
     // Submit and wait
     endSingleTimeCommands(cmd);
@@ -373,10 +362,7 @@ void VulkanImmediateUploader::beginBatch() {
     m_ImmediateCtx.isRecording = true;
 }
 
-void VulkanImmediateUploader::uploadBufferBatched(VkBuffer    dstBuffer,
-                                                  const void* data,
-                                                  uint32_t    size,
-                                                  uint32_t    dstOffset) {
+void VulkanImmediateUploader::uploadBufferBatched(VkBuffer dstBuffer, const void* data, uint32_t size, uint32_t dstOffset) {
     if (!m_ImmediateCtx.isRecording) {
         RENDERX_ERROR("[ImmediateUploader] Must call beginBatch() first");
         return;
@@ -485,10 +471,7 @@ void VulkanDeferredUploader::uploadBuffer(BufferHandle dstBuffer, const void* da
     m_PendingBufferUploads.push_back(upload);
 }
 
-void VulkanDeferredUploader::uploadTexture(TextureHandle      dstTexture,
-                                           const void*        data,
-                                           uint32_t           size,
-                                           const TextureCopy& region) {
+void VulkanDeferredUploader::uploadTexture(TextureHandle dstTexture, const void* data, uint32_t size, const TextureCopy& region) {
     std::lock_guard<std::mutex> lock(m_Mutex);
 
     VulkanTexture* texture = g_TexturePool.get(dstTexture);
@@ -552,7 +535,7 @@ Timeline VulkanDeferredUploader::flush() {
         if (!texture)
             continue;
 
-        // Barrier + copy logic here (similar to immediate uploader)
+        // Memory_Barrier + copy logic here (similar to immediate uploader)
         // ...
     }
 
@@ -617,40 +600,36 @@ VulkanLoadTimeStagingUploader::~VulkanLoadTimeStagingUploader() {
     // m_Cmd is owned by m_Pool, destroyed implicitly
 }
 
-
-void VulkanLoadTimeStagingUploader::uploadBuffer(
-    VkBuffer dst, const void* data, uint32_t size, uint32_t dstOffset) {
+void VulkanLoadTimeStagingUploader::uploadBuffer(VkBuffer dst, const void* data, uint32_t size, uint32_t dstOffset) {
 
     RENDERX_ASSERT_MSG(dst != VK_NULL_HANDLE, "[LoadUploader] dst buffer is null");
-    RENDERX_ASSERT_MSG(data,                  "[LoadUploader] data pointer is null");
-    RENDERX_ASSERT_MSG(size > 0,              "[LoadUploader] upload size is 0");
+    RENDERX_ASSERT_MSG(data, "[LoadUploader] data pointer is null");
+    RENDERX_ASSERT_MSG(size > 0, "[LoadUploader] upload size is 0");
 
     uint32_t offset = pushData(data, size);
     m_BufferUploads.push_back({dst, offset, dstOffset, size});
     m_TotalSize += size;
 }
 
-void VulkanLoadTimeStagingUploader::uploadTexture(
-    VkImage dst, const void* data, uint32_t size, const TextureCopy& region) {
+void VulkanLoadTimeStagingUploader::uploadTexture(VkImage dst, const void* data, uint32_t size, const TextureCopy& region) {
 
     RENDERX_ASSERT_MSG(dst != VK_NULL_HANDLE, "[LoadUploader] dst image is null");
-    RENDERX_ASSERT_MSG(data,                  "[LoadUploader] data pointer is null");
-    RENDERX_ASSERT_MSG(size > 0,              "[LoadUploader] upload size is 0");
+    RENDERX_ASSERT_MSG(data, "[LoadUploader] data pointer is null");
+    RENDERX_ASSERT_MSG(size > 0, "[LoadUploader] upload size is 0");
 
     uint32_t offset = pushData(data, size);
     m_TextureUploads.push_back({dst, offset, size, region});
     m_TotalSize += size;
 }
 
-
 void VulkanLoadTimeStagingUploader::flush() {
     if (m_BufferUploads.empty() && m_TextureUploads.empty())
         return;
 
     RENDERX_INFO("[LoadUploader] Flushing {} buffer(s) and {} texture(s) ({:.2f} MB)",
-        m_BufferUploads.size(),
-        m_TextureUploads.size(),
-        m_CPUData.size() / (1024.0f * 1024.0f));
+                 m_BufferUploads.size(),
+                 m_TextureUploads.size(),
+                 m_CPUData.size() / (1024.0f * 1024.0f));
 
     VkBuffer          stagingBuffer = VK_NULL_HANDLE;
     VmaAllocation     stagingAlloc  = VK_NULL_HANDLE;
@@ -658,18 +637,17 @@ void VulkanLoadTimeStagingUploader::flush() {
 
     VmaAllocationCreateInfo vmaCI{};
     vmaCI.usage = VMA_MEMORY_USAGE_AUTO;
-    vmaCI.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT
-                | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+    vmaCI.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
 
-    bool ok = m_Ctx.allocator->createBuffer(
-        (uint32_t)m_CPUData.size(),
-        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        VMA_MEMORY_USAGE_AUTO,
-        vmaCI.flags,
-        stagingBuffer, stagingAlloc, &stagingInfo);
+    bool ok = m_Ctx.allocator->createBuffer((uint32_t)m_CPUData.size(),
+                                            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                                            VMA_MEMORY_USAGE_AUTO,
+                                            vmaCI.flags,
+                                            stagingBuffer,
+                                            stagingAlloc,
+                                            &stagingInfo);
 
-    RENDERX_ASSERT_MSG(ok, "[LoadUploader] Failed to create staging buffer ({:.2f} MB)",
-        m_CPUData.size() / (1024.0f * 1024.0f));
+    RENDERX_ASSERT_MSG(ok, "[LoadUploader] Failed to create staging buffer ({:.2f} MB)", m_CPUData.size() / (1024.0f * 1024.0f));
 
     // Single memcpy — all data already packed in m_CPUData
     std::memcpy(stagingInfo.pMappedData, m_CPUData.data(), m_CPUData.size());
@@ -702,10 +680,15 @@ void VulkanLoadTimeStagingUploader::flush() {
         }
 
         vkCmdPipelineBarrier(m_Cmd,
-            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-            VK_PIPELINE_STAGE_TRANSFER_BIT,
-            0, 0, nullptr, 0, nullptr,
-            (uint32_t)preBarriers.size(), preBarriers.data());
+                             VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                             VK_PIPELINE_STAGE_TRANSFER_BIT,
+                             0,
+                             0,
+                             nullptr,
+                             0,
+                             nullptr,
+                             (uint32_t)preBarriers.size(),
+                             preBarriers.data());
     }
 
     for (auto& up : m_BufferUploads) {
@@ -725,18 +708,9 @@ void VulkanLoadTimeStagingUploader::flush() {
         region.imageSubresource.mipLevel       = up.region.dstMipLevel;
         region.imageSubresource.baseArrayLayer = up.region.dstArrayLayer;
         region.imageSubresource.layerCount     = 1;
-        region.imageOffset = {
-            (int32_t)up.region.dstOffset.x,
-            (int32_t)up.region.dstOffset.y,
-            (int32_t)up.region.dstOffset.z
-        };
-        region.imageExtent = {
-            (uint32_t)up.region.extent.x,
-            (uint32_t)up.region.extent.y,
-            (uint32_t)up.region.extent.z
-        };
-        vkCmdCopyBufferToImage(m_Cmd, stagingBuffer, up.dst,
-            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+        region.imageOffset = {(int32_t)up.region.dstOffset.x, (int32_t)up.region.dstOffset.y, (int32_t)up.region.dstOffset.z};
+        region.imageExtent = {(uint32_t)up.region.extent.x, (uint32_t)up.region.extent.y, (uint32_t)up.region.extent.z};
+        vkCmdCopyBufferToImage(m_Cmd, stagingBuffer, up.dst, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
     }
 
     if (!m_TextureUploads.empty()) {
@@ -762,10 +736,15 @@ void VulkanLoadTimeStagingUploader::flush() {
         }
 
         vkCmdPipelineBarrier(m_Cmd,
-            VK_PIPELINE_STAGE_TRANSFER_BIT,
-            VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-            0, 0, nullptr, 0, nullptr,
-            (uint32_t)postBarriers.size(), postBarriers.data());
+                             VK_PIPELINE_STAGE_TRANSFER_BIT,
+                             VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                             0,
+                             0,
+                             nullptr,
+                             0,
+                             nullptr,
+                             (uint32_t)postBarriers.size(),
+                             postBarriers.data());
     }
 
     VK_CHECK(vkEndCommandBuffer(m_Cmd));
@@ -791,7 +770,6 @@ void VulkanLoadTimeStagingUploader::flush() {
     vkResetCommandBuffer(m_Cmd, 0);
 }
 
-
 uint32_t VulkanLoadTimeStagingUploader::pushData(const void* data, uint32_t size, uint32_t alignment) {
     // Pad to alignment boundary
     uint32_t offset = (uint32_t)((m_CPUData.size() + alignment - 1) & ~(alignment - 1));
@@ -800,9 +778,9 @@ uint32_t VulkanLoadTimeStagingUploader::pushData(const void* data, uint32_t size
     return offset;
 }
 
-void VKFlushUploads(){
-   auto& ctx = GetVulkanContext();
-   ctx.loadTimeStagingUploader->flush();    
+void VKFlushUploads() {
+    auto& ctx = GetVulkanContext();
+    ctx.loadTimeStagingUploader->flush();
 }
 
 } // namespace RxVK

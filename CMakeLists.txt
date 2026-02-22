@@ -1,10 +1,14 @@
 cmake_minimum_required(VERSION 3.10)
 
-if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
-    set(CMAKE_TOOLCHAIN_FILE 
-        "D:/dev/cpp/vcpkg/scripts/buildsystems/vcpkg.cmake"
-        CACHE STRING ""
-    )
+option(RX_BUILD_TESTS "Build Tests" OFF)
+
+if(RX_BUILD_TESTS)
+    if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
+        set(CMAKE_TOOLCHAIN_FILE
+            "D:/dev/cpp/vcpkg/scripts/buildsystems/vcpkg.cmake"
+            CACHE STRING ""
+        )
+    endif()
 endif()
 
 project(RenderX VERSION 1.0.1)
@@ -26,9 +30,8 @@ foreach(CONFIG Debug Release RelWithDebInfo MinSizeRel)
 endforeach()
 
 option(RX_BUILD_VULKAN "Enable Vulkan backend" ON)
-option(RX_BUILD_OPENGL "Enable OpenGL backend" OFF) 
+option(RX_BUILD_OPENGL "Enable OpenGL backend" OFF)
 option(RX_BUILD_DLL "Build Shared" ON)
-option(RX_BUILD_TESTS "Build Tests" ON)
 
 if(CMAKE_SIZEOF_VOID_P EQUAL 8)
     message(STATUS "Building 64-bit")
@@ -38,7 +41,6 @@ endif()
 
 add_subdirectory(External/glm)
 add_subdirectory(External/spdlog)
-add_subdirectory(External_local/ProLog)
 
 if(RX_BUILD_TESTS)
     add_subdirectory(Test/HelloCube)
@@ -118,20 +120,33 @@ target_compile_definitions(RenderX PRIVATE
 )
 
 target_compile_options(RenderX PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/utf-8>)
-target_link_directories(RenderX PUBLIC External_local/ProLog/bin)
 
 target_include_directories(${PROJECT_NAME}
-    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/External/VulkanMemoryAllocator/include"
-    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/External/spdlog/include"
+    SYSTEM PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/External/VulkanMemoryAllocator/include"
+    SYSTEM PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/External/glm"
+    SYSTEM PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/External/spdlog/include"
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src"
-    PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/External/glm"
-    PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/External_local/ProLog/include"
 )
 
 target_link_libraries(${PROJECT_NAME}
     PRIVATE glm
     PUBLIC spdlog
-    PUBLIC ProLog
 )
+
+find_program(CLANG_FORMAT_EXE NAMES clang-format)
+
+if(CLANG_FORMAT_EXE)
+    file(GLOB_RECURSE ALL_SOURCE_FILES
+        ${CMAKE_SOURCE_DIR}/src/*.cpp
+        ${CMAKE_SOURCE_DIR}/src/*.h
+    )
+
+    add_custom_target(format
+        COMMAND ${CLANG_FORMAT_EXE}
+            -i
+            -style=file
+            ${ALL_SOURCE_FILES}
+    )
+endif()
 
 

@@ -51,8 +51,7 @@ template <typename Enum> inline constexpr std::enable_if_t<EnableBitMaskOperator
     return static_cast<Underlying<Enum>>(value) != 0;
 }
 
-template <typename Enum>
-inline constexpr std::enable_if_t<EnableBitMaskOperators<Enum>::enable, bool> Has(Enum mask, Enum flag) {
+template <typename Enum> inline constexpr std::enable_if_t<EnableBitMaskOperators<Enum>::enable, bool> Has(Enum mask, Enum flag) {
     return (static_cast<Underlying<Enum>>(mask) & static_cast<Underlying<Enum>>(flag)) != 0;
 }
 
@@ -65,9 +64,9 @@ template <typename Enum>
 inline constexpr std::enable_if_t<EnableBitMaskOperators<Enum>::enable, void> Clear(Enum& mask, Enum flag) {
     mask &= ~flag;
 }
-#define ENABLE_BITMASK_OPERATORS(_enum)                                                                                \
-    template <> struct EnableBitMaskOperators<_enum> {                                                                 \
-        static constexpr bool enable = true;                                                                           \
+#define ENABLE_BITMASK_OPERATORS(_enum)                                                                                          \
+    template <> struct EnableBitMaskOperators<_enum> {                                                                           \
+        static constexpr bool enable = true;                                                                                     \
     };
 
 } // namespace Rx

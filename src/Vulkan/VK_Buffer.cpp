@@ -26,7 +26,6 @@ inline Hash64 ComputeBufferViewHash(const BufferViewDesc& desc) {
 }
 
 BufferHandle VKCreateBuffer(const BufferDesc& desc) {
-    PROFILE_FUNCTION();
 
     // Safety validation
     if (desc.size == 0) {
@@ -95,8 +94,6 @@ BufferHandle VKCreateBuffer(const BufferDesc& desc) {
 }
 
 void VKDestroyBuffer(BufferHandle& handle) {
-    PROFILE_FUNCTION();
-
     if (!handle.isValid()) {
         RENDERX_WARN("VKDestroyBuffer: invalid buffer handle");
         return;

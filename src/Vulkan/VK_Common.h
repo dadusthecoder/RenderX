@@ -1,11 +1,9 @@
 #pragma once
-#include "ProLog/ProLog.h"
 #include "RenderX/RX_Common.h"
 
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
-#include <vk_mem_alloc.h>
 #include <vulkan/vulkan.h>
 
 #include <array>
@@ -21,8 +19,10 @@
 #include <utility>
 #include <vector>
 
+#include "vk_mem_alloc.h"
+
 namespace Rx {
-namespace RxVK {
+    namespace RxVK {
 
 // Type Aliases & Global Variables
 
@@ -137,11 +137,11 @@ inline const char* VkResultToString(VkResult result) {
     }
 }
 
-#define VK_CHECK(x)                                                                                                    \
-    do {                                                                                                               \
-        VkResult err = x;                                                                                              \
-        if (err != VK_SUCCESS)                                                                                         \
-            RENDERX_ERROR("[Vulkan] {} at {}:{}", VkResultToString(err), __FILE__, __LINE__);                          \
+#define VK_CHECK(x)                                                                                                              \
+    do {                                                                                                                         \
+        VkResult err = x;                                                                                                        \
+        if (err != VK_SUCCESS)                                                                                                   \
+            RENDERX_ERROR("[Vulkan] {} at {}:{}", VkResultToString(err), __FILE__, __LINE__);                                    \
     } while (0)
 
 inline bool CheckVk(VkResult result, const char* message = nullptr) {
@@ -239,8 +239,7 @@ struct VulkanAccessState {
     uint32_t              queueFamily = VK_QUEUE_FAMILY_IGNORED;
 
     bool operator==(const VulkanAccessState& o) const {
-        return stageMask == o.stageMask && accessMask == o.accessMask && layout == o.layout &&
-               queueFamily == o.queueFamily;
+        return stageMask == o.stageMask && accessMask == o.accessMask && layout == o.layout && queueFamily == o.queueFamily;
     }
 
     bool operator!=(const VulkanAccessState& o) const { return !(*this == o); }
@@ -577,7 +576,7 @@ public:
             fn(_My_resource[i], handle);
         }
     }
-    
+
     bool IsAlive(const Tag& handle) const {
         if (!handle.isValid())
             return false;
@@ -742,9 +741,8 @@ private:
     uint32_t   scoreDevice(const DeviceInfo& info) const;
     int        selectDevice(const std::vector<DeviceInfo>& devices) const;
     bool       isDeviceSuitable(VkPhysicalDevice device) const;
-    void       createLogicalDevice(const std::vector<const char*>& requiredExtensions,
-                                   const std::vector<const char*>& requiredLayers);
-    void       queryLimits();
+    void createLogicalDevice(const std::vector<const char*>& requiredExtensions, const std::vector<const char*>& requiredLayers);
+    void queryLimits();
 
 private:
     VkInstance                 m_Instance       = VK_NULL_HANDLE;
@@ -827,9 +825,8 @@ struct StagingChunk {
         StagingAllocation alloc{};
         uint32_t          alignedOffset = (currentOffset + alignment - 1) & ~(alignment - 1);
         if (!(alignedOffset + requestedSize <= size)) {
-            RENDERX_ERROR("Staging allocation exceeds chunk size requested size {}, size {}",
-                          alignedOffset + requestedSize,
-                          size);
+            RENDERX_ERROR(
+                "Staging allocation exceeds chunk size requested size {}, size {}", alignedOffset + requestedSize, size);
         }
 
         alloc.buffer    = buffer;
@@ -876,8 +873,7 @@ class VulkanImmediateUploader {
 public:
     VulkanImmediateUploader(VulkanContext& ctx);
     ~VulkanImmediateUploader();
-    bool
-    uploadBuffer(VkBuffer dstBuffer, const void* data, uint32_t size, uint32_t dstOffset = 0, uint32_t alignment = 256);
+    bool uploadBuffer(VkBuffer dstBuffer, const void* data, uint32_t size, uint32_t dstOffset = 0, uint32_t alignment = 256);
     bool uploadTexture(VkImage dstTexture, const void* data, uint32_t size, const TextureCopy& region);
     void beginBatch();
     void uploadBufferBatched(VkBuffer dstBuffer, const void* data, uint32_t size, uint32_t dstOffset = 0);
@@ -990,10 +986,7 @@ public:
     void setVertexBuffer(const BufferHandle& buffer, uint64_t offset = 0) override;
     void setIndexBuffer(const BufferHandle& buffer, uint64_t offset = 0, Format indextype = Format::UINT32) override;
 
-    void draw(uint32_t vertexCount,
-              uint32_t instanceCount = 1,
-              uint32_t firstVertex   = 0,
-              uint32_t firstInstance = 0) override;
+    void draw(uint32_t vertexCount, uint32_t instanceCount = 1, uint32_t firstVertex = 0, uint32_t firstInstance = 0) override;
 
     void drawIndexed(uint32_t indexCount,
                      int32_t  vertexOffset  = 0,
@@ -1020,8 +1013,7 @@ public:
     void setDescriptorSet(uint32_t slot, SetHandle set) override;
     void setDescriptorSets(uint32_t firstSlot, const SetHandle* sets, uint32_t count) override;
     void setBindlessTable(BindlessTableHandle table) override;
-    void
-    pushConstants(uint32_t slot, const void* data, uint32_t sizeIn32BitWords, uint32_t offsetIn32BitWords = 0) override;
+    void pushConstants(uint32_t slot, const void* data, uint32_t sizeIn32BitWords, uint32_t offsetIn32BitWords = 0) override;
     void setDescriptorHeaps(DescriptorHeapHandle* heaps, uint32_t count) override;
     void setInlineCBV(uint32_t slot, BufferHandle buf, uint64_t offset = 0) override;
     void setInlineSRV(uint32_t slot, BufferHandle buf, uint64_t offset = 0) override;
@@ -1272,8 +1264,7 @@ inline VmaAllocationCreateInfo ToVmaAllocationCreateInfo(MemoryType type, Buffer
         allocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT;
 
         if (isDynamic || isStreaming) {
-            allocInfo.flags |=
-                VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+            allocInfo.flags |= VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
         }
         break;
 
@@ -1297,8 +1288,7 @@ inline VkMemoryPropertyFlags ToVulkanMemoryPropertyFlags(MemoryType type) {
         return VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
 
     case MemoryType::GPU_TO_CPU:
-        return VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT |
-               VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+        return VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
 
     case MemoryType::CPU_ONLY:
         return VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
@@ -1312,10 +1302,8 @@ inline VkMemoryPropertyFlags ToVulkanMemoryPropertyFlags(MemoryType type) {
 }
 
 /// Extended allocation info with priority and dedicated allocation support
-inline VmaAllocationCreateInfo ToVmaAllocationCreateInfoEx(MemoryType  type,
-                                                           BufferFlags flags,
-                                                           float       priority            = 0.5f,
-                                                           bool        dedicatedAllocation = false) {
+inline VmaAllocationCreateInfo
+ToVmaAllocationCreateInfoEx(MemoryType type, BufferFlags flags, float priority = 0.5f, bool dedicatedAllocation = false) {
     VmaAllocationCreateInfo allocInfo = ToVmaAllocationCreateInfo(type, flags);
     allocInfo.priority                = priority;
     if (dedicatedAllocation) {
@@ -1326,8 +1314,7 @@ inline VmaAllocationCreateInfo ToVmaAllocationCreateInfoEx(MemoryType  type,
 }
 
 /// Get preferred flags vs required flags
-inline void
-GetMemoryRequirements(MemoryType type, VkMemoryPropertyFlags& preferredFlags, VkMemoryPropertyFlags& requiredFlags) {
+inline void GetMemoryRequirements(MemoryType type, VkMemoryPropertyFlags& preferredFlags, VkMemoryPropertyFlags& requiredFlags) {
     requiredFlags  = 0;
     preferredFlags = 0;
 
@@ -1343,8 +1330,8 @@ GetMemoryRequirements(MemoryType type, VkMemoryPropertyFlags& preferredFlags, Vk
         break;
 
     case MemoryType::GPU_TO_CPU:
-        requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT |
-                        VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+        requiredFlags =
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
         preferredFlags = requiredFlags;
         break;
 
@@ -1834,8 +1821,7 @@ inline VmaAllocationCreateFlags ToVmaAllocationFlags(MemoryType type, BufferFlag
 
 // Image Usage Flags Conversion (Helper)
 inline VkImageUsageFlags GetDefaultImageUsageFlags(TextureType type, Format format) {
-    VkImageUsageFlags usage =
-        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+    VkImageUsageFlags usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
 
     // Add depth/stencil usage for depth formats
     if (format == Format::D24_UNORM_S8_UINT || format == Format::D32_SFLOAT) {
@@ -1947,9 +1933,9 @@ inline const char* FormatToString(Format format) {
         return "BC3_UNORM";
     case Format::BC3_SRGB:
         return "BC3_SRGB";
+    default:
+        return "UNKNOWN_FORMAT";
     }
-
-    return "UNKNOWN_FORMAT";
 }
 
 inline Format VkFormatToFormat(VkFormat format) {
@@ -1994,9 +1980,9 @@ inline Format VkFormatToFormat(VkFormat format) {
         return Format::BC3_UNORM;
     case VK_FORMAT_BC3_SRGB_BLOCK:
         return Format::BC3_SRGB;
+    default:
+        return Format::UNDEFINED;
     }
-
-    return Format::UNDEFINED;
 }
 
 inline const char* VkColorSpaceToString(VkColorSpaceKHR cs) {
@@ -2170,9 +2156,8 @@ inline bool IsReadOnly(VkAccessFlags2 access) {
 inline bool NeedsBarrier(const VulkanAccessState& oldState, const VulkanAccessState& newState) {
     bool writeHazard = HasWriteAccess(oldState.accessMask) || HasWriteAccess(newState.accessMask);
 
-    bool layoutChange = oldState.layout != newState.layout;
-    bool queueTransfer =
-        oldState.queueFamily != newState.queueFamily && oldState.queueFamily != VK_QUEUE_FAMILY_IGNORED;
+    bool layoutChange  = oldState.layout != newState.layout;
+    bool queueTransfer = oldState.queueFamily != newState.queueFamily && oldState.queueFamily != VK_QUEUE_FAMILY_IGNORED;
 
     bool stageOnlyChange = oldState.stageMask != newState.stageMask && IsReadOnly(oldState.accessMask) &&
                            IsReadOnly(newState.accessMask) && !layoutChange && !queueTransfer;

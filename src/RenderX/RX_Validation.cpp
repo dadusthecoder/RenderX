@@ -264,9 +264,7 @@ void ValidationLayer::OnBufferMap(BufferHandle handle, void* ptr) {
     }
 
     if (it->second.isMapped) {
-        Report(ValidationSeverity::_ERROR,
-               ValidationCategory::MEMORY,
-               fmt::format("Buffer 0x{:016X} already mapped", handle.id));
+        Report(ValidationSeverity::_ERROR, ValidationCategory::MEMORY, fmt::format("Buffer 0x{:016X} already mapped", handle.id));
         return;
     }
 
@@ -297,9 +295,7 @@ void ValidationLayer::OnBufferUnmap(BufferHandle handle) {
     }
 
     if (!it->second.isMapped) {
-        Report(ValidationSeverity::WARNING,
-               ValidationCategory::MEMORY,
-               fmt::format("Buffer 0x{:016X} not mapped", handle.id));
+        Report(ValidationSeverity::WARNING, ValidationCategory::MEMORY, fmt::format("Buffer 0x{:016X} not mapped", handle.id));
         return;
     }
 
@@ -343,10 +339,9 @@ void ValidationLayer::UnregisterTexture(TextureHandle handle) {
 
     // Check for orphaned views
     if (!it->second.viewHandles.empty()) {
-        Report(
-            ValidationSeverity::WARNING,
-            ValidationCategory::RESOURCE,
-            fmt::format("Texture 0x{:016X} destroyed with {} active views", handle.id, it->second.viewHandles.size()));
+        Report(ValidationSeverity::WARNING,
+               ValidationCategory::RESOURCE,
+               fmt::format("Texture 0x{:016X} destroyed with {} active views", handle.id, it->second.viewHandles.size()));
     }
 
     textures_.erase(it);
@@ -395,30 +390,23 @@ void ValidationLayer::ValidateTextureDesc(const TextureDesc& desc) {
 
     // Validate cube maps
     if (desc.type == TextureType::TEXTURE_CUBE && desc.arrayLayers != 6) {
-        Report(ValidationSeverity::_ERROR,
-               ValidationCategory::RESOURCE,
-               "Cubemap textures must have exactly 6 array layers");
+        Report(ValidationSeverity::_ERROR, ValidationCategory::RESOURCE, "Cubemap textures must have exactly 6 array layers");
     }
 
     if (desc.type == TextureType::TEXTURE_CUBE && desc.width != desc.height) {
-        Report(ValidationSeverity::_ERROR,
-               ValidationCategory::RESOURCE,
-               "Cubemap textures must be square (width == height)");
+        Report(ValidationSeverity::_ERROR, ValidationCategory::RESOURCE, "Cubemap textures must be square (width == height)");
     }
 
     // Validate depth/stencil formats
     bool isDepthStencil = desc.format == Format::D24_UNORM_S8_UINT || desc.format == Format::D32_SFLOAT;
 
     if (isDepthStencil && !Has(desc.usage, TextureUsage::DEPTH_STENCIL)) {
-        Report(ValidationSeverity::WARNING,
-               ValidationCategory::RESOURCE,
-               "Depth/stencil format without DEPTH_STENCIL usage flag");
+        Report(
+            ValidationSeverity::WARNING, ValidationCategory::RESOURCE, "Depth/stencil format without DEPTH_STENCIL usage flag");
     }
 
     if (!isDepthStencil && Has(desc.usage, TextureUsage::DEPTH_STENCIL)) {
-        Report(ValidationSeverity::_ERROR,
-               ValidationCategory::RESOURCE,
-               "DEPTH_STENCIL usage requires depth/stencil format");
+        Report(ValidationSeverity::_ERROR, ValidationCategory::RESOURCE, "DEPTH_STENCIL usage requires depth/stencil format");
     }
 }
 
@@ -570,9 +558,7 @@ void ValidationLayer::ValidatePipelineDesc(const PipelineDesc& desc) {
 
     // Color format validation
     if (desc.colorFromats.empty() && !desc.renderPass.isValid()) {
-        Report(ValidationSeverity::WARNING,
-               ValidationCategory::PIPELINE,
-               "Pipeline has no color attachments and no render pass");
+        Report(ValidationSeverity::WARNING, ValidationCategory::PIPELINE, "Pipeline has no color attachments and no render pass");
     }
 }
 
@@ -598,16 +584,12 @@ void ValidationLayer::UnregisterCommandList(CommandList* cmdList) {
 
     auto it = commandLists_.find(cmdList);
     if (it == commandLists_.end()) {
-        Report(ValidationSeverity::_ERROR,
-               ValidationCategory::COMMAND_LIST,
-               "Attempting to destroy non-existent command list");
+        Report(ValidationSeverity::_ERROR, ValidationCategory::COMMAND_LIST, "Attempting to destroy non-existent command list");
         return;
     }
 
     if (it->second.isInsideRenderPass || it->second.isInsideRendering) {
-        Report(ValidationSeverity::_ERROR,
-               ValidationCategory::COMMAND_LIST,
-               "Command list destroyed while inside render pass");
+        Report(ValidationSeverity::_ERROR, ValidationCategory::COMMAND_LIST, "Command list destroyed while inside render pass");
     }
 
     commandLists_.erase(it);
@@ -662,14 +644,11 @@ void ValidationLayer::OnCommandListEnd(CommandList* cmdList) {
     }
 
     if (info->isInsideRenderPass) {
-        Report(
-            ValidationSeverity::_ERROR, ValidationCategory::RENDER_PASS, "Command list ended while inside render pass");
+        Report(ValidationSeverity::_ERROR, ValidationCategory::RENDER_PASS, "Command list ended while inside render pass");
     }
 
     if (info->isInsideRendering) {
-        Report(ValidationSeverity::_ERROR,
-               ValidationCategory::RENDER_PASS,
-               "Command list ended while inside rendering block");
+        Report(ValidationSeverity::_ERROR, ValidationCategory::RENDER_PASS, "Command list ended while inside rendering block");
     }
 
     info->state = CommandListState::EXECUTABLE;
@@ -813,15 +792,13 @@ void ValidationLayer::ValidateBeginRenderPass(CommandList* cmdList, RenderPassHa
     }
 
     if (info->isInsideRendering) {
-        Report(ValidationSeverity::_ERROR,
-               ValidationCategory::RENDER_PASS,
-               "BeginRenderPass called while inside rendering block");
+        Report(
+            ValidationSeverity::_ERROR, ValidationCategory::RENDER_PASS, "BeginRenderPass called while inside rendering block");
         return;
     }
 
     if (!pass.isValid()) {
-        Report(
-            ValidationSeverity::_ERROR, ValidationCategory::HANDLE, "BeginRenderPass with invalid render pass handle");
+        Report(ValidationSeverity::_ERROR, ValidationCategory::HANDLE, "BeginRenderPass with invalid render pass handle");
         return;
     }
 
@@ -845,9 +822,8 @@ void ValidationLayer::ValidateEndRenderPass(CommandList* cmdList) {
     }
 
     if (!info->isInsideRenderPass) {
-        Report(ValidationSeverity::_ERROR,
-               ValidationCategory::RENDER_PASS,
-               "EndRenderPass called without matching BeginRenderPass");
+        Report(
+            ValidationSeverity::_ERROR, ValidationCategory::RENDER_PASS, "EndRenderPass called without matching BeginRenderPass");
         return;
     }
 
@@ -878,16 +854,12 @@ void ValidationLayer::ValidateBeginRendering(CommandList* cmdList, const Renderi
     }
 
     if (info->isInsideRenderPass) {
-        Report(ValidationSeverity::_ERROR,
-               ValidationCategory::RENDER_PASS,
-               "BeginRendering called while inside render pass");
+        Report(ValidationSeverity::_ERROR, ValidationCategory::RENDER_PASS, "BeginRendering called while inside render pass");
         return;
     }
 
     if (desc.colorAttachments.empty() && !desc.hasDepthStencil) {
-        Report(ValidationSeverity::WARNING,
-               ValidationCategory::RENDER_PASS,
-               "BeginRendering with no color or depth attachments");
+        Report(ValidationSeverity::WARNING, ValidationCategory::RENDER_PASS, "BeginRendering with no color or depth attachments");
     }
 
     info->isInsideRendering = true;
@@ -909,9 +881,8 @@ void ValidationLayer::ValidateEndRendering(CommandList* cmdList) {
     }
 
     if (!info->isInsideRendering) {
-        Report(ValidationSeverity::_ERROR,
-               ValidationCategory::RENDER_PASS,
-               "EndRendering called without matching BeginRendering");
+        Report(
+            ValidationSeverity::_ERROR, ValidationCategory::RENDER_PASS, "EndRendering called without matching BeginRendering");
         return;
     }
 
@@ -995,9 +966,8 @@ void ValidationLayer::ValidateSetIndexBuffer(CommandList* cmdList, BufferHandle 
     auto bufIt = buffers_.find(buffer.id);
     if (bufIt != buffers_.end()) {
         if (!Has(bufIt->second.desc.usage, BufferFlags::INDEX)) {
-            Report(ValidationSeverity::_ERROR,
-                   ValidationCategory::RESOURCE,
-                   "Buffer used as index buffer without INDEX usage flag");
+            Report(
+                ValidationSeverity::_ERROR, ValidationCategory::RESOURCE, "Buffer used as index buffer without INDEX usage flag");
         }
     }
 
@@ -1021,15 +991,12 @@ void ValidationLayer::ValidateBufferCopy(BufferHandle src, BufferHandle dst, con
     if (srcIt != buffers_.end() && dstIt != buffers_.end()) {
         // Check usage flags
         if (!Has(srcIt->second.desc.usage, BufferFlags::TRANSFER_SRC)) {
-            Report(ValidationSeverity::_ERROR,
-                   ValidationCategory::RESOURCE,
-                   "Source buffer missing TRANSFER_SRC usage flag");
+            Report(ValidationSeverity::_ERROR, ValidationCategory::RESOURCE, "Source buffer missing TRANSFER_SRC usage flag");
         }
 
         if (!Has(dstIt->second.desc.usage, BufferFlags::TRANSFER_DST)) {
-            Report(ValidationSeverity::_ERROR,
-                   ValidationCategory::RESOURCE,
-                   "Destination buffer missing TRANSFER_DST usage flag");
+            Report(
+                ValidationSeverity::_ERROR, ValidationCategory::RESOURCE, "Destination buffer missing TRANSFER_DST usage flag");
         }
 
         // Check bounds
@@ -1068,16 +1035,12 @@ void ValidationLayer::ValidateBufferWrite(BufferHandle buffer, uint32_t offset, 
         if (offset + size > it->second.desc.size) {
             Report(ValidationSeverity::_ERROR,
                    ValidationCategory::MEMORY,
-                   fmt::format("Buffer write out of bounds (offset: {}, size: {}, buffer size: {})",
-                               offset,
-                               size,
-                               it->second.desc.size));
+                   fmt::format(
+                       "Buffer write out of bounds (offset: {}, size: {}, buffer size: {})", offset, size, it->second.desc.size));
         }
 
         if (it->second.desc.memoryType == MemoryType::GPU_ONLY) {
-            Report(ValidationSeverity::WARNING,
-                   ValidationCategory::MEMORY,
-                   "Direct write to GPU_ONLY buffer may be inefficient");
+            Report(ValidationSeverity::WARNING, ValidationCategory::MEMORY, "Direct write to GPU_ONLY buffer may be inefficient");
         }
     }
 }
@@ -1088,9 +1051,7 @@ void ValidationLayer::ValidateRenderPassDesc(const RenderPassDesc& desc) {
         return;
 
     if (desc.colorAttachments.empty() && !desc.hasDepthStencil) {
-        Report(ValidationSeverity::WARNING,
-               ValidationCategory::RENDER_PASS,
-               "Render pass with no color or depth attachments");
+        Report(ValidationSeverity::WARNING, ValidationCategory::RENDER_PASS, "Render pass with no color or depth attachments");
     }
 
     for (size_t i = 0; i < desc.colorAttachments.size(); ++i) {
@@ -1111,9 +1072,8 @@ void ValidationLayer::ValidateRenderPassDesc(const RenderPassDesc& desc) {
 
     if (desc.hasDepthStencil) {
         if (!desc.depthStencilAttachment.handle.isValid()) {
-            Report(ValidationSeverity::_ERROR,
-                   ValidationCategory::RENDER_PASS,
-                   "Depth/stencil attachment has invalid texture view");
+            Report(
+                ValidationSeverity::_ERROR, ValidationCategory::RENDER_PASS, "Depth/stencil attachment has invalid texture view");
         }
     }
 }
@@ -1162,8 +1122,7 @@ void ValidationLayer::ValidateQueueSubmit(QueueType queue, const SubmitInfo& inf
     }
 
     if (info.commandListCount == 0) {
-        Report(
-            ValidationSeverity::WARNING, ValidationCategory::SYNCHRONIZATION, "Queue submit with 0 command list count");
+        Report(ValidationSeverity::WARNING, ValidationCategory::SYNCHRONIZATION, "Queue submit with 0 command list count");
     }
 }
 
@@ -1214,9 +1173,7 @@ void ValidationLayer::LogMessage(const ValidationMessage& msg) {
 CommandListInfo* ValidationLayer::GetCommandListInfo(CommandList* cmdList) {
     auto it = commandLists_.find(cmdList);
     if (it == commandLists_.end()) {
-        Report(ValidationSeverity::_ERROR,
-               ValidationCategory::COMMAND_LIST,
-               "Command list not registered with validation layer");
+        Report(ValidationSeverity::_ERROR, ValidationCategory::COMMAND_LIST, "Command list not registered with validation layer");
         return nullptr;
     }
     return &it->second;

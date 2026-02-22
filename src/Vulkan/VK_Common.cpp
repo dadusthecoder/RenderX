@@ -62,10 +62,8 @@ void VKPrintHandles() {
 
     RENDERX_INFO("---- Shaders ----");
     g_ShaderPool.ForEachAlive([](VulkanShader& shader, ShaderHandle handle) {
-        RENDERX_INFO("Shader[{}] | VkShaderModule={} | EntryPoint={}",
-                     handle.id,
-                     fmt::ptr(shader.shaderModule),
-                     shader.entryPoint);
+        RENDERX_INFO(
+            "Shader[{}] | VkShaderModule={} | EntryPoint={}", handle.id, fmt::ptr(shader.shaderModule), shader.entryPoint);
     });
 
     RENDERX_INFO("---- Pipeline Layouts ----");
@@ -104,8 +102,7 @@ void VKPrintHandles() {
 
     RENDERX_INFO("---- Descriptor Heaps ----");
     g_DescriptorHeapPool.ForEachAlive([](VulkanDescriptorHeap& heap, DescriptorHeapHandle handle) {
-        RENDERX_INFO(
-            "DescriptorHeap[{}] | Buffer={} | GPUAddress={}", handle.id, fmt::ptr(heap.buffer), heap.gpuAddress);
+        RENDERX_INFO("DescriptorHeap[{}] | Buffer={} | GPUAddress={}", handle.id, fmt::ptr(heap.buffer), heap.gpuAddress);
     });
 
     RENDERX_INFO("---- Samplers ----");

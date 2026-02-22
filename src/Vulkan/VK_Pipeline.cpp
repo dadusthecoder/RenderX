@@ -11,8 +11,7 @@ ResourcePool<VulkanPipeline, PipelineHandle>             g_PipelinePool;
 // SHADER
 ShaderHandle VKCreateShader(const ShaderDesc& desc) {
     RENDERX_ASSERT_MSG(desc.bytecode.size() > 0, "VKCreateShader: bytecode is empty");
-    RENDERX_ASSERT_MSG(desc.bytecode.size() % sizeof(uint32_t) == 0,
-                       "VKCreateShader: bytecode size not aligned to uint32_t");
+    RENDERX_ASSERT_MSG(desc.bytecode.size() % sizeof(uint32_t) == 0, "VKCreateShader: bytecode size not aligned to uint32_t");
     RENDERX_ASSERT_MSG(!desc.entryPoint.empty(), "VKCreateShader: entryPoint is empty");
 
     VkShaderModuleCreateInfo ci{};
@@ -22,8 +21,7 @@ ShaderHandle VKCreateShader(const ShaderDesc& desc) {
 
     VkShaderModule shaderModule;
     auto&          ctx = GetVulkanContext();
-    RENDERX_ASSERT_MSG(ctx.device && ctx.device->logical() != VK_NULL_HANDLE,
-                       "VKCreateShader: device is VK_NULL_HANDLE");
+    RENDERX_ASSERT_MSG(ctx.device && ctx.device->logical() != VK_NULL_HANDLE, "VKCreateShader: device is VK_NULL_HANDLE");
 
     VkResult result = vkCreateShaderModule(ctx.device->logical(), &ci, nullptr, &shaderModule);
     if (!CheckVk(result, "VKCreateShader: Failed to create shader module")) {
@@ -187,8 +185,8 @@ PipelineHandle VKCreateGraphicsPipeline(PipelineDesc& desc) {
     rast.sType       = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
     rast.polygonMode = ToVulkanPolygonMode(desc.rasterizer.fillMode);
     rast.cullMode    = ToVulkanCullMode(desc.rasterizer.cullMode);
-    rast.frontFace = desc.rasterizer.frontCounterClockwise ? VK_FRONT_FACE_COUNTER_CLOCKWISE : VK_FRONT_FACE_CLOCKWISE;
-    rast.lineWidth = 1.0f;
+    rast.frontFace   = desc.rasterizer.frontCounterClockwise ? VK_FRONT_FACE_COUNTER_CLOCKWISE : VK_FRONT_FACE_CLOCKWISE;
+    rast.lineWidth   = 1.0f;
 
     //  Multisample
     VkPipelineMultisampleStateCreateInfo ms{};

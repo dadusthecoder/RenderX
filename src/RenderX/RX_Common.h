@@ -8,14 +8,12 @@
 #include <memory>
 #include <string>
 #include <vector>
-
 #include <spdlog/async.h>
 #include <spdlog/fmt/fmt.h>
 #include <spdlog/fmt/ostr.h>
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/spdlog.h>
-
 #include "RX_Flags.h"
 
 #if defined(_MSC_VER)
@@ -27,23 +25,23 @@
 #endif
 
 #ifdef RX_DEBUG_BUILD
-#define RENDERX_ASSERT(expr)                                                                                           \
-    {                                                                                                                  \
-        if (!(expr)) {                                                                                                 \
-            spdlog::error("Assertion Failed! Expr: {}", #expr);                                                        \
-            RENDERX_DEBUGBREAK();                                                                                      \
-        }                                                                                                              \
+#define RENDERX_ASSERT(expr)                                                                                                     \
+    {                                                                                                                            \
+        if (!(expr)) {                                                                                                           \
+            spdlog::error("Assertion Failed! Expr: {}", #expr);                                                                  \
+            RENDERX_DEBUGBREAK();                                                                                                \
+        }                                                                                                                        \
     }
 
-#define RENDERX_ASSERT_MSG(expr, msg, ...)                                                                             \
-    {                                                                                                                  \
-        if (!(expr)) {                                                                                                 \
-            spdlog::error("Assertion Failed: {} | Expr: "                                                              \
-                          "{}",                                                                                        \
-                          fmt::format(msg, ##__VA_ARGS__),                                                             \
-                          #expr);                                                                                      \
-            RENDERX_DEBUGBREAK();                                                                                      \
-        }                                                                                                              \
+#define RENDERX_ASSERT_MSG(expr, msg, ...)                                                                                       \
+    {                                                                                                                            \
+        if (!(expr)) {                                                                                                           \
+            spdlog::error("Assertion Failed: {} | Expr: "                                                                        \
+                          "{}",                                                                                                  \
+                          fmt::format(msg, ##__VA_ARGS__),                                                                       \
+                          #expr);                                                                                                \
+            RENDERX_DEBUGBREAK();                                                                                                \
+        }                                                                                                                        \
     }
 #else
 #define RENDERX_ASSERT(expr) (void)0
@@ -74,104 +72,42 @@
 #define XSTRFY(X)       STRFY(X)
 #define PRINT(msg, ...) std::cout << XSTRFY(__VA_ARGS__) << std::endl
 
-#define RENDERX_DEFINE_HANDLE(Name)                                                                                    \
-    namespace HandleType {                                                                                             \
-    struct Name {};                                                                                                    \
-    }                                                                                                                  \
+#define RENDERX_DEFINE_HANDLE(Name)                                                                                              \
+    namespace HandleType {                                                                                                       \
+    struct Name {};                                                                                                              \
+    }                                                                                                                            \
     using Name##Handle = Handle<HandleType::Name>;
+
 
 namespace spdlog {
 class logger;
 }
 
 namespace Rx {
-// Frame-based logging accumulator
-class RENDERX_EXPORT FrameLogger {
-public:
-    struct LogEntry {
-        std::string                           message;
-        spdlog::level::level_enum             level;
-        uint32_t                              count = 1;
-        std::chrono::steady_clock::time_point last_time;
-    };
-    void AddMessage(const std::string& key, const std::string& msg, spdlog::level::level_enum level);
-    void FlushFrame(std::shared_ptr<spdlog::logger>& logger);
-    void Clear();
-
-private:
-    std::unordered_map<std::string, LogEntry> frame_logs_;
-    std::mutex                                mutex_;
-};
-
 class Log {
 public:
-    RENDERX_EXPORT static void Init();
-    RENDERX_EXPORT static void Shutdown();
-
-    RENDERX_EXPORT static std::shared_ptr<spdlog::logger>& Core();
-    RENDERX_EXPORT static std::shared_ptr<spdlog::logger>& Client();
-
-    // Frame-based logging
-    RENDERX_EXPORT static void BeginFrame();
-    RENDERX_EXPORT static void EndFrame();
-    RENDERX_EXPORT static void
-    FrameLog(const std::string& key, const std::string& msg, spdlog::level::level_enum level = spdlog::level::info);
-
-    RENDERX_EXPORT static void LogStatus(const std::string& msg);
+     static void Init();
+     static void Shutdown();
+     static std::shared_ptr<spdlog::logger>& Core();
+     static void LogStatus(const std::string& msg);
 
 private:
-    RENDERX_EXPORT static std::shared_ptr<spdlog::logger> s_CoreLogger;
-    RENDERX_EXPORT static std::shared_ptr<spdlog::logger> s_ClientLogger;
-    RENDERX_EXPORT static std::unique_ptr<FrameLogger>    s_FrameLogger;
+     static std::shared_ptr<spdlog::logger> s_CoreLogger;
 };
 } // namespace Rx
 
-// Frame logging macros
-// #ifdef RX_DEBUG_BUILD
-// #define RX_FRAME_TRACE(key, msg, ...) \
-//     ::Rx::Log::FrameLog(key, fmt::format("[{}:{}] " msg, __func__, __LINE__, ##__VA_ARGS__), spdlog::level::trace)
-// #define RX_FRAME_INFO(key, msg, ...) \
-//     ::Rx::Log::FrameLog(key, fmt::format("[{}] " msg, __func__, ##__VA_ARGS__), spdlog::level::info)
-// #define RX_FRAME_WARN(key, msg, ...) \
-//     ::Rx::Log::FrameLog(key, fmt::format("[{}:{}] " msg, __func__, __LINE__, ##__VA_ARGS__), spdlog::level::warn)
-
-// #define RX_BEGIN_FRAME() ::Rx::Log::BeginFrame()
-// #define RX_END_FRAME()   ::Rx::Log::EndFrame()
-// #else
-// #define RX_FRAME_TRACE(key, msg, ...)
-// #define RX_FRAME_INFO(key, msg, ...)
-// #define RX_FRAME_WARN(key, msg, ...)
-// #define RX_BEGIN_FRAME()
-// #define RX_END_FRAME()
-// #endif
-
-// Regular logging macros (same as before)
 #ifdef RX_DEBUG_BUILD
 #define RX_CORE_TRACE(msg, ...)    ::Rx::Log::Core()->trace("[{}:{}] " msg, __func__, __LINE__, ##__VA_ARGS__)
 #define RX_CORE_INFO(msg, ...)     ::Rx::Log::Core()->info("[{}] " msg, __func__, ##__VA_ARGS__)
 #define RX_CORE_WARN(msg, ...)     ::Rx::Log::Core()->warn("[{}:{}] " msg, __func__, __LINE__, ##__VA_ARGS__)
 #define RX_CORE_ERROR(msg, ...)    ::Rx::Log::Core()->error("[{}:{}] " msg, __func__, __LINE__, ##__VA_ARGS__)
 #define RX_CORE_CRITICAL(msg, ...) ::Rx::Log::Core()->critical("[{}:{}] " msg, __func__, __LINE__, ##__VA_ARGS__)
-
-#define RX_CLIENT_TRACE(msg, ...)    ::Rx::Log::Client()->trace("[{}:{}] " msg, __func__, __LINE__, ##__VA_ARGS__)
-#define RX_CLIENT_INFO(msg, ...)     ::Rx::Log::Client()->info("[{}] " msg, __func__, ##__VA_ARGS__)
-#define RX_CLIENT_WARN(msg, ...)     ::Rx::Log::Client()->warn("[{}:{}] " msg, __func__, __LINE__, ##__VA_ARGS__)
-#define RX_CLIENT_ERROR(msg, ...)    ::Rx::Log::Client()->error("[{}:{}] " msg, __func__, __LINE__, ##__VA_ARGS__)
-#define RX_CLIENT_CRITICAL(msg, ...) ::Rx::Log::Client()->critical("[{}:{}] " msg, __func__, __LINE__, ##__VA_ARGS__)
-
-#define RX_STATUS(msg, ...) ::Rx::Log::LogStatus(fmt::format(msg, ##__VA_ARGS__))
 #else
 #define RX_CORE_TRACE(msg, ...)
 #define RX_CORE_INFO(msg, ...)
 #define RX_CORE_WARN(msg, ...)
 #define RX_CORE_ERROR(msg, ...)
 #define RX_CORE_CRITICAL(msg, ...)
-#define RX_CLIENT_TRACE(msg, ...)
-#define RX_CLIENT_INFO(msg, ...)
-#define RX_CLIENT_WARN(msg, ...)
-#define RX_CLIENT_ERROR(msg, ...)
-#define RX_CLIENT_CRITICAL(msg, ...)
-#define RX_STATUS(msg)
 #endif
 
 // for backward compatibility
@@ -193,103 +129,86 @@ private:
 #define LOG_SHUTDOWN()
 #endif
 
-#ifdef RX_DEBUG_BUILD
-#define CLIENT_TRACE(msg, ...)    ::Rx::Log::Client()->trace("[{}]: " msg, __func__, ##__VA_ARGS__)
-#define CLIENT_INFO(msg, ...)     ::Rx::Log::Client()->info("[{}]: " msg, __func__, ##__VA_ARGS__)
-#define CLIENT_WARN(msg, ...)     ::Rx::Log::Client()->warn("[{}]: " msg, __func__, ##__VA_ARGS__)
-#define CLIENT_ERROR(msg, ...)    ::Rx::Log::Client()->error("[{}]: " msg, __func__, ##__VA_ARGS__)
-#define CLIENT_CRITICAL(msg, ...) ::Rx::Log::Client()->critical("[{}]: " msg, __func__, ##__VA_ARGS__)
-#else
-#define CLIENT_TRACE(msg, ...)
-#define CLIENT_INFO(msg, ...)
-#define CLIENT_WARN(msg, ...)
-#define CLIENT_ERROR(msg, ...)
-#define CLIENT_CRITICAL(msg, ...)
-#endif
-
 namespace Rx {
 
 // RenderX API X-Macro
-#define RENDERX_FUNC(X)                                                                                                \
-                                                                                                                       \
-    /* RenderX Lifetime */                                                                                             \
-    X(void, BackendInit, (const InitDesc& window), (window))                                                           \
-                                                                                                                       \
-    X(void, BackendShutdown, (), ())                                                                                   \
-                                                                                                                       \
-    /* Pipeline Layout */                                                                                              \
-    X(PipelineLayoutHandle,                                                                                            \
-      CreatePipelineLayout,                                                                                            \
-      (const SetLayoutHandle*   layouts,                                                                               \
-       uint32_t                 layoutCount,                                                                           \
-       const PushConstantRange* pushRanges,                                                                            \
-       uint32_t                 pushRangeCount),                                                                                       \
-      (layouts, layoutCount, pushRanges, pushRangeCount))                                                              \
-                                                                                                                       \
-    /* Pipeline Graphics */                                                                                            \
-    X(PipelineHandle, CreateGraphicsPipeline, (PipelineDesc & desc), (desc))                                           \
-                                                                                                                       \
-    X(ShaderHandle, CreateShader, (const ShaderDesc& desc), (desc))                                                    \
-                                                                                                                       \
-    X(void, DestroyShader, (ShaderHandle & handle), (handle))                                                          \
-                                                                                                                       \
-    /* Resource Creation */                                                                                            \
-    /* Buffers */                                                                                                      \
-    X(BufferHandle, CreateBuffer, (const BufferDesc& desc), (desc))                                                    \
-                                                                                                                       \
-    /* Buffer Views */                                                                                                 \
-    X(BufferViewHandle, CreateBufferView, (const BufferViewDesc& desc), (desc))                                        \
-                                                                                                                       \
-    X(void, DestroyBufferView, (BufferViewHandle & handle), (handle))                                                  \
-                                                                                                                       \
-    /* Render Pass */                                                                                                  \
-    X(RenderPassHandle, CreateRenderPass, (const RenderPassDesc& desc), (desc))                                        \
-                                                                                                                       \
-    X(void, DestroyRenderPass, (RenderPassHandle & pass), (pass))                                                      \
-                                                                                                                       \
-    /* Framebuffer */                                                                                                  \
-    X(FramebufferHandle, CreateFramebuffer, (const FramebufferDesc& desc), (desc))                                     \
-                                                                                                                       \
-    X(void, DestroyFramebuffer, (FramebufferHandle & framebuffer), (framebuffer))                                      \
-                                                                                                                       \
-    X(void*, MapBuffer, (BufferHandle handle), (handle))                                                               \
-                                                                                                                       \
-    X(TextureHandle, CreateTexture, (const TextureDesc& desc), (desc))                                                 \
-    X(void, DestroyTexture, (TextureHandle & handle), (handle))                                                        \
-                                                                                                                       \
-    X(TextureViewHandle, CreateTextureView, (const TextureViewDesc& desc), (desc))                                     \
-    X(void, DestroyTextureView, (TextureViewHandle & handle), (handle))                                                \
-                                                                                                                       \
-    X(CommandQueue*, GetGpuQueue, (QueueType type), (type))                                                            \
-                                                                                                                       \
-    X(Swapchain*, CreateSwapchain, (const SwapchainDesc& desc), (desc))                                                \
-    X(void, DestroySwapchain, (Swapchain * swapchain), (swapchain))                                                    \
-                                                                                                                       \
-    X(DescriptorPoolHandle, CreateDescriptorPool, (const DescriptorPoolDesc& desc), (desc))                            \
-    X(void, DestroyDescriptorPool, (DescriptorPoolHandle & handle), (handle))                                          \
-    X(void, ResetDescriptorPool, (DescriptorPoolHandle handle), (handle))                                              \
-    X(SetLayoutHandle, CreateSetLayout, (const SetLayoutDesc& desc), (desc))                                           \
-    X(void, DestroySetLayout, (SetLayoutHandle & handle), (handle))                                                    \
-    X(SetHandle, AllocateSet, (DescriptorPoolHandle pool, SetLayoutHandle layout), (pool, layout))                     \
-    X(void,                                                                                                            \
-      AllocateSets,                                                                                                    \
-      (DescriptorPoolHandle pool, SetLayoutHandle layout, SetHandle * pSets, uint32_t count),                          \
-      (pool, layout, pSets, count))                                                                                    \
-    X(void, FreeSet, (DescriptorPoolHandle pool, SetHandle & set), (pool, set))                                        \
-    X(void, WriteSet, (SetHandle set, const DescriptorWrite* writes, uint32_t writeCount), (set, writes, writeCount))  \
-    X(void,                                                                                                            \
-      WriteSets,                                                                                                       \
-      (SetHandle * *sets, const DescriptorWrite** writes, uint32_t setCount, const uint32_t* writeCounts),             \
-      (sets, writes, setCount, writeCounts))                                                                           \
-    X(DescriptorHeapHandle, CreateDescriptorHeap, (const DescriptorHeapDesc& desc), (desc))                            \
-    X(void, DestroyDescriptorHeap, (DescriptorHeapHandle & handle), (handle))                                          \
-    X(DescriptorPointer, GetDescriptorHeapPtr, (DescriptorHeapHandle heap, uint32_t index), (heap, index))             \
-    X(SamplerHandle, CreateSampler, (const SamplerDesc& desc), (desc))                                                 \
-    X(void, DestroySampler, (SamplerHandle & handle), (handle))                                                        \
-    X(void, DestroyBuffer, (BufferHandle & handle), (handle))                                                          \
-    X(void, DestroyPipeline, (PipelineHandle & handle), (handle))                                                      \
-    X(void, DestroyPipelineLayout, (PipelineLayoutHandle & handle), (handle))                                          \
-    X(void, FlushUploads, (), ())                                                                                      \
+#define RENDERX_FUNC(X)                                                                                                          \
+                                                                                                                                 \
+    /* RenderX Lifetime */                                                                                                       \
+    X(void, BackendInit, (const InitDesc& window), (window))                                                                     \
+                                                                                                                                 \
+    X(void, BackendShutdown, (), ())                                                                                             \
+                                                                                                                                 \
+    /* Pipeline Layout */                                                                                                        \
+    X(PipelineLayoutHandle,                                                                                                      \
+      CreatePipelineLayout,                                                                                                      \
+      (const SetLayoutHandle* layouts, uint32_t layoutCount, const PushConstantRange* pushRanges, uint32_t pushRangeCount),      \
+      (layouts, layoutCount, pushRanges, pushRangeCount))                                                                        \
+                                                                                                                                 \
+    /* Pipeline Graphics */                                                                                                      \
+    X(PipelineHandle, CreateGraphicsPipeline, (PipelineDesc & desc), (desc))                                                     \
+                                                                                                                                 \
+    X(ShaderHandle, CreateShader, (const ShaderDesc& desc), (desc))                                                              \
+                                                                                                                                 \
+    X(void, DestroyShader, (ShaderHandle & handle), (handle))                                                                    \
+                                                                                                                                 \
+    /* Resource Creation */                                                                                                      \
+    /* Buffers */                                                                                                                \
+    X(BufferHandle, CreateBuffer, (const BufferDesc& desc), (desc))                                                              \
+                                                                                                                                 \
+    /* Buffer Views */                                                                                                           \
+    X(BufferViewHandle, CreateBufferView, (const BufferViewDesc& desc), (desc))                                                  \
+                                                                                                                                 \
+    X(void, DestroyBufferView, (BufferViewHandle & handle), (handle))                                                            \
+                                                                                                                                 \
+    /* Render Pass */                                                                                                            \
+    X(RenderPassHandle, CreateRenderPass, (const RenderPassDesc& desc), (desc))                                                  \
+                                                                                                                                 \
+    X(void, DestroyRenderPass, (RenderPassHandle & pass), (pass))                                                                \
+                                                                                                                                 \
+    /* Framebuffer */                                                                                                            \
+    X(FramebufferHandle, CreateFramebuffer, (const FramebufferDesc& desc), (desc))                                               \
+                                                                                                                                 \
+    X(void, DestroyFramebuffer, (FramebufferHandle & framebuffer), (framebuffer))                                                \
+                                                                                                                                 \
+    X(void*, MapBuffer, (BufferHandle handle), (handle))                                                                         \
+                                                                                                                                 \
+    X(TextureHandle, CreateTexture, (const TextureDesc& desc), (desc))                                                           \
+    X(void, DestroyTexture, (TextureHandle & handle), (handle))                                                                  \
+                                                                                                                                 \
+    X(TextureViewHandle, CreateTextureView, (const TextureViewDesc& desc), (desc))                                               \
+    X(void, DestroyTextureView, (TextureViewHandle & handle), (handle))                                                          \
+                                                                                                                                 \
+    X(CommandQueue*, GetGpuQueue, (QueueType type), (type))                                                                      \
+                                                                                                                                 \
+    X(Swapchain*, CreateSwapchain, (const SwapchainDesc& desc), (desc))                                                          \
+    X(void, DestroySwapchain, (Swapchain * swapchain), (swapchain))                                                              \
+                                                                                                                                 \
+    X(DescriptorPoolHandle, CreateDescriptorPool, (const DescriptorPoolDesc& desc), (desc))                                      \
+    X(void, DestroyDescriptorPool, (DescriptorPoolHandle & handle), (handle))                                                    \
+    X(void, ResetDescriptorPool, (DescriptorPoolHandle handle), (handle))                                                        \
+    X(SetLayoutHandle, CreateSetLayout, (const SetLayoutDesc& desc), (desc))                                                     \
+    X(void, DestroySetLayout, (SetLayoutHandle & handle), (handle))                                                              \
+    X(SetHandle, AllocateSet, (DescriptorPoolHandle pool, SetLayoutHandle layout), (pool, layout))                               \
+    X(void,                                                                                                                      \
+      AllocateSets,                                                                                                              \
+      (DescriptorPoolHandle pool, SetLayoutHandle layout, SetHandle * pSets, uint32_t count),                                    \
+      (pool, layout, pSets, count))                                                                                              \
+    X(void, FreeSet, (DescriptorPoolHandle pool, SetHandle & set), (pool, set))                                                  \
+    X(void, WriteSet, (SetHandle set, const DescriptorWrite* writes, uint32_t writeCount), (set, writes, writeCount))            \
+    X(void,                                                                                                                      \
+      WriteSets,                                                                                                                 \
+      (SetHandle * *sets, const DescriptorWrite** writes, uint32_t setCount, const uint32_t* writeCounts),                       \
+      (sets, writes, setCount, writeCounts))                                                                                     \
+    X(DescriptorHeapHandle, CreateDescriptorHeap, (const DescriptorHeapDesc& desc), (desc))                                      \
+    X(void, DestroyDescriptorHeap, (DescriptorHeapHandle & handle), (handle))                                                    \
+    X(DescriptorPointer, GetDescriptorHeapPtr, (DescriptorHeapHandle heap, uint32_t index), (heap, index))                       \
+    X(SamplerHandle, CreateSampler, (const SamplerDesc& desc), (desc))                                                           \
+    X(void, DestroySampler, (SamplerHandle & handle), (handle))                                                                  \
+    X(void, DestroyBuffer, (BufferHandle & handle), (handle))                                                                    \
+    X(void, DestroyPipeline, (PipelineHandle & handle), (handle))                                                                \
+    X(void, DestroyPipelineLayout, (PipelineLayoutHandle & handle), (handle))                                                    \
+    X(void, FlushUploads, (), ())                                                                                                \
     X(void, PrintHandles, (), ())
 
 // Base Handle Template
@@ -522,8 +441,8 @@ enum class Format : uint16_t {
     BC3_SRGB,
 
     // Index Types
-    //@note Do not use this format , for the  buffers creation
-    // valid uasges : CommandList::setIndexBuffer( , /*indexType*/ Format::UINT32|UINT64)
+    //@note Do not use this format , for buffers creation
+    // valid uasges : CommandList::setIndexBuffer( , /*indexType*/ Format::UINT32|UINT16)
     // passing this to the bufferDesc Will be considered as undefined behaviour
     // i put the enum in here cuse it is easy to remember
     UINT32,
@@ -545,25 +464,27 @@ enum class Filter {
  *        Providing invalid flags results in undefined behavior.
  */
 enum class MemoryType : uint8_t {
-    GPU_ONLY   = 1 << 0, // Device-local, no CPU access
-    CPU_TO_GPU = 1 << 1, // Host-visible, optimized for CPU writes
-    GPU_TO_CPU = 1 << 2, // Host-visible, optimized for CPU reads (cached)
-    CPU_ONLY   = 1 << 3, // Host memory, rarely accessed by GPU
-    AUTO       = 1 << 4  // Prefer device-local but allow/fallback
+    GPU_ONLY   = 1 << 0, //// Device-local, no CPU access
+    CPU_TO_GPU = 1 << 1, //// Host-visible, optimized for CPU writes
+    GPU_TO_CPU = 1 << 2, //// Host-visible, optimized for CPU reads (cached)
+    CPU_ONLY   = 1 << 3, //// Host memory, rarely accessed by GPU
+    AUTO       = 1 << 4  //// Prefer device-local but allow/fallback
 };
 ENABLE_BITMASK_OPERATORS(MemoryType);
 
+/// @brief
 enum class ResourceType : uint8_t {
-    CONSTANT_BUFFER,          // Uniform / Constant buffer
-    STORAGE_BUFFER,           // Read-only SSBO
-    RW_STORAGE_BUFFER,        // Read-write
-    TEXTURE_SRV,              // Read-only texture (sampled image)
-    TEXTURE_UAV,              // Read-write texture (storage image)
-    SAMPLER,                  // Sampler state object
-    COMBINED_TEXTURE_SAMPLER, // Combined (GL-style convenience)
-    ACCELERATION_STRUCTURE    // Ray tracing TLAS/BLAS
+    CONSTANT_BUFFER,          /// Uniform / Constant buffer
+    STORAGE_BUFFER,           /// Read-only SSBO
+    RW_STORAGE_BUFFER,        /// Read-write
+    TEXTURE_SRV,              /// Read-only texture (sampled image)
+    TEXTURE_UAV,              /// Read-write texture (storage image)
+    SAMPLER,                  /// Sampler state object
+    COMBINED_TEXTURE_SAMPLER, /// Combined (GL-style convenience)
+    ACCELERATION_STRUCTURE    /// Ray tracing TLAS/BLAS
 };
 
+/// @brief
 enum class PipelineStage : uint16_t {
     NONE = 0,
 
@@ -687,10 +608,8 @@ struct Memory_Barrier {
     }
 
     static Memory_Barrier TransferToGraphics() {
-        return Memory_Barrier(PipelineStage::TRANSFER,
-                              AccessFlags::TRANSFER_WRITE,
-                              PipelineStage::ALL_GRAPHICS,
-                              AccessFlags::SHADER_READ);
+        return Memory_Barrier(
+            PipelineStage::TRANSFER, AccessFlags::TRANSFER_WRITE, PipelineStage::ALL_GRAPHICS, AccessFlags::SHADER_READ);
     }
 
     static Memory_Barrier GraphicsToCompute() {
@@ -723,7 +642,6 @@ struct BufferBarrier {
           dstStage(dst),
           dstAccess(dstAcc) {}
 
-    // Fluent setters
     BufferBarrier& SetRange(uint64_t off, uint64_t sz) {
         offset = off;
         size   = sz;
@@ -746,35 +664,23 @@ struct BufferBarrier {
     }
 
     static BufferBarrier IndexBufferReady(BufferHandle buffer) {
-        return BufferBarrier(buffer,
-                             PipelineStage::TRANSFER,
-                             AccessFlags::TRANSFER_WRITE,
-                             PipelineStage::VERTEX,
-                             AccessFlags::INDEX_READ);
+        return BufferBarrier(
+            buffer, PipelineStage::TRANSFER, AccessFlags::TRANSFER_WRITE, PipelineStage::VERTEX, AccessFlags::INDEX_READ);
     }
 
     static BufferBarrier UniformBufferReady(BufferHandle buffer) {
-        return BufferBarrier(buffer,
-                             PipelineStage::TRANSFER,
-                             AccessFlags::TRANSFER_WRITE,
-                             PipelineStage::ALL_GRAPHICS,
-                             AccessFlags::UNIFORM_READ);
+        return BufferBarrier(
+            buffer, PipelineStage::TRANSFER, AccessFlags::TRANSFER_WRITE, PipelineStage::ALL_GRAPHICS, AccessFlags::UNIFORM_READ);
     }
 
     static BufferBarrier StorageBufferReadToWrite(BufferHandle buffer) {
-        return BufferBarrier(buffer,
-                             PipelineStage::COMPUTE,
-                             AccessFlags::SHADER_READ,
-                             PipelineStage::COMPUTE,
-                             AccessFlags::SHADER_WRITE);
+        return BufferBarrier(
+            buffer, PipelineStage::COMPUTE, AccessFlags::SHADER_READ, PipelineStage::COMPUTE, AccessFlags::SHADER_WRITE);
     }
 
     static BufferBarrier StorageBufferWriteToRead(BufferHandle buffer) {
-        return BufferBarrier(buffer,
-                             PipelineStage::COMPUTE,
-                             AccessFlags::SHADER_WRITE,
-                             PipelineStage::COMPUTE,
-                             AccessFlags::SHADER_READ);
+        return BufferBarrier(
+            buffer, PipelineStage::COMPUTE, AccessFlags::SHADER_WRITE, PipelineStage::COMPUTE, AccessFlags::SHADER_READ);
     }
 
     static BufferBarrier TransferSrcReady(BufferHandle buffer) {
@@ -1511,10 +1417,7 @@ struct TextureDesc {
     bool         generateMips;
 
     // Constructors
-    TextureDesc(uint32_t    w   = 1,
-                uint32_t    h   = 1,
-                Format      fmt = Format::RGBA8_UNORM,
-                TextureType t   = TextureType::TEXTURE_2D)
+    TextureDesc(uint32_t w = 1, uint32_t h = 1, Format fmt = Format::RGBA8_UNORM, TextureType t = TextureType::TEXTURE_2D)
         : type(t),
           width(w),
           height(h),
@@ -1565,8 +1468,7 @@ struct TextureDesc {
         return desc;
     }
 
-    static TextureDesc
-    TextureArray(uint32_t width, uint32_t height, uint32_t layers, Format format = Format::RGBA8_UNORM) {
+    static TextureDesc TextureArray(uint32_t width, uint32_t height, uint32_t layers, Format format = Format::RGBA8_UNORM) {
         TextureDesc desc(width, height, format, TextureType::TEXTURE_2D_ARRAY);
         desc.arrayLayers = layers;
         desc.usage       = TextureUsage::SAMPLED | TextureUsage::TRANSFER_DST;
@@ -1733,8 +1635,7 @@ struct TextureCopy {
 
     // Copy a specific mip level in full
     static TextureCopy FullMip(uint32_t w, uint32_t h, uint32_t mip, uint32_t d = 1) {
-        return TextureCopy().setSrcMip(mip).setDstMip(mip).setExtent(
-            w >> mip ? w >> mip : 1, h >> mip ? h >> mip : 1, d);
+        return TextureCopy().setSrcMip(mip).setDstMip(mip).setExtent(w >> mip ? w >> mip : 1, h >> mip ? h >> mip : 1, d);
     }
 
     // Copy one array layer to another (same or different texture)
@@ -2241,8 +2142,7 @@ struct DepthStencilAttachmentDesc {
     }
 
     // Clear depth + stencil
-    static DepthStencilAttachmentDesc ClearDepthStencil(TextureViewHandle view,
-                                                        Format            fmt = Format::D24_UNORM_S8_UINT) {
+    static DepthStencilAttachmentDesc ClearDepthStencil(TextureViewHandle view, Format fmt = Format::D24_UNORM_S8_UINT) {
         DepthStencilAttachmentDesc desc;
         desc.handle         = view;
         desc.format         = fmt;
@@ -2668,10 +2568,7 @@ struct DescriptorHeapDesc {
         return {DescriptorHeapType::RESOURCES, MemoryType::CPU_TO_GPU, capacity, true};
     }
     static DescriptorHeapDesc StagingResources(uint32_t capacity) {
-        return {DescriptorHeapType::RESOURCES,
-                MemoryType::CPU_TO_GPU,
-                capacity,
-                false}; // not shader-visible — staging only
+        return {DescriptorHeapType::RESOURCES, MemoryType::CPU_TO_GPU, capacity, false}; // not shader-visible — staging only
     }
     static DescriptorHeapDesc Samplers(uint32_t capacity = 2048) {
         return {DescriptorHeapType::SAMPLERS, MemoryType::CPU_TO_GPU, capacity, true};
@@ -2714,15 +2611,11 @@ struct DescriptorWrite {
     uint8_t      _pad[3] = {};
     uint64_t     handle  = 0; // raw handle id
 
-    static DescriptorWrite CBV(uint32_t slot, BufferViewHandle h) {
-        return {slot, ResourceType::CONSTANT_BUFFER, {}, h.id};
-    }
+    static DescriptorWrite CBV(uint32_t slot, BufferViewHandle h) { return {slot, ResourceType::CONSTANT_BUFFER, {}, h.id}; }
     static DescriptorWrite StorageBuf(uint32_t slot, BufferViewHandle h, bool writable = false) {
         return {slot, writable ? ResourceType::RW_STORAGE_BUFFER : ResourceType::STORAGE_BUFFER, {}, h.id};
     }
-    static DescriptorWrite Texture(uint32_t slot, TextureViewHandle h) {
-        return {slot, ResourceType::TEXTURE_SRV, {}, h.id};
-    }
+    static DescriptorWrite Texture(uint32_t slot, TextureViewHandle h) { return {slot, ResourceType::TEXTURE_SRV, {}, h.id}; }
     static DescriptorWrite StorageTexture(uint32_t slot, TextureViewHandle h) {
         return {slot, ResourceType::TEXTURE_UAV, {}, h.id};
     }
@@ -2752,14 +2645,10 @@ struct PushConstantRange {
           size(size) {}
 
     // Push constants visible to vertex shader only
-    static PushConstantRange Vertex(uint32_t size, uint32_t offset = 0) {
-        return {PipelineStage::VERTEX, size, offset};
-    }
+    static PushConstantRange Vertex(uint32_t size, uint32_t offset = 0) { return {PipelineStage::VERTEX, size, offset}; }
 
     // Push constants visible to fragment shader only
-    static PushConstantRange Fragment(uint32_t size, uint32_t offset = 0) {
-        return {PipelineStage::FRAGMENT, size, offset};
-    }
+    static PushConstantRange Fragment(uint32_t size, uint32_t offset = 0) { return {PipelineStage::FRAGMENT, size, offset}; }
 
     // Push constants visible to both vertex and fragment
     static PushConstantRange VertexFragment(uint32_t size, uint32_t offset = 0) {
@@ -2767,9 +2656,7 @@ struct PushConstantRange {
     }
 
     // Push constants visible to compute shader
-    static PushConstantRange Compute(uint32_t size, uint32_t offset = 0) {
-        return {PipelineStage::COMPUTE, size, offset};
-    }
+    static PushConstantRange Compute(uint32_t size, uint32_t offset = 0) { return {PipelineStage::COMPUTE, size, offset}; }
 
     // Push constants visible to all stages — convenient but slightly over-declares
     static PushConstantRange AllStages(uint32_t size, uint32_t offset = 0) {
@@ -2893,8 +2780,7 @@ public:
                              uint32_t firstIndex    = 0,
                              uint32_t firstInstance = 0) = 0;
 
-    virtual void
-    draw(uint32_t vertexCount, uint32_t instanceCount = 1, uint32_t firstVertex = 0, uint32_t firstInstance = 0) = 0;
+    virtual void draw(uint32_t vertexCount, uint32_t instanceCount = 1, uint32_t firstVertex = 0, uint32_t firstInstance = 0) = 0;
 
     //---- Classic set binding ------------------------------------------------------
     // DESCRIPTOR_SETS arena: vkCmdBindDescriptorSets / SetGraphicsRootDescriptorTable
@@ -2914,8 +2800,7 @@ public:
     //---- Inline data — no descriptor allocation -------------------------------
     // VK:    vkCmdPushConstants
     // D3D12: SetGraphicsRoot32BitConstants
-    virtual void
-    pushConstants(uint32_t slot, const void* data, uint32_t sizeIn32BitWords, uint32_t offsetIn32BitWords = 0) = 0;
+    virtual void pushConstants(uint32_t slot, const void* data, uint32_t sizeIn32BitWords, uint32_t offsetIn32BitWords = 0) = 0;
 
     // Skip descriptor table entirely — bind buffer by GPU address
     // VK:    VK_KHR_push_descriptor → vkCmdPushDescriptorSetKHR

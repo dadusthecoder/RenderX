@@ -1,41 +1,33 @@
 #include "GL_Common.h"
 
-namespace Rx {
-namespace RxGL {
+namespace Rx::RxGL {
 
-	// Simple in-memory store for resource groups used by the OpenGL backend.
-	static std::unordered_map<uint64_t, ResourceGroupDesc> s_ResourceGroups;
-	static uint32_t s_NextResourceGroupIndex = 1;
+int   g_WindowWidth   = 0;
+int   g_WindowHeight  = 0;
 
-} // namespace RxGL
-} // namespace Rx
+std::atomic<uint64_t> g_NextHandleId{1};
 
-Rx::ResourceGroupHandle Rx::RxGL::GLCreateResourceGroup(const ResourceGroupDesc& desc) {
-	PROFILE_FUNCTION();
-	ResourceGroupHandle handle;
-	
-	if (!desc.layout.IsValid()) {
-		RENDERX_WARN("GLCreateResourceGroup: Invalid pipeline layout");
-		return handle;
-	}
+std::unordered_map<uint64_t, GLBufferResource>         g_Buffers;
+std::unordered_map<uint64_t, BufferViewDesc>           g_BufferViews;
+std::unordered_map<uint64_t, GLTextureResource>        g_Textures;
+std::unordered_map<uint64_t, GLTextureViewResource>    g_TextureViews;
+std::unordered_map<uint64_t, GLShaderResource>         g_Shaders;
+std::unordered_map<uint64_t, GLPipelineResource>       g_Pipelines;
+std::unordered_map<uint64_t, GLPipelineLayoutResource> g_PipelineLayouts;
+std::unordered_map<uint64_t, GLRenderPassResource>     g_RenderPasses;
+std::unordered_map<uint64_t, GLFramebufferResource>    g_Framebuffers;
+std::unordered_map<uint64_t, GLSetLayoutResource>      g_SetLayouts;
+std::unordered_map<uint64_t, GLDescriptorPoolResource> g_DescriptorPools;
+std::unordered_map<uint64_t, GLSetResource>            g_Sets;
+std::unordered_map<uint64_t, GLDescriptorHeapResource> g_DescriptorHeaps;
+std::unordered_map<uint64_t, GLSamplerResource>        g_Samplers;
 
-	uint64_t id = (static_cast<uint64_t>(2) << 32) | static_cast<uint64_t>(s_NextResourceGroupIndex++);
-	s_ResourceGroups[id] = desc;
-	handle.id = id;
-	
-	RENDERX_INFO("GL: Created ResourceGroup (id={})", handle.id);
-	return handle;
+GLCommandQueue* g_GraphicsQueue = nullptr;
+GLCommandQueue* g_ComputeQueue  = nullptr;
+GLCommandQueue* g_TransferQueue = nullptr;
+
+uint64_t GLNextHandle() {
+    return g_NextHandleId.fetch_add(1, std::memory_order_relaxed);
 }
 
-void Rx::RxGL::GLDestroyResourceGroup(ResourceGroupHandle& handle) {
-	PROFILE_FUNCTION();
-	if (!handle.IsValid()) return;
-	
-	auto it = s_ResourceGroups.find(handle.id);
-	if (it != s_ResourceGroups.end()) {
-		s_ResourceGroups.erase(it);
-		RENDERX_INFO("GL: Destroyed ResourceGroup (id={})", handle.id);
-	}
-	
-	handle.id = 0;
-}
+} // namespace Rx::RxGL

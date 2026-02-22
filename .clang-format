@@ -53,7 +53,7 @@ KeepEmptyLinesAtTheStartOfBlocks: false
 Language: Cpp
 BasedOnStyle: LLVM
 
-ColumnLimit: 120
+ColumnLimit: 130
 IndentWidth: 4
 ContinuationIndentWidth: 4
 TabWidth: 4

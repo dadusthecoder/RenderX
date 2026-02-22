@@ -140,7 +140,7 @@ void VulkanSwapchain::createSwapchain(uint32_t width, uint32_t height) {
     ci.imageExtent      = extent;
     ci.imageArrayLayers = 1;
     ci.imageUsage       = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-    
+
     ci.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
     ci.preTransform     = caps.currentTransform;
     ci.compositeAlpha   = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
@@ -168,8 +168,7 @@ void VulkanSwapchain::createSwapchain(uint32_t width, uint32_t height) {
         m_ImageHandles[i] = g_TexturePool.allocate(std::move(texture));
         m_DepthHandles[i] = VKCreateTexture(TextureDesc::DepthStencil(extent.width, extent.height));
 
-        m_DepthViewHandles[i] =
-            VKCreateTextureView(TextureViewDesc::Default(m_DepthHandles[i], Format::D24_UNORM_S8_UINT));
+        m_DepthViewHandles[i] = VKCreateTextureView(TextureViewDesc::Default(m_DepthHandles[i], Format::D24_UNORM_S8_UINT));
         m_ImageViewsHandles[i] =
             VKCreateTextureView(TextureViewDesc::Default(m_ImageHandles[i], VkFormatToFormat(surfaceFormat.format)));
     }
@@ -213,8 +212,7 @@ VkSurfaceFormatKHR VulkanSwapchain::chooseSurfaceFormat() const {
         }
     }
 
-    RENDERX_WARN("The surface doesn't support preferred format: {}",
-                 FormatToString(VkFormatToFormat(m_Info.preferredFormat)));
+    RENDERX_WARN("The surface doesn't support preferred format: {}", FormatToString(VkFormatToFormat(m_Info.preferredFormat)));
     assert(!formats.empty() && "No surface formats available");
     RENDERX_INFO("Swapchain format: {} | ColorSpace={}",
                  FormatToString(VkFormatToFormat(formats[0].format)),

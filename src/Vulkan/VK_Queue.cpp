@@ -161,7 +161,6 @@ void VulkanCommandQueue::addSignal2(VkSemaphore semaphore, uint64_t value, VkPip
 };
 
 bool VulkanCommandQueue::Wait(Timeline value, uint64_t timeout) {
-    PROFILE_FUNCTION();
     VkSemaphoreWaitInfo info{};
     info.sType          = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO;
     info.semaphoreCount = 1;
@@ -171,7 +170,6 @@ bool VulkanCommandQueue::Wait(Timeline value, uint64_t timeout) {
 }
 
 void VulkanCommandQueue::WaitIdle() {
-    PROFILE_FUNCTION();
     VkSemaphoreWaitInfo info{};
     info.sType          = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO;
     info.semaphoreCount = 1;

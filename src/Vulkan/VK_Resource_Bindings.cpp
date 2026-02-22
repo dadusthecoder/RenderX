@@ -245,8 +245,7 @@ SetHandle VKAllocateSet(DescriptorPoolHandle poolHandle, SetLayoutHandle layoutH
 
         VkResult result = vkAllocateDescriptorSets(ctx.device->logical(), &allocInfo, &internal.vkSet);
 
-        RENDERX_ASSERT_MSG(
-            result == VK_SUCCESS, "AllocateSet: vkAllocateDescriptorSets failed: {}", VkResultToString(result));
+        RENDERX_ASSERT_MSG(result == VK_SUCCESS, "AllocateSet: vkAllocateDescriptorSets failed: {}", VkResultToString(result));
 
     } else {
         // ── Descriptor buffer path ───────────────────────────────────────
@@ -261,8 +260,7 @@ SetHandle VKAllocateSet(DescriptorPoolHandle poolHandle, SetLayoutHandle layoutH
             // Align to 256 bytes
             offset = (offset + 255) & ~255ull;
 
-            RENDERX_ASSERT_MSG((offset - pool->heapBaseOffset + pool->stridePerSet) <=
-                                   (pool->capacity * pool->stridePerSet),
+            RENDERX_ASSERT_MSG((offset - pool->heapBaseOffset + pool->stridePerSet) <= (pool->capacity * pool->stridePerSet),
                                "AllocateSet: descriptor buffer pool is full");
 
             internal.heapHandle = pool->heapHandle;
@@ -313,8 +311,7 @@ void VKAllocateSets(DescriptorPoolHandle poolHandle, SetLayoutHandle layoutHandl
 
         VkResult result = vkAllocateDescriptorSets(ctx.device->logical(), &allocInfo, vkSets.data());
 
-        RENDERX_ASSERT_MSG(
-            result == VK_SUCCESS, "AllocateSets: vkAllocateDescriptorSets failed: {}", VkResultToString(result));
+        RENDERX_ASSERT_MSG(result == VK_SUCCESS, "AllocateSets: vkAllocateDescriptorSets failed: {}", VkResultToString(result));
 
         // Wrap each VkDescriptorSet into a SetHandle
         for (uint32_t i = 0; i < count; i++) {
@@ -470,8 +467,8 @@ void VKWriteSet(SetHandle setHandle, const DescriptorWrite* writes, uint32_t wri
 
     if (Has(set->poolFlags, DescriptorPoolFlags::DESCRIPTOR_SETS)) {
 
-        // 32 writes max / for the sake os stack allocations 
-        // may be i will cange it to the vector in future 
+        // 32 writes max / for the sake os stack allocations
+        // may be i will cange it to the vector in future
         VkDescriptorBufferInfo bufInfos[32];
         VkDescriptorImageInfo  imgInfos[32];
         VkWriteDescriptorSet   vkWrites[32];
@@ -716,8 +713,7 @@ DescriptorHeapHandle VKCreateDescriptorHeap(const DescriptorHeapDesc& desc) {
     VkDeviceSize bufferSize = (VkDeviceSize)desc.capacity * descriptorSize;
 
     // Build usage flags
-    VkBufferUsageFlags usage =
-        VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+    VkBufferUsageFlags usage = VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
 
     if (desc.type == DescriptorHeapType::SAMPLERS) {
         usage = VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
@@ -855,14 +851,8 @@ void VulkanCommandList::setDescriptorSets(uint32_t firstSlot, const SetHandle* s
         }
 
         // One vkCmdBindDescriptorSets for all sets
-        vkCmdBindDescriptorSets(m_CommandBuffer,
-                                VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                pipelineLayout->vkLayout,
-                                firstSlot,
-                                count,
-                                vkSets,
-                                0,
-                                nullptr);
+        vkCmdBindDescriptorSets(
+            m_CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout->vkLayout, firstSlot, count, vkSets, 0, nullptr);
 
     } else {
         // Descriptor buffer path — N offset calls
@@ -885,9 +875,8 @@ void VulkanCommandList::setDescriptorHeaps(DescriptorHeapHandle* heaps, uint32_t
 
         bindingInfos[i].sType   = VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT;
         bindingInfos[i].address = heap->gpuAddress;
-        bindingInfos[i].usage   = (heap->type == DescriptorHeapType::SAMPLERS)
-                                      ? VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT
-                                      : VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT;
+        bindingInfos[i].usage   = (heap->type == DescriptorHeapType::SAMPLERS) ? VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT
+                                                                               : VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT;
     }
 
     // vkCmdBindDescriptorBuffersEXT(m_CommandBuffer, count, bindingInfos);
@@ -895,10 +884,7 @@ void VulkanCommandList::setDescriptorHeaps(DescriptorHeapHandle* heaps, uint32_t
     (void)bindingInfos;
 }
 
-void VulkanCommandList::pushConstants(uint32_t    slot,
-                                      const void* data,
-                                      uint32_t    sizeIn32BitWords,
-                                      uint32_t    offsetIn32BitWords) {
+void VulkanCommandList::pushConstants(uint32_t slot, const void* data, uint32_t sizeIn32BitWords, uint32_t offsetIn32BitWords) {
     RENDERX_ASSERT_MSG(m_BoundPipelineLayout != VK_NULL_HANDLE,
                        "pushConstants: no pipeline bound — call setPipeline before pushConstants");
     RENDERX_ASSERT_MSG(data != nullptr, "pushConstants: data pointer is null");
@@ -923,10 +909,8 @@ void VulkanCommandList::pushConstants(uint32_t    slot,
             if (r.offset < offsetIn32BitWords + sizeIn32BitWords && r.offset + r.size > offsetIn32BitWords)
                 stages |= r.stageFlags;
         }
-        RENDERX_ASSERT_MSG(stages != 0,
-                           "pushConstants: no push constant range covers offset={} size={}",
-                           offsetIn32BitWords,
-                           sizeIn32BitWords);
+        RENDERX_ASSERT_MSG(
+            stages != 0, "pushConstants: no push constant range covers offset={} size={}", offsetIn32BitWords, sizeIn32BitWords);
     }
 
     vkCmdPushConstants(m_CommandBuffer, m_BoundPipelineLayout, stages, offsetIn32BitWords, sizeIn32BitWords, data);

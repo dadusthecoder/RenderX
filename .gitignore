@@ -82,6 +82,12 @@ External/glew-2.1.0/
 *.old
 *.orig
 *.swo
+*.js 
+*.json
+*.docs
+*.log
+Test/
+Shaders/
 docs/
 doc/
 coverage/
@@ -92,8 +98,6 @@ tmp/
 *.sublime-project
 *.sublime-workspace
 .DS_Store
-.json
-.js 
 Thumbs.db
 ehthumbs.db
 Desktop.ini

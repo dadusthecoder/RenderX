@@ -1,6 +1,4 @@
 #include "RenderX/RenderX.h"
-#include "ProLog/ProLog.h"
-#include "RenderX/DebugProfiler.h"
 #include "RenderX/RX_Core.h"
 
 #include <cassert>
@@ -22,17 +20,7 @@ GraphicsAPI         API             = GraphicsAPI::NONE;
 namespace {
 
 void InitializeLoggingSystem() {
-#ifdef RX_DEBUG_BUILD
     LOG_INIT();
-    Debug::ConfigureDetailedProfiling();
-#else
-    ProLog::ProfilerConfig config = {};
-    config.enableProfiling        = true;
-    config.enableLogging          = true;
-    config.bufferSize             = 500;
-    config.autoFlush              = true;
-    ProLog::SetConfig(config);
-#endif
 }
 
 void ClearDispatchTable() {
@@ -127,14 +115,13 @@ void Shutdown() {
     }
     ClearDispatchTable();
     API = GraphicsAPI::NONE;
-    PROFILE_END_SESSION();
     LOG_SHUTDOWN();
 }
 
-#define RX_FORWARD_FUNC(_ret, _name, _parms, _args)                                                                    \
-    _ret _name _parms {                                                                                                \
-        RENDERX_ASSERT_MSG(g_DispatchTable._name != nullptr, "Function not initialized");                              \
-        return g_DispatchTable._name _args;                                                                            \
+#define RX_FORWARD_FUNC(_ret, _name, _parms, _args)                                                                              \
+    _ret _name _parms {                                                                                                          \
+        RENDERX_ASSERT_MSG(g_DispatchTable._name != nullptr, "Function not initialized");                                        \
+        return g_DispatchTable._name _args;                                                                                      \
     }
 RENDERX_FUNC(RX_FORWARD_FUNC)
 #undef RX_FORWARD_FUNC

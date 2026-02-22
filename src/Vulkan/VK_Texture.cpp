@@ -22,8 +22,7 @@ static bool IsDepthFormat(VkFormat format) {
 }
 
 static bool IsStencilFormat(VkFormat format) {
-    return format == VK_FORMAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT ||
-           format == VK_FORMAT_D32_SFLOAT_S8_UINT;
+    return format == VK_FORMAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT || format == VK_FORMAT_D32_SFLOAT_S8_UINT;
 }
 
 static bool IsDepthStencilFormat(VkFormat format) {
@@ -100,12 +99,9 @@ TextureHandle VKCreateTexture(const TextureDesc& desc) {
         ToVmaAllocationCreateInfoForImage(desc.memoryType, Has(desc.usage, TextureUsage::RENDER_TARGET), false);
 
     VmaAllocationInfo vmaInfo{};
-    if (!ctx.allocator->createImage(
-            imageInfo, allocInfo.usage, allocInfo.flags, texture.image, texture.allocation, &vmaInfo)) {
-        RENDERX_ERROR("VKCreateTexture: failed to allocate image ({}x{} fmt={})",
-                      desc.width,
-                      desc.height,
-                      static_cast<int>(desc.format));
+    if (!ctx.allocator->createImage(imageInfo, allocInfo.usage, allocInfo.flags, texture.image, texture.allocation, &vmaInfo)) {
+        RENDERX_ERROR(
+            "VKCreateTexture: failed to allocate image ({}x{} fmt={})", desc.width, desc.height, static_cast<int>(desc.format));
         return {};
     }
 
@@ -224,8 +220,9 @@ static VkFilter ToVkFilter(Filter f) {
         return VK_FILTER_NEAREST;
     case Filter::LINEAR:
         return VK_FILTER_LINEAR;
+    default:
+        return VK_FILTER_LINEAR;
     }
-    return VK_FILTER_LINEAR;
 }
 
 static VkSamplerMipmapMode ToVkMipFilter(Filter f) {
@@ -234,8 +231,9 @@ static VkSamplerMipmapMode ToVkMipFilter(Filter f) {
         return VK_SAMPLER_MIPMAP_MODE_NEAREST;
     case Filter::LINEAR:
         return VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    default:
+        return VK_SAMPLER_MIPMAP_MODE_LINEAR;
     }
-    return VK_SAMPLER_MIPMAP_MODE_LINEAR;
 }
 
 static VkSamplerAddressMode ToVkAddressMode(AddressMode m) {

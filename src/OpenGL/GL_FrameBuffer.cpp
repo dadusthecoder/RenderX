@@ -1,21 +1,18 @@
 #include "GL_Common.h"
 
-namespace Rx {
-namespace RxGL {
+namespace Rx::RxGL {
 
-	FramebufferHandle GLCreateFramebuffer(const FramebufferDesc&) {
-		PROFILE_FUNCTION();
-		// Minimal implementation: Framebuffers are not required for basic on-screen rendering
-		// Return an empty handle to indicate default framebuffer should be used.
-		FramebufferHandle fb{};
-		RENDERX_INFO("GL: CreateFramebuffer - returning default (no-op)");
-		return fb;
-	}
+FramebufferHandle GLCreateFramebuffer(const FramebufferDesc& desc) {
+    PROFILE_FUNCTION();
+    FramebufferHandle handle{GLNextHandle()};
+    g_Framebuffers.emplace(handle.id, GLFramebufferResource{desc});
+    return handle;
+}
 
-	void GLDestroyFramebuffer(FramebufferHandle& fb) {
-		PROFILE_FUNCTION();
-		fb.id = 0;
-	}
-} // namespace RxGL
+void GLDestroyFramebuffer(FramebufferHandle& framebuffer) {
+    PROFILE_FUNCTION();
+    g_Framebuffers.erase(framebuffer.id);
+    framebuffer.id = 0;
+}
 
-} // namespace Rx
+} // namespace Rx::RxGL

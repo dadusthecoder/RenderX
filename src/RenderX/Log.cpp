@@ -2,36 +2,8 @@
 #include <chrono>
 #include <unordered_map>
 
+
 namespace Rx {
-
-void FrameLogger::AddMessage(const std::string& key, const std::string& msg, spdlog::level::level_enum level) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    auto&                       entry = frame_logs_[key];
-    entry.message                     = msg;
-    entry.level                       = level;
-    entry.count++;
-    entry.last_time = std::chrono::steady_clock::now();
-}
-
-void FrameLogger::FlushFrame(std::shared_ptr<spdlog::logger>& logger) {
-    std::lock_guard<std::mutex> lock(mutex_);
-
-    if (frame_logs_.empty())
-        return;
-
-    for (const auto& [key, entry] : frame_logs_) {
-        if (entry.count > 1) {
-            std::string msg = fmt::format("{} (x{})", entry.message, entry.count);
-            logger->log(entry.level, msg);
-        } else {
-            logger->log(entry.level, entry.message);
-        }
-    }
-}
-
-void FrameLogger::Clear() {
-    std::lock_guard<std::mutex> lock(mutex_);
-}
 
 // Rate-limited sink - prevents console flooding
 class RateLimitedSink : public spdlog::sinks::base_sink<std::mutex> {
@@ -64,9 +36,9 @@ protected:
         if (it == last_log_time_.end() || (now - it->second) >= rate_limit_interval_) {
             auto suppress_it = suppressed_count_.find(msg_key);
             if (suppress_it != suppressed_count_.end() && suppress_it->second > 0) {
-                spdlog::details::log_msg modified_msg = msg;
-                std::string modified_payload = fmt::format("{} (+{} suppressed)", msg_key, suppress_it->second);
-                modified_msg.payload         = modified_payload;
+                spdlog::details::log_msg modified_msg     = msg;
+                std::string              modified_payload = fmt::format("{} (+{} suppressed)", msg_key, suppress_it->second);
+                modified_msg.payload                      = modified_payload;
                 wrapped_sink_->log(modified_msg);
                 suppressed_count_[msg_key] = 0;
             } else {
@@ -135,20 +107,15 @@ private:
 };
 
 std::shared_ptr<spdlog::logger> Log::s_CoreLogger;
-std::shared_ptr<spdlog::logger> Log::s_ClientLogger;
-std::unique_ptr<FrameLogger>    Log::s_FrameLogger;
+
+
 
 std::shared_ptr<spdlog::logger>& Log::Core() {
     return s_CoreLogger;
 }
-std::shared_ptr<spdlog::logger>& Log::Client() {
-    return s_ClientLogger;
-}
 
 void Log::Init() {
     spdlog::init_thread_pool(8192, 1);
-
-    s_FrameLogger = std::make_unique<FrameLogger>();
 
     // Console sink with rate limiting and level-specific patterns
     auto baseConsoleSink        = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
@@ -177,56 +144,22 @@ void Log::Init() {
     fileSink->set_pattern_for_level(spdlog::level::err, "[%Y-%m-%d %T.%e] [E] [thread %t] [%n] [%s:%#] [%!] %v");
     fileSink->set_pattern_for_level(spdlog::level::critical, "[%Y-%m-%d %T.%e] [C] [thread %t] [%n] [%s:%#] [%!] %v");
 
-    s_CoreLogger = std::make_shared<spdlog::async_logger>("RENDERX",
-                                                          spdlog::sinks_init_list{consoleSink, fileSink},
-                                                          spdlog::thread_pool(),
-                                                          spdlog::async_overflow_policy::block);
+    s_CoreLogger = std::make_shared<spdlog::async_logger>(
+        "RENDERX", spdlog::sinks_init_list{consoleSink, fileSink}, spdlog::thread_pool(), spdlog::async_overflow_policy::block);
 
     s_CoreLogger->set_level(spdlog::level::trace);
     s_CoreLogger->flush_on(spdlog::level::err);
     spdlog::register_logger(s_CoreLogger);
-
-    s_ClientLogger = std::make_shared<spdlog::async_logger>("APP",
-                                                            spdlog::sinks_init_list{consoleSink, fileSink},
-                                                            spdlog::thread_pool(),
-                                                            spdlog::async_overflow_policy::block);
-
-    s_ClientLogger->set_level(spdlog::level::trace);
-    s_ClientLogger->flush_on(spdlog::level::err);
-    spdlog::register_logger(s_ClientLogger);
-
-    RX_CORE_INFO("RenderX logging system initialized");
 }
 
 void Log::Shutdown() {
-    RX_CORE_INFO("Shutting down logging system");
-
     if (s_CoreLogger)
         s_CoreLogger->flush();
-    if (s_ClientLogger)
-        s_ClientLogger->flush();
 
-    s_FrameLogger.reset();
     s_CoreLogger.reset();
-    s_ClientLogger.reset();
-
     spdlog::shutdown();
 }
 
-void Log::BeginFrame() {
-    if (s_FrameLogger)
-        s_FrameLogger->Clear();
-}
-
-void Log::EndFrame() {
-    if (s_FrameLogger && s_CoreLogger)
-        s_FrameLogger->FlushFrame(s_CoreLogger);
-}
-
-void Log::FrameLog(const std::string& key, const std::string& msg, spdlog::level::level_enum level) {
-    if (s_FrameLogger)
-        s_FrameLogger->AddMessage(key, msg, level);
-}
 
 void Log::LogStatus(const std::string& msg) {
     if (!s_CoreLogger)

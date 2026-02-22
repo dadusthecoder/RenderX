@@ -1,4 +1,3 @@
-#include "RenderX/DebugProfiler.h"
 #include "VK_Common.h"
 #include "VK_RenderX.h"
 
@@ -35,19 +34,19 @@ void VulkanCommandAllocator::Reset() {
 
 // command list
 void VulkanCommandList::open() {
-    PROFILE_FUNCTION();
+    
     VkCommandBufferBeginInfo bi{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
     bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     VK_CHECK(vkBeginCommandBuffer(m_CommandBuffer, &bi));
 }
 
 void VulkanCommandList::close() {
-    PROFILE_FUNCTION();
+    
     VK_CHECK(vkEndCommandBuffer(m_CommandBuffer));
 }
 
 void VulkanCommandList::setPipeline(const PipelineHandle& pipeline) {
-    PROFILE_FUNCTION();
+    
     auto* p = g_PipelinePool.get(pipeline);
     if (p == nullptr || p->vkPipeline == VK_NULL_HANDLE) {
         RENDERX_WARN("VulkanCommandList::setPipeline: invalid pipeline handle");
@@ -81,7 +80,7 @@ void VulkanCommandList::setPipeline(const PipelineHandle& pipeline) {
 }
 
 void VulkanCommandList::setVertexBuffer(const BufferHandle& buffer, uint64_t offset) {
-    PROFILE_FUNCTION();
+    
     m_VertexBuffer       = buffer;
     m_VertexBufferOffset = offset;
 
@@ -97,7 +96,7 @@ void VulkanCommandList::setVertexBuffer(const BufferHandle& buffer, uint64_t off
 }
 
 void VulkanCommandList::setIndexBuffer(const BufferHandle& buffer, uint64_t offset, Format indextype) {
-    PROFILE_FUNCTION();
+    
     m_IndexBuffer       = buffer;
     m_IndexBufferOffset = offset;
 
@@ -110,27 +109,24 @@ void VulkanCommandList::setIndexBuffer(const BufferHandle& buffer, uint64_t offs
     vkCmdBindIndexBuffer(m_CommandBuffer, ib->buffer, static_cast<VkDeviceSize>(offset), ToVulkanIndexType(indextype));
 }
 
-void VulkanCommandList::draw(uint32_t vertexCount,
-                             uint32_t instanceCount,
-                             uint32_t firstVertex,
-                             uint32_t firstInstance) {
-    PROFILE_FUNCTION();
+void VulkanCommandList::draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance) {
+    
     vkCmdDraw(m_CommandBuffer, vertexCount, instanceCount, firstVertex, firstInstance);
 }
 
 void VulkanCommandList::drawIndexed(
     uint32_t indexCount, int32_t vertexOffset, uint32_t instanceCount, uint32_t firstIndex, uint32_t firstInstance) {
-    PROFILE_FUNCTION();
+    
     vkCmdDrawIndexed(m_CommandBuffer, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
 }
 
 void VulkanCommandList::beginRenderPass(RenderPassHandle pass, const void* clearValues, uint32_t clearCount) {
-    PROFILE_FUNCTION();
+    
     RENDERX_ERROR("is not implemented for the Vulkan backend yet");
 }
 
 void VulkanCommandList::endRenderPass() {
-    PROFILE_FUNCTION();
+    
     RENDERX_ERROR("is not implemented for the Vulkan backend yet");
 }
 
@@ -208,7 +204,7 @@ void VulkanCommandList::endRendering() {
 }
 
 void VulkanCommandList::writeBuffer(BufferHandle handle, const void* data, uint32_t offset, uint32_t size) {
-    PROFILE_FUNCTION();
+    
     auto* buf = g_BufferPool.get(handle);
     if (buf == nullptr || buf->buffer == VK_NULL_HANDLE) {
         RENDERX_WARN("VulkanCommandList::writeBuffer: invalid destination buffer handle");
@@ -226,9 +222,7 @@ void VulkanCommandList::setFramebuffer(FramebufferHandle handle) {
     RENDERX_ERROR("Function not implemented for the vulkan backend yet");
 }
 
-void VulkanCommandList::copyBufferToTexture(BufferHandle       srcBuffer,
-                                            TextureHandle      dstTexture,
-                                            const TextureCopy& region) {
+void VulkanCommandList::copyBufferToTexture(BufferHandle srcBuffer, TextureHandle dstTexture, const TextureCopy& region) {
     RENDERX_ERROR("is not implemented for the Vulkan backend yet");
 }
 
@@ -240,9 +234,7 @@ void VulkanCommandList::copyBuffer(BufferHandle src, BufferHandle dst, const Buf
     RENDERX_ERROR("is not implemented for the Vulkan backend yet");
 }
 
-void VulkanCommandList::copyTextureToBuffer(TextureHandle      srcTexture,
-                                            BufferHandle       dstBuffer,
-                                            const TextureCopy& region) {
+void VulkanCommandList::copyTextureToBuffer(TextureHandle srcTexture, BufferHandle dstBuffer, const TextureCopy& region) {
     RENDERX_ERROR("is not implemented for the Vulkan backend yet");
 }
 
@@ -287,19 +279,18 @@ void VulkanCommandList::Barrier(const Memory_Barrier* memoryBarriers,
     for (uint32_t i = 0; i < imageCount; ++i) {
         auto& b = imageBarriers[i];
 
-        vkImage[i] = {
-            .sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-            .srcStageMask        = MapPipelineStage(b.srcStage),
-            .srcAccessMask       = MapAccess(b.srcAccess),
-            .dstStageMask        = MapPipelineStage(b.dstStage),
-            .dstAccessMask       = MapAccess(b.dstAccess),
-            .oldLayout           = MapLayout(b.oldLayout),
-            .newLayout           = MapLayout(b.newLayout),
-            .srcQueueFamilyIndex = b.srcQueue,
-            .dstQueueFamilyIndex = b.dstQueue,
-            .image               = g_TexturePool.get(b.texture)->image,
-            .subresourceRange    = {
-                MapAspect(b.range.aspect), b.range.baseMip, b.range.mipCount, b.range.baseLayer, b.range.layerCount}};
+        vkImage[i] = {.sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                      .srcStageMask        = MapPipelineStage(b.srcStage),
+                      .srcAccessMask       = MapAccess(b.srcAccess),
+                      .dstStageMask        = MapPipelineStage(b.dstStage),
+                      .dstAccessMask       = MapAccess(b.dstAccess),
+                      .oldLayout           = MapLayout(b.oldLayout),
+                      .newLayout           = MapLayout(b.newLayout),
+                      .srcQueueFamilyIndex = b.srcQueue,
+                      .dstQueueFamilyIndex = b.dstQueue,
+                      .image               = g_TexturePool.get(b.texture)->image,
+                      .subresourceRange    = {
+                          MapAspect(b.range.aspect), b.range.baseMip, b.range.mipCount, b.range.baseLayer, b.range.layerCount}};
     }
 
     dependencyInfo.memoryBarrierCount = memoryCount;

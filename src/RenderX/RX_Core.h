@@ -12,8 +12,8 @@ namespace Rx {
  */
 
 struct RenderDispatchTable {
-#define RX_DESPATCH_TABLE_FUNC(_ret, _name, _parms, _args)                                                             \
-    using _name##_func_t = _ret(*) _parms;                                                                             \
+#define RX_DESPATCH_TABLE_FUNC(_ret, _name, _parms, _args)                                                                       \
+    using _name##_func_t = _ret(*) _parms;                                                                                       \
     _name##_func_t _name;
     RENDERX_FUNC(RX_DESPATCH_TABLE_FUNC)
 #undef RX_DESPATCH_TABLE_FUNC
