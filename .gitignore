@@ -67,7 +67,6 @@ Makefile
 build/
 Build/
 build-*/
-External/glew-2.1.0/
 *.lib
 *.a
 *.dll
@@ -86,8 +85,6 @@ External/glew-2.1.0/
 *.json
 *.docs
 *.log
-Test/
-Shaders/
 docs/
 doc/
 coverage/

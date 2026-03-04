@@ -16,11 +16,14 @@
 #include <spdlog/spdlog.h>
 #include "RX_Flags.h"
 
-#if defined(_MSC_VER)
+#if defined(__clang__)
+#define RENDERX_DEBUGBREAK() __builtin_trap()
+#elif defined(_MSC_VER)
 #define RENDERX_DEBUGBREAK() __debugbreak()
-#elif defined(__GNUC__) || defined(__clang__)
+#elif defined(__GNUC__)
 #define RENDERX_DEBUGBREAK() __builtin_trap()
 #else
+#include <cstdlib>
 #define RENDERX_DEBUGBREAK() std::abort()
 #endif
 
@@ -49,23 +52,22 @@
 #endif
 
 // EXPORT / IMPORT MACROS
-#ifndef RX_BUILD_DLL
-#define RENDERX_EXPORT
-#else
+#pragma once
+
 #if defined(RX_PLATFORM_WINDOWS)
-#pragma warning(disable : 4390)
 #if defined(RX_BUILD_DLL)
-#pragma warning(disable : 4251)
+#if defined(RX_BUILD_CORE)
 #define RENDERX_EXPORT __declspec(dllexport)
 #else
 #define RENDERX_EXPORT __declspec(dllimport)
 #endif
-#elif defined(RX_PLATFORM_LINUX) || defined(__GNUC__) || defined(__clang__)
+#elif defined(RX_BUILD_CORE)
 #define RENDERX_EXPORT __attribute__((visibility("default")))
 #else
 #define RENDERX_EXPORT
-#pragma warning Unknown dynamic link import / export semantics.
 #endif
+#else
+#define RENDERX_EXPORT
 #endif
 
 #define STRFY(s)        #s
@@ -78,7 +80,6 @@
     }                                                                                                                            \
     using Name##Handle = Handle<HandleType::Name>;
 
-
 namespace spdlog {
 class logger;
 }
@@ -86,13 +87,13 @@ class logger;
 namespace Rx {
 class Log {
 public:
-     static void Init();
-     static void Shutdown();
-     static std::shared_ptr<spdlog::logger>& Core();
-     static void LogStatus(const std::string& msg);
+    static void                             Init();
+    static void                             Shutdown();
+    static std::shared_ptr<spdlog::logger>& Core();
+    static void                             LogStatus(const std::string& msg);
 
 private:
-     static std::shared_ptr<spdlog::logger> s_CoreLogger;
+    static std::shared_ptr<spdlog::logger> s_CoreLogger;
 };
 } // namespace Rx
 

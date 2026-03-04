@@ -31,7 +31,7 @@ endforeach()
 
 option(RX_BUILD_VULKAN "Enable Vulkan backend" ON)
 option(RX_BUILD_OPENGL "Enable OpenGL backend" OFF)
-option(RX_BUILD_DLL "Build Shared" ON)
+option(RX_BUILD_SHARED "Build Shared" OFF)
 
 if(CMAKE_SIZEOF_VOID_P EQUAL 8)
     message(STATUS "Building 64-bit")
@@ -74,16 +74,22 @@ if(RX_BUILD_OPENGL)
     list(APPEND SOURCES ${OPENGL_SOURCES})
 endif()
 
-add_library(${PROJECT_NAME} SHARED ${SOURCES})
+if(RX_BUILD_SHARED)
+    add_library(${PROJECT_NAME} SHARED ${SOURCES})
+    target_compile_definitions(${PROJECT_NAME} PRIVATE RX_BUILD_DLL)
+    target_compile_definitions(${PROJECT_NAME} PUBLICs RX_BUILD_CORE)
+else()
+    add_library(${PROJECT_NAME} STATIC ${SOURCES})
+endif()
 
 if(WIN32)
-    target_compile_definitions(${PROJECT_NAME} PRIVATE RX_PLATFORM_WINDOWS)
+    target_compile_definitions(${PROJECT_NAME} PUBLIC RX_PLATFORM_WINDOWS)
     message(STATUS "Building for Windows")
 elseif(UNIX AND NOT APPLE)
-    target_compile_definitions(${PROJECT_NAME} PRIVATE RX_PLATFORM_LINUX)
+    target_compile_definitions(${PROJECT_NAME} PUBLIC RX_PLATFORM_LINUX)
     message(STATUS "Building for Linux")
 elseif(APPLE)
-    target_compile_definitions(${PROJECT_NAME} PRIVATE RX_PLATFORM_MACOS)
+    target_compile_definitions(${PROJECT_NAME} PUBLIC RX_PLATFORM_MACOS)
     message(STATUS "Building for macOS")
 endif()
 
@@ -108,10 +114,6 @@ if(RX_BUILD_OPENGL)
     find_package(OpenGL REQUIRED)
     target_link_libraries(RenderX PRIVATE OpenGL::GL)
     target_compile_definitions(RenderX PRIVATE RX_ENABLE_OPENGL)
-endif()
-
-if(RX_BUILD_DLL)
-    target_compile_definitions(${PROJECT_NAME} PRIVATE RX_BUILD_DLL)
 endif()
 
 target_compile_definitions(RenderX PRIVATE
@@ -143,9 +145,9 @@ if(CLANG_FORMAT_EXE)
 
     add_custom_target(format
         COMMAND ${CLANG_FORMAT_EXE}
-            -i
-            -style=file
-            ${ALL_SOURCE_FILES}
+        -i
+        -style=file
+        ${ALL_SOURCE_FILES}
     )
 endif()
 

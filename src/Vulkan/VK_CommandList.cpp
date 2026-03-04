@@ -34,19 +34,19 @@ void VulkanCommandAllocator::Reset() {
 
 // command list
 void VulkanCommandList::open() {
-    
+
     VkCommandBufferBeginInfo bi{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
     bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     VK_CHECK(vkBeginCommandBuffer(m_CommandBuffer, &bi));
 }
 
 void VulkanCommandList::close() {
-    
+
     VK_CHECK(vkEndCommandBuffer(m_CommandBuffer));
 }
 
 void VulkanCommandList::setPipeline(const PipelineHandle& pipeline) {
-    
+
     auto* p = g_PipelinePool.get(pipeline);
     if (p == nullptr || p->vkPipeline == VK_NULL_HANDLE) {
         RENDERX_WARN("VulkanCommandList::setPipeline: invalid pipeline handle");
@@ -80,7 +80,7 @@ void VulkanCommandList::setPipeline(const PipelineHandle& pipeline) {
 }
 
 void VulkanCommandList::setVertexBuffer(const BufferHandle& buffer, uint64_t offset) {
-    
+
     m_VertexBuffer       = buffer;
     m_VertexBufferOffset = offset;
 
@@ -96,7 +96,7 @@ void VulkanCommandList::setVertexBuffer(const BufferHandle& buffer, uint64_t off
 }
 
 void VulkanCommandList::setIndexBuffer(const BufferHandle& buffer, uint64_t offset, Format indextype) {
-    
+
     m_IndexBuffer       = buffer;
     m_IndexBufferOffset = offset;
 
@@ -110,23 +110,23 @@ void VulkanCommandList::setIndexBuffer(const BufferHandle& buffer, uint64_t offs
 }
 
 void VulkanCommandList::draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance) {
-    
+
     vkCmdDraw(m_CommandBuffer, vertexCount, instanceCount, firstVertex, firstInstance);
 }
 
 void VulkanCommandList::drawIndexed(
     uint32_t indexCount, int32_t vertexOffset, uint32_t instanceCount, uint32_t firstIndex, uint32_t firstInstance) {
-    
+
     vkCmdDrawIndexed(m_CommandBuffer, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
 }
 
 void VulkanCommandList::beginRenderPass(RenderPassHandle pass, const void* clearValues, uint32_t clearCount) {
-    
+
     RENDERX_ERROR("is not implemented for the Vulkan backend yet");
 }
 
 void VulkanCommandList::endRenderPass() {
-    
+
     RENDERX_ERROR("is not implemented for the Vulkan backend yet");
 }
 
@@ -204,7 +204,7 @@ void VulkanCommandList::endRendering() {
 }
 
 void VulkanCommandList::writeBuffer(BufferHandle handle, const void* data, uint32_t offset, uint32_t size) {
-    
+
     auto* buf = g_BufferPool.get(handle);
     if (buf == nullptr || buf->buffer == VK_NULL_HANDLE) {
         RENDERX_WARN("VulkanCommandList::writeBuffer: invalid destination buffer handle");
@@ -306,20 +306,14 @@ void VulkanCommandList::Barrier(const Memory_Barrier* memoryBarriers,
 }
 
 // VulkanCommandList.cpp
-
 void VulkanCommandList::setViewport(const Viewport& vp) {
-    // Vulkan uses top-left origin with Y flipped relative to OpenGL.
-    // We flip by setting y = vp.y + vp.height and height = -vp.height.
-    // This makes NDC +Y point up consistently with OpenGL/GLM conventions
-    // without needing to touch projection matrices.
     VkViewport vkVP{};
     vkVP.x        = static_cast<float>(vp.x);
-    vkVP.y        = static_cast<float>(vp.y + vp.height); // flip origin to bottom-left
+    vkVP.y        = static_cast<float>(vp.y);
     vkVP.width    = static_cast<float>(vp.width);
-    vkVP.height   = static_cast<float>(-vp.height); // negative height = Y-flip
+    vkVP.height   = static_cast<float>(vp.height);
     vkVP.minDepth = vp.minDepth;
     vkVP.maxDepth = vp.maxDepth;
-
     vkCmdSetViewport(m_CommandBuffer, 0, 1, &vkVP);
 }
 
@@ -335,9 +329,7 @@ void VulkanCommandList::setScissor(const Scissor& sc) {
     vkCmdSetScissor(m_CommandBuffer, 0, 1, &rect);
 }
 
-// void VulkanCommandList::flushBarriers() {
 
-// }
 
 } // namespace RxVK
 
