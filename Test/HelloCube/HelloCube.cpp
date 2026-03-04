@@ -62,11 +62,19 @@ int main() {
     initInfo.instanceExtensions = glfwGetRequiredInstanceExtensions(&initInfo.extensionCount);
 
 #if defined(_WIN32)
-    initInfo.nativeWindowHandle = glfwGetWin32Window(window);
-    initInfo.displayHandle      = GetModuleHandle(nullptr);
+    initInfo.window.win32.hwnd      = glfwGetWin32Window(window);
+    initInfo.window.win32.hinstance = GetModuleHandle(nullptr);
 #elif defined(__linux__)
-    initInfo.nativeWindowHandle = reinterpret_cast<void*>(glfwGetX11Window(window));
-    initInfo.displayHandle      = reinterpret_cast<void*>(glfwGetX11Display());
+    auto platform = glfwGetPlatform();
+    if (platform == GLFW_PLATFORM_X11) {
+        initInfo.window.x11.window  = (void*)glfwGetX11Window(window);
+        initInfo.window.x11.display = (void*)glfwGetX11Display();
+        initInfo.window.type        = Rx::WindowSystem::X11;
+    } else if (platform == GLFW_PLATFORM_WAYLAND) {
+        initInfo.window.wayland.surface = (void*)glfwGetWaylandWindow(window);
+        initInfo.window.wayland.display = (void*)glfwGetWaylandDisplay();
+        initInfo.window.type            = Rx::WindowSystem::WAYLAND;
+    }
 #else
 #error Unsupported platform
 #endif

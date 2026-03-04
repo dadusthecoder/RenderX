@@ -1146,7 +1146,6 @@ public:
 };
 
 struct VulkanContext {
-    void*                          window = nullptr;
     VulkanInstance*                instance;
     VulkanDevice*                  device;
     VulkanSwapchain*               swapchain;

@@ -10,8 +10,9 @@
 
 #elif defined(__linux__)
 #include <X11/Xlib.h>
+#include <wayland-client.h>
 #include <vulkan/vulkan_xlib.h>
-
+#include <vulkan/vulkan_wayland.h>
 #endif
 
 #include <cstring>
@@ -63,19 +64,32 @@ void VulkanInstance::createInstance(const InitDesc& window) {
     VK_CHECK(vkCreateInstance(&ci, nullptr, &m_Instance));
 }
 
-void VulkanInstance::createSurface(const InitDesc& window) {
+void VulkanInstance::createSurface(const InitDesc& desc) {
 #if defined(RX_PLATFORM_WINDOWS)
     VkWin32SurfaceCreateInfoKHR ci{};
     ci.sType     = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
-    ci.hwnd      = static_cast<HWND>(window.nativeWindowHandle);
-    ci.hinstance = static_cast<HINSTANCE>(window.displayHandle);
+    ci.hwnd      = static_cast<HWND>(desc.window.win32.hwnd);
+    ci.hinstance = static_cast<HINSTANCE>(desc.window.win32.hinstance);
     VK_CHECK(vkCreateWin32SurfaceKHR(m_Instance, &ci, nullptr, &m_Surface));
+    
 #elif defined(RX_PLATFORM_LINUX)
-    VkXlibSurfaceCreateInfoKHR ci{};
-    ci.sType  = VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR;
-    ci.dpy    = static_cast<Display*>(window.displayHandle);
-    ci.window = reinterpret_cast<::Window>(window.nativeWindowHandle);
-    VK_CHECK(vkCreateXlibSurfaceKHR(m_Instance, &ci, nullptr, &m_Surface));
+    switch (desc.window.type) {
+    case WindowSystem::X11: {
+        VkXlibSurfaceCreateInfoKHR ci{};
+        ci.sType  = VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR;
+        ci.dpy    = static_cast<Display*>(desc.window.x11.display);
+        ci.window = reinterpret_cast<::Window>(desc.window.x11.window);
+        VK_CHECK(vkCreateXlibSurfaceKHR(m_Instance, &ci, nullptr, &m_Surface))
+    }
+    case WindowSystem::WAYLAND: {
+        VkWaylandSurfaceCreateInfoKHR ci{};
+        ci.sType   = VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR;
+        ci.display = static_cast<wl_display*>(window.wayland.surface);
+        ci.surface = static_cast<wl_surface*>(window.wayland.display);
+        VK_CHECK(vkCreateWaylandSurfaceKHR(m_Instance, &ci, nullptr, &m_Surface));
+    }
+    }
+
 #elif defined(RX_PLATFORM_MACOS)
     VkMetalSurfaceCreateInfoEXT ci{};
     ci.sType  = VK_STRUCTURE_TYPE_METAL_SURFACE_CREATE_INFO_EXT;

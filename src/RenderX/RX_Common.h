@@ -325,10 +325,31 @@ enum class Platform : uint8_t {
     MACOS
 };
 
+enum class WindowSystem {
+    X11,
+    WAYLAND
+};
+struct NativeWindow {
+    WindowSystem type;
+    union {
+        struct {
+            void* hwnd;
+            void* hinstance;
+        } win32;
+        struct {
+            void* display;
+            void* window;
+        } x11;
+        struct {
+            void* display;
+            void* surface;
+        } wayland;
+    };
+};
+
 struct InitDesc {
-    GraphicsAPI api;
-    void*       displayHandle;
-    void*       nativeWindowHandle;
+    GraphicsAPI  api;
+    NativeWindow window;
     // vulkan only
     const char** instanceExtensions;
     uint32_t     extensionCount;

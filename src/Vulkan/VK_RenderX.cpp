@@ -5,14 +5,12 @@ namespace Rx {
 namespace RxVK {
 
 void VKBackendInit(const InitDesc& window) {
-    RENDERX_ASSERT_MSG(window.nativeWindowHandle != nullptr, "VKInit: window.nativeHandle is null");
     RENDERX_ASSERT_MSG(window.extensionCount >= 0, "VKInit: extensionCount is negative");
     if (window.extensionCount > 0) {
         RENDERX_ASSERT_MSG(window.instanceExtensions != nullptr, "VKInit: instanceExtensions is null but extensionCount > 0");
     }
 
     VulkanContext& ctx = GetVulkanContext();
-    ctx.window         = window.nativeWindowHandle;
     ctx.instance       = new VulkanInstance(window);
     ctx.device =
         new VulkanDevice(ctx.instance->getInstance(),
